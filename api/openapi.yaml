@@ -1,0 +1,82 @@
+openapi: 3.1.1
+info:
+  title: Backend Sandbox API
+  version: 0.1.0
+  description: |
+    Frontend 与 Backend 之间的唯一 HTTP API Contract。
+
+    该 Contract 同时供本地 Fastify Mock Server（`apps/mock-server`）、TypeScript 客户端
+    （`packages/api-client`）以及未来的 PHP 生产实现使用。任何 API 变更都必须先修改本文件，
+    再执行 `pnpm api:lint` 与 `pnpm api:generate`。
+
+    首版只包含 `GET /health`，用于验证 Contract → 生成类型 → 共享 Client → Vite 代理 →
+    Mock Server → Contract Test 的完整链路；不包含业务资源、认证、分页或过滤。
+
+    所有 schema 限定在 JSON Schema Draft-07 兼容子集内，以匹配 Fastify 默认 Ajv 的校验语义。
+    引入 Draft 2020-12 专有语义前，必须先单独设计并确认 Fastify 的 validator 与 serializer compiler。
+servers:
+  - url: /api
+    description: |
+      客户端 API base URL。Fastify 的路由前缀由 Mock Server 注册 Glue 时显式指定
+      （`prefix: '/api'`），不从该字段推导。
+tags:
+  - name: system
+    description: Mock Server 自身运行状态，与业务数据无关。
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Read mock server liveness
+      description: |
+        返回本地 Mock Server 的存活状态。
+
+        该 operation 只表示 Mock Server 已完成监听前置检查（含本地 SQLite 文件存在性检查），
+        不代表业务数据库能够完成业务 CRUD；首版没有业务表。
+      tags:
+        - system
+      responses:
+        '200':
+          description: Mock server is running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+components:
+  responses:
+    ErrorResponse:
+      description: Safe application error response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+  schemas:
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: ok
+          description: 固定为 `ok`，表示 Mock Server 进程可用。
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, requestId]
+          properties:
+            code:
+              type: string
+              description: 稳定的机器可读错误码。
+            message:
+              type: string
+              description: 面向调用方的安全错误描述，不包含堆栈、SQL 或本地文件路径。
+            requestId:
+              type: string
+              description: Fastify request ID，用于把响应与日志关联起来。

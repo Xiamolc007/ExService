@@ -1,0 +1,15 @@
+extends:
+  - recommended
+
+rules:
+  # 设计说明第 3 节明确排除登录、Token、用户、角色与权限，首版 Contract 中不存在
+  # security scheme 可供声明，因此该规则在本项目不适用。
+  security-defined: off
+
+  # 错误响应统一由 api/openapi.yaml 中的 `default` response（ErrorResponse -> ErrorEnvelope）表达。
+  # 额外声明一个 4xx response 会引入第二份错误定义，违反「单一 Contract 错误结构」的设计。
+  operation-4xx-response: off
+
+  # 这是私有项目的内部 API Contract，不是对外发布的 API 描述，仓库也未确定许可证。
+  # 与其填入未经确认的 license，不如显式关闭该规则。
+  info-license: off
