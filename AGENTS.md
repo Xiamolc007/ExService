@@ -41,9 +41,22 @@ Fastify + SQLite 是本地开发实现，未来的 PHP + MySQL 是生产实现�
 | --- | --- | --- |
 | `api/` | 定义 HTTP 路径、operation、请求/响应/错误 schema。 | 存放前端或服务端实现。 |
 | `packages/api-client/` | 导出生成的类型与 `createApiClient({ baseUrl })` 工厂。 | 引入 React、Valtio、Framer Motion、业务状态或 endpoint 定义。 |
+| `packages/components/` | 应用级共享 UI 组件（站点顶栏等），基于 ExUI 组装。 | 直接使用 `fetch`、import `@workspace/api-client`、import `@exre/exui/style.css`、定义路由表。 |
 | `apps/web/` | 配置 Vite、SCSS、环境变量，并适配共享 Client。 | 直接调用浏览器 `fetch`、复制 DTO、臆造 endpoint。 |
 | `apps/mock-server/` | 加载 Contract、映射 operation handler、执行受控的 SQLite 访问。 | 用 `app.get()` 绕过 Contract、把 schema 写成第二份 API 定义、连接生产数据库。 |
 | `tests/contract/` | 从 Contract 读取 schema，对真实 Fastify app 的 HTTP 响应做验证。 | 只单测 handler 而跳过路由与 schema 注册。 |
+
+### 共享组件与 ExUI
+
+`packages/components` 的依赖边界：`react` / `react-dom` / `react-router` 同时声明为 `peerDependencies`（保证消费方单一实例与 context 共享）与 `devDependencies`（本包 `typecheck` 需要）；`@exre/exui` 与 `lucide-react` 是普通 `dependencies`。样式用 CSS Modules，颜色、边框、圆角一律取 ExUI 的 `var(--exui-*)`，不新建本地 token 层。
+
+以下三条是 `@exre/exui` 自身的契约，写错不会报错、只会静默失效：
+
+- **`@exre/exui/style.css` 每个应用只导入一次**，它已内含 Token CSS 与字体 CSS。导入点固定在 `apps/web/src/main.tsx`；不得在 `packages/components` 内导入，也不得再导入 `@exre/exui/tokens/style.css` 或 `font.css`。
+- **`useTheme` 必须在 `ThemeProvider` 之内调用**，否则抛错。provider 挂在 `apps/web/src/main.tsx`，高于路由；不要在可能没有 provider 的组件里调用它。
+- **`@exre/exui` 不声明 `color-scheme`**，其 `ThemeProvider` 也只增删 `documentElement` 上的 `light` / `dark` 类。应用侧必须按同一组类选择器自己补 `color-scheme`（见 `apps/web/src/styles/index.scss`）。
+
+`@exre/exui` 会把 Sonner、Radix、Base UI 等实现库一并打包进产物；**不要**为了使用 ExUI 组件而单独安装这些库，重复实例会让状态不共享（通知类组件会静默失效）。图标统一用 `lucide-react`。
 
 ## 命令
 

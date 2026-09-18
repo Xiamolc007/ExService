@@ -32,14 +32,16 @@ Contract 是唯一的中心节点，所有其他部分都是它的消费者：
 | --- | --- | --- |
 | `api/` | 定义 HTTP 路径、operation、请求/响应/错误 schema。 | 存放前端或服务端实现。 |
 | `packages/api-client/` | 导出生成的类型与 `createApiClient({ baseUrl })` 工厂。 | 引入 React、Valtio、Framer Motion、业务状态或 endpoint 定义。 |
-| `apps/web/` | 配置 Vite、SCSS、环境变量，声明前端路由表，并适配共享 Client。 | 直接调用浏览器 `fetch`、复制 DTO、臆造 endpoint。 |
+| `packages/components/` | 应用级共享 UI 组件（站点顶栏等），基于 ExUI 组装。 | 直接使用 `fetch`、import `@workspace/api-client`、import `@exre/exui/style.css`、定义路由表。 |
+| `apps/web/` | 配置 Vite、SCSS、环境变量，声明前端路由表与主题来源，并适配共享 Client。 | 直接调用浏览器 `fetch`、复制 DTO、臆造 endpoint。 |
 | `apps/mock-server/` | 加载 Contract、映射 operation handler、执行受控的 SQLite 访问。 | 用 `app.get()` 绕过 Contract、把 schema 写成第二份 API 定义、连接生产数据库。 |
 | `tests/contract/` | 从 Contract 读取 schema，对真实 Fastify app 的 HTTP 响应做验证。 | 只单测 handler 而跳过路由与 schema 注册。 |
 
 ## 依赖与构建边界
 
-- `packages/api-client` 以**源码形式**导出（`exports` 直接指向 `src/index.ts`），由消费方的打包器编译，因此没有自己的构建步骤。
-- 它是为打包器准备的包，不是 Node 运行时包：内部使用无扩展名的相对 import，Node ESM 不接受这种说明符。若将来需要在 Node 侧复用，必须补充真正的构建产物与 `exports` 条件，或统一改为显式扩展名。
+- `packages/api-client` 与 `packages/components` 都以**源码形式**导出（`exports` 直接指向 `src/index.ts`），由消费方的打包器编译，因此没有自己的构建步骤。
+- 它们是**为打包器准备的包**，不是 Node 运行时包：内部使用无扩展名的相对 import，Node ESM 不接受这种说明符。若将来需要在 Node 侧复用，必须补充真正的构建产物与 `exports` 条件，或统一改为显式扩展名。
+- `packages/components` 的 `react` / `react-dom` / `react-router` 同时声明为 peer 与 dev 依赖：peer 保证消费方单一实例与 context 共享，dev 供本包 `typecheck` 使用。`@exre/exui` 与 `lucide-react` 是普通依赖。
 - 根 `package.json` 只承载跨工作区的命令与工具依赖，不含运行时依赖；运行时依赖按上表的边界声明在各自包内。
 
 ## 前端请求流（开发期）
@@ -55,18 +57,24 @@ Contract 是唯一的中心节点，所有其他部分都是它的消费者：
 
 ```text
 main.tsx ──<BrowserRouter>──▶ App.tsx（路由表）
-                                  │
-                                  ▼
-                       routes/RootLayout.tsx（只渲染 <Outlet />）
-                                  │
-                     ┌────────────┴────────────┐
-                     ▼                         ▼
-             pages/Home.tsx  `/`      pages/NotFound.tsx  `*`
+   │                              │
+   │                              ▼
+   │                   routes/RootLayout.tsx
+   │                     ├── <SiteHeader />（packages/components）
+   │                     └── <Outlet />
+   │                              │
+   │                 ┌────────────┴────────────┐
+   │                 ▼                         ▼
+   │         pages/Home.tsx  `/`      pages/NotFound.tsx  `*`
+   │
+   └── <ThemeProvider>（@exre/exui）包住整个路由树
+       导入 `@exre/exui/style.css`，全应用仅此一处
 ```
 
-- 首版只有这两条路由；`*` 只处理前端路由，不替代 Mock Server 的 404 envelope。
-- 布局层只提供嵌套路由的挂载点，不含导航或其他 UI。
-- 代价是 history 路由要求未来的 PHP 部署把未知路径回落到 `index.html`。理由见 [[web/02-react-route-skeleton]]。
+- 只有这两条路由；`*` 只处理前端路由，不替代 Mock Server 的 404 envelope。
+- 布局层提供嵌套路由的挂载点与站点顶栏。顶栏在这里而不是各页面里，因此所有路由共用、页面切换时不重新挂载。
+- 主题来源是 ExUI 的 `ThemeProvider`，挂在路由之上，所以所有页面（含兜底页）都能用 `useTheme`。`@exre/exui/style.css` 必须排在 `styles/index.scss` 之前，应用样式才能覆盖库的默认值。
+- 代价是 history 路由要求未来的 PHP 部署把未知路径回落到 `index.html`。理由见 [[web/02-react-route-skeleton]]；顶栏归属与 ExUI 引入见 [[web/03-exui-as-component-and-theme-source]] 与 [[components/01-app-level-shared-component-package]]。
 
 ## 扩展点：新增一个 operation
 
