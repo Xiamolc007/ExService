@@ -2,7 +2,7 @@
 
 本文件说明 ExWebsite 的整体结构与请求流。单个模块的内部结构见各模块目录下的文档。
 
-_最后更新：2026-09-17_
+_最后更新：2026-09-18_
 
 ## 系统结构
 
@@ -32,7 +32,7 @@ Contract 是唯一的中心节点，所有其他部分都是它的消费者：
 | --- | --- | --- |
 | `api/` | 定义 HTTP 路径、operation、请求/响应/错误 schema。 | 存放前端或服务端实现。 |
 | `packages/api-client/` | 导出生成的类型与 `createApiClient({ baseUrl })` 工厂。 | 引入 React、Valtio、Framer Motion、业务状态或 endpoint 定义。 |
-| `apps/web/` | 配置 Vite、SCSS、环境变量，并适配共享 Client。 | 直接调用浏览器 `fetch`、复制 DTO、臆造 endpoint。 |
+| `apps/web/` | 配置 Vite、SCSS、环境变量，声明前端路由表，并适配共享 Client。 | 直接调用浏览器 `fetch`、复制 DTO、臆造 endpoint。 |
 | `apps/mock-server/` | 加载 Contract、映射 operation handler、执行受控的 SQLite 访问。 | 用 `app.get()` 绕过 Contract、把 schema 写成第二份 API 定义、连接生产数据库。 |
 | `tests/contract/` | 从 Contract 读取 schema，对真实 Fastify app 的 HTTP 响应做验证。 | 只单测 handler 而跳过路由与 schema 注册。 |
 
@@ -48,6 +48,25 @@ Contract 是唯一的中心节点，所有其他部分都是它的消费者：
 2. Vite 把 `/api/*` 转发到 `http://127.0.0.1:3000`，并且**不做 rewrite**：`/api` 前缀由 Mock Server 自己注册。
 3. `apps/web/src/main.tsx` 在 `import.meta.env.DEV` 下经共享 Client 调用 `GET /health`，作为启动期连通性检查；失败只记录开发错误，不渲染任何面板或业务 UI。
 4. 切换到生产实现时，只把 `VITE_API_BASE_URL` 指向 PHP 的 `/api` 前缀，业务调用点与共享 Client 都不改动。
+
+## 前端页面结构
+
+`apps/web` 的挂载点只有一个 router 实例，路由表与实际页面分离：
+
+```text
+main.tsx ──<BrowserRouter>──▶ App.tsx（路由表）
+                                  │
+                                  ▼
+                       routes/RootLayout.tsx（只渲染 <Outlet />）
+                                  │
+                     ┌────────────┴────────────┐
+                     ▼                         ▼
+             pages/Home.tsx  `/`      pages/NotFound.tsx  `*`
+```
+
+- 首版只有这两条路由；`*` 只处理前端路由，不替代 Mock Server 的 404 envelope。
+- 布局层只提供嵌套路由的挂载点，不含导航或其他 UI。
+- 代价是 history 路由要求未来的 PHP 部署把未知路径回落到 `index.html`。理由见 [[web/02-react-route-skeleton]]。
 
 ## 扩展点：新增一个 operation
 

@@ -6,7 +6,7 @@
 
 决定「为什么这样做」的内容留在本目录；它产生的结构写在 `../architectures/`，运行中暴露的失败模式写在 `../knowledge/`。
 
-_最后更新：2026-09-17_
+_最后更新：2026-09-18_
 
 ## 索引
 
@@ -21,6 +21,7 @@ _最后更新：2026-09-17_
 | 03 | [数据库变更只由显式命令执行](mock-server/03-database-changes-only-by-explicit-command.md) | `mock-server` | 已接受 | 2026-09-16 |
 | 04 | [只对外回显安全的错误消息](mock-server/04-safe-error-messages.md) | `mock-server` | 已接受 | 2026-09-16 |
 | 01 | [前端只经共享 Client 调用，base URL 由配置决定](web/01-shared-client-with-configurable-base-url.md) | `web` | 已接受 | 2026-09-16 |
+| 02 | [前端使用 react-router 的声明式路由](web/02-react-route-skeleton.md) | `web` | 已接受 | 2026-09-18 |
 | 01 | [Contract Test 必须断言 handler 的原始返回值](contract-tests/01-assert-raw-handler-output.md) | `contract-tests` | 已接受 | 2026-09-16 |
 | 02 | [测试直接以 Contract 为 schema 来源，并做双向覆盖检查](contract-tests/02-contract-as-sole-schema-source.md) | `contract-tests` | 已接受 | 2026-09-16 |
 

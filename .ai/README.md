@@ -4,7 +4,7 @@
 
 本站只记录**阅读代码无法直接得到**的知识：模块边界与依赖方向、已接受决策及其理由、以及源码中看不出的失败模式。Task 进行中的状态、版本控制状态与源码的直接复述都不在这里。
 
-_最后更新：2026-09-17_
+_最后更新：2026-09-18_
 
 ## 模块划分
 
@@ -15,7 +15,7 @@ _最后更新：2026-09-17_
 | `api` | `api/` | 定义唯一的 HTTP API Contract：路径、operation、请求/响应/错误 schema。 | [architectures/api/contract-layout.md](architectures/api/contract-layout.md) · [decisions/api](decisions/README.md) |
 | `api-client` | `packages/api-client/` | 导出 Contract 生成的类型与 `createApiClient({ baseUrl })` 工厂。 | [architectures/overview.md](architectures/overview.md) · [decisions/api-client](decisions/README.md) |
 | `mock-server` | `apps/mock-server/` | 按 Contract 注册 Fastify 路由、实现 handler、执行受控的本地 SQLite 访问。 | [architectures/mock-server/request-lifecycle.md](architectures/mock-server/request-lifecycle.md) · [decisions/mock-server](decisions/README.md) · [knowledge/mock-server](knowledge/mock-server/database-lifecycle-traps.md) |
-| `web` | `apps/web/` | Vite/React 前端外壳：决定 API base URL，并在开发期经代理访问 Mock Server。 | [architectures/overview.md](architectures/overview.md) · [decisions/web](decisions/README.md) · [knowledge/web](knowledge/web/api-base-url-and-proxy-traps.md) |
+| `web` | `apps/web/` | Vite/React 前端外壳：声明前端路由表，决定 API base URL，并在开发期经代理访问 Mock Server。 | [architectures/overview.md](architectures/overview.md) · [decisions/web](decisions/README.md) · [knowledge/web](knowledge/web/api-base-url-and-proxy-traps.md) |
 | `contract-tests` | `tests/contract/` | 以真实 Fastify app 的 `inject()` 验证 HTTP Contract，而不是单测 handler。 | [architectures/contract-tests/test-layers.md](architectures/contract-tests/test-layers.md) · [decisions/contract-tests](decisions/README.md) · [knowledge/contract-tests](knowledge/contract-tests/contract-parsing-constraints.md) |
 
 `api-client`、`web` 目前没有独立的架构文档：它们的结构由 [architectures/overview.md](architectures/overview.md) 一并说明。只在该模块出现第一份文档时才创建模块子目录。
