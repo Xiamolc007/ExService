@@ -1,0 +1,4 @@
+interface:
+  display_name: "ExUI Usage"
+  short_description: "Use ExUI Tokens and React components correctly."
+  default_prompt: "Use $exui-usage to choose and apply ExUI Tokens, React components, and Lucide icons."

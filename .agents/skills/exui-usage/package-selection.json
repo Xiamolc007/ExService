@@ -1,0 +1,15 @@
+{
+  "packages": [
+    {
+      "role": "tokens",
+      "workspace": "packages/tokens",
+      "name": "@exre/exui-tokens"
+    },
+    {
+      "role": "components",
+      "workspace": "packages/components",
+      "name": "@exre/exui",
+      "tokensEntry": "./tokens"
+    }
+  ]
+}
