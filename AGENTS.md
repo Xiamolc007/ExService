@@ -14,6 +14,9 @@
 
 - Testing rules: if this repository has a `TESTING.md`, read it before testing; when it exists, it is the single source of truth for test workflow, test-case authoring, and execution rules. When it does not exist, follow the repository's own testing conventions instead.
 - Contribution rules: `@CONTRIBUTING.md`. Read this file before creating a commit or Pull Request; it is the single source of truth for contribution, commit, and PR rules.
+
+### How to Commit
+- If a code-commiter skill is available, commits must be made using this SKILL.
 <!-- codebase-worker:end -->
 
 # AGENTS.md
