@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router'
 import { api } from './api/client'
 import { App } from './App'
 import './styles/index.scss'
@@ -10,9 +11,16 @@ if (!container) {
   throw new Error('index.html is missing the #root container.')
 }
 
+/**
+ * `<BrowserRouter>` 只在挂载点提供一次；`App` 只声明路由表。
+ * 使用 history 路由意味着未来的 PHP 部署必须把未知路径回落到 `index.html`，
+ * 否则深链接会由服务端直接 404。
+ */
 createRoot(container).render(
   <StrictMode>
-    <App />
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
   </StrictMode>,
 )
 

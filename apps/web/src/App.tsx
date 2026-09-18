@@ -1,12 +1,19 @@
+import { Route, Routes } from 'react-router'
+import { Home } from './pages/Home'
+import { NotFound } from './pages/NotFound'
+import { RootLayout } from './routes/RootLayout'
+
 /**
- * 脚手架空壳：只显示静态就绪信息。
- * 首版不包含业务实体、数据列表、按钮流程或交互式状态演示。
+ * 路由表：唯一的根布局挂载首页与兜底页。
+ * 首版不含业务页面，因此这就是全部路由；`<BrowserRouter>` 由 `main.tsx` 提供。
  */
 export function App() {
   return (
-    <main className="app-shell">
-      <h1>Backend Sandbox</h1>
-      <p>Contract-first workspace scaffolding is ready.</p>
-    </main>
+    <Routes>
+      <Route element={<RootLayout />}>
+        <Route path="/" element={<Home />} />
+        <Route path="*" element={<NotFound />} />
+      </Route>
+    </Routes>
   )
 }
