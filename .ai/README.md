@@ -44,11 +44,11 @@ _最后更新：2026-09-17_
 
 - `api/openapi.yaml` — Contract 的形状、operation 与 schema。
 - `AGENTS.md` — 仓库对人类与 AI 协作者的强制约束（Contract-first 流程、目录边界、命令、数据库边界）。
-- `notes/backend-sandbox/specs/` 与 `notes/backend-sandbox/rfcs/` — 已批准的设计说明与 RFC：决策的背景、替代方案与取舍。
+- `.notes/backend-sandbox/specs/` 与 `.notes/backend-sandbox/rfcs/` — 已批准的设计说明与 RFC：决策的背景、替代方案与取舍。
 - `package.json`、`pnpm-workspace.yaml` 与各包的 `package.json` — 工作区划分、命令与依赖归属。
 - `apps/mock-server/src/**`、`packages/api-client/src/**`、`apps/web/src/**`、`tests/contract/**` — 实际行为，以及源码注释中记录的实测结论。
 
-设计文档、RFC 与实施计划保留在 `notes/<module>/` 原地，不复制进本目录；只有已经稳定的结论才提炼到 `.ai/`。
+设计文档、RFC 与实施计划保留在 `.notes/<module>/` 原地，不复制进本目录；只有已经稳定的结论才提炼到 `.ai/`。
 
 ## 不写入本站的内容
 
