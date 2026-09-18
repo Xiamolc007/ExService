@@ -1,8 +1,12 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
+import { ThemeProvider } from '@exre/exui'
 import { api } from './api/client'
 import { App } from './App'
+// ExUI 的组件样式表，已内含 Token CSS 与字体 CSS，每个应用只导入这一次。
+// 它必须排在 `./styles/index.scss` 之前：应用自己的样式要能覆盖库的默认值。
+import '@exre/exui/style.css'
 import './styles/index.scss'
 
 const container = document.getElementById('root')
@@ -15,12 +19,18 @@ if (!container) {
  * `<BrowserRouter>` 只在挂载点提供一次；`App` 只声明路由表。
  * 使用 history 路由意味着未来的 PHP 部署必须把未知路径回落到 `index.html`，
  * 否则深链接会由服务端直接 404。
+ *
+ * `<ThemeProvider>` 挂在路由之上，因此所有页面（含兜底页）都能使用 `useTheme`。
+ * ExUI 的 provider 在渲染期读取 `localStorage`，只能在浏览器挂载；本应用是纯客户端
+ * SPA，不存在服务端渲染路径，所以这里安全。
  */
 createRoot(container).render(
   <StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <ThemeProvider>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </ThemeProvider>
   </StrictMode>,
 )
 

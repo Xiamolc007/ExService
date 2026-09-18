@@ -1,0 +1,30 @@
+.home {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+
+  /**
+   * 顶栏是 sticky 的，仍然占据文档流空间，因此内容区可用的视口高度要减去它。
+   * `var()` 带 fallback，即使该自定义属性缺失也不会塌成 0 高度。
+   */
+  min-height: calc(100dvh - var(--site-header-height, 0px));
+  padding: 1rem 1.5rem 4rem;
+}
+
+.placeholder {
+  /* 宽度跟随容器但不溢出，高度由宽高比决定。 */
+  width: min(22.5rem, 100%);
+  aspect-ratio: 36 / 25;
+
+  border: 1px solid var(--exui-border-default);
+  border-radius: var(--density-control-radius, 0.625rem);
+  background: var(--exui-surface-secondary);
+}
+
+.actions {
+  /* 把按钮组推到内容区底部，中间自然形成大段留白。 */
+  margin-top: auto;
+  display: flex;
+  gap: 0.75rem;
+}

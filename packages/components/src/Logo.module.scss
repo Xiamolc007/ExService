@@ -1,0 +1,13 @@
+/**
+ * Logo 的样式。类名由 CSS Modules 局部化，不需要 BEM 前缀来避免与
+ * `apps/web` 的全局样式撞名。
+ *
+ * 字体相关的值取自 ExUI 的 Token，避免在应用侧再造一套设计变量。
+ */
+.wordmark {
+  font-size: 1.25rem;
+  font-weight: var(--exui-font-weight-bold);
+  letter-spacing: -0.01em;
+  color: var(--exui-text-primary);
+  text-decoration: none;
+}

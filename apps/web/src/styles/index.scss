@@ -1,9 +1,27 @@
-$font-stack: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Noto Sans SC', sans-serif;
-
+/**
+ * `color-scheme` 决定浏览器如何渲染原生滚动条与表单控件。
+ *
+ * ExUI 的样式表**不声明**它，`ThemeProvider` 也只负责在 `documentElement` 上增删
+ * `light` / `dark` 两个类，因此这里必须按同一组类选择器补上；否则深色主题下
+ * 页面是深色、原生滚动条却仍是浅色。
+ *
+ * 原来的 `color-scheme: light dark` 已删除：它跟随**操作系统**偏好，而这里的主题
+ * 是用户显式选择并可持久化的，两者矛盾时会互相打架。
+ *
+ * `:root` 与 `.dark` 的特异性相同（都是 0,1,0），靠源码顺序决定胜负，
+ * 所以 `.dark` 必须写在 `:root` 之后。
+ *
+ * 这里**不再声明** `font-family`：原来写在 `:root`（特异性 0,1,0）上的字体栈会压过
+ * ExUI 在 `html`（0,0,1）上的 `font-family: var(--exui-font-family)`，让库自带的
+ * Outfit 字体静默失效。字体现在完全交给 ExUI 的 Token 决定。
+ */
 :root {
-  color-scheme: light dark;
-  font-family: $font-stack;
   line-height: 1.5;
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
 }
 
 body {
