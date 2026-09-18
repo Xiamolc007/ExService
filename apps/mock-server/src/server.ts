@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { createApp } from './app.js'
 import { DATABASE_PATH } from './db/client.js'
 
-const PORT = 3000
+const PORT = 8080
 /** 只绑定回环地址：这是本地 Mock，不对局域网暴露。 */
 const HOST = '127.0.0.1'
 

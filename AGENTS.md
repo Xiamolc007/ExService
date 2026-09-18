@@ -49,7 +49,7 @@ Fastify + SQLite 是本地开发实现，未来的 PHP + MySQL 是生产实现�
 
 | 命令 | 作用 |
 | --- | --- |
-| `pnpm dev` | 并行启动 Vite（`5173`）与 Mock Server（`3000`）；不执行 migration/reset。 |
+| `pnpm dev` | 并行启动 Vite（`8081`）与 Mock Server（`8080`）；不执行 migration/reset。 |
 | `pnpm api:lint` | 用 Redocly 校验 Contract 的解析、引用与项目规则。 |
 | `pnpm api:generate` | 用 openapi-typescript 更新 `packages/api-client/src/generated/schema.d.ts`。 |
 | `pnpm typecheck` | 对每个 workspace 包执行无输出的 TypeScript 检查。 |

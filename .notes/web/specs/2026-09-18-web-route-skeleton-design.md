@@ -56,7 +56,7 @@ v8 是 ESM-only，`apps/web` 的 `moduleResolution: bundler` 可以正常解析�
 ## 5. 已知风险与延后项
 
 1. **未来 PHP 部署必须配置 SPA fallback。** 选了 history 路由，服务端必须把未知路径回落到 `index.html`，否则深链接会由服务端直接 404。若部署时 SPA 不在域名根路径，还需要配置 `basename`。当前没有部署上下文，不预先实现。
-2. **本地 `pnpm dev` 当前起不来。** `vite.config.ts` 使用 `strictPort: true`，而 `5173` 在本机已被另一个进程占用，因此人工验证前需要先释放该端口。这是本机环境状态，不是本次改动引入的。
+2. **本地 `pnpm dev` 曾起不来（已解决）。** `vite.config.ts` 使用 `strictPort: true`，而 `5173` 当时在本机被另一个进程占用，人工验证前需要先释放该端口。这是本机环境状态，不是本次改动引入的；同日已通过把端口改为 Vite `8081` / Mock Server `8080` 解决，`pnpm dev` 现在可正常启动。
 3. **路由骨架没有任何自动化覆盖。** 仓库没有前端测试基建，兜底页与根布局只有 typecheck、build 与人工验证能覆盖。
 
 ## 6. 证据

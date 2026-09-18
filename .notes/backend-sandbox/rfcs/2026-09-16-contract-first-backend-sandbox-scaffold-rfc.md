@@ -22,7 +22,7 @@
 ### 目标
 
 1. `api/openapi.yaml` 成为唯一 API Contract；前端和 Fastify 都从它派生行为或类型。
-2. `pnpm dev` 同时启动 Vite（`5173`）与 Mock Server（`3000`）。
+2. `pnpm dev` 同时启动 Vite（`8081`）与 Mock Server（`8080`）。
 3. 浏览器通过相对的 `/api` 调用，在开发期由 Vite 代理到 Mock Server；换接 PHP 时仅通过 `VITE_API_BASE_URL` 改变 API base URL。
 4. `pnpm db:migrate` 可创建/升级固定的本地 SQLite 文件；`pnpm db:reset` 仅删除并重建该文件与其 SQLite sidecar 文件。
 5. `pnpm api:lint`、`pnpm api:generate`、`pnpm typecheck`、`pnpm test` 和 `pnpm build` 可验证基础设施完整性。
@@ -132,7 +132,7 @@ fastify.register(openapiGlue, {
 ### 前端请求流
 
 1. `apps/web/src/api/client.ts` 从 `VITE_API_BASE_URL` 读取 base URL，未设置时使用 `/api`。
-2. 开发期 Vite 将 `/api/*` 代理到 `http://localhost:3000`。
+2. 开发期 Vite 将 `/api/*` 代理到 `http://localhost:8080`。
 3. 在 `import.meta.env.DEV` 下，根应用经共享 Client 调用 `GET /health` 验证通路；调用失败只记录明确的开发错误，不添加状态面板或业务 UI。
 4. 未来接入 PHP 时，部署配置将 `VITE_API_BASE_URL` 指向 PHP 的 `/api` 前缀；调用点和共享 Client 不变。
 
@@ -233,7 +233,7 @@ components:
 
 | 命令 | 行为 |
 | --- | --- |
-| `pnpm dev` | 并发启动 Vite `:5173` 和 Mock Server `:3000`；不运行 migration/reset。 |
+| `pnpm dev` | 并发启动 Vite `:8081` 和 Mock Server `:8080`；不运行 migration/reset。 |
 | `pnpm api:lint` | 以 Redocly 校验 OpenAPI 解析、引用和项目规则。 |
 | `pnpm api:generate` | 使用 `openapi-typescript` 更新 `packages/api-client/src/generated/schema.d.ts`。 |
 | `pnpm typecheck` | 对所有 workspace 包执行无输出的 TypeScript 检查。 |
@@ -303,7 +303,7 @@ API 修改的不可变顺序：修改 `api/openapi.yaml` → `api:lint` → `api
 | 数据库迁移 | `db:migrate` 创建/升级固定 SQLite 文件。 |
 | 数据库重置 | `db:reset` 只重建该 SQLite 文件及其 sidecar 文件。 |
 | 类型与构建 | `pnpm typecheck` 和 `pnpm build` 成功，Vite 可编译 SCSS。 |
-| 开发运行 | `pnpm dev` 使 `5173` 和 `3000` 可用，且前端的开发期 Client 请求通过 Vite 代理到 `/api/health`。 |
+| 开发运行 | `pnpm dev` 使 `8081` 和 `8080` 可用，且前端的开发期 Client 请求通过 Vite 代理到 `/api/health`。 |
 
 ### 失败路径
 

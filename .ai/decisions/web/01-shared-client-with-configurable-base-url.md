@@ -15,7 +15,7 @@ _最后更新：2026-09-17_
 
 - 前端只能通过 `@workspace/api-client` 的共享 Client 发起 API 请求：不得直接使用浏览器 `fetch`，不得在本仓库内复制 DTO 类型。
 - API base URL 的唯一来源是 `VITE_API_BASE_URL`，缺省 `/api`；该解析只发生在 `apps/web/src/api/client.ts` 一处。
-- 开发期由 Vite 把 `/api/*` 代理到 `http://127.0.0.1:3000`，**不做 rewrite**。
+- 开发期由 Vite 把 `/api/*` 代理到 `http://127.0.0.1:8080`，**不做 rewrite**。
 - 开发期的连通性检查（`GET /health`）只在 `import.meta.env.DEV` 下执行，失败只记录开发错误，不渲染任何面板或业务 UI。
 
 ## 理由

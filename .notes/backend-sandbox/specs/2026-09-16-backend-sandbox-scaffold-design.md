@@ -241,7 +241,7 @@ createApiClient({ baseUrl: string })
 
 它基于 `openapi-fetch` 和 `openapi-typescript` 生成的 `paths` 类型创建客户端。`apps/web/src/api/client.ts` 唯一负责从 `VITE_API_BASE_URL` 读取 base URL，缺省值为 `/api`。
 
-- 开发时，Vite 将 `/api` 代理到 `http://localhost:3000`。
+- 开发时，Vite 将 `/api` 代理到 `http://localhost:8080`。
 - 前端启动时，在 `import.meta.env.DEV` 条件下使用共享 Client 请求 Contract 中的 `GET /health`；失败只输出明确的开发错误，不渲染业务或健康检查仪表盘。
 - 生产切换 PHP 时，将 `VITE_API_BASE_URL` 配置为 PHP 实现的 API 前缀（例如 `https://service.example.test/api`）；业务调用点不改变。
 - 前端源码禁止直接调用 `fetch`、硬编码新端点或重复定义 API DTO。
@@ -250,7 +250,7 @@ createApiClient({ baseUrl: string })
 
 ### 8.1 Fastify 应用
 
-`src/app.ts` 创建可测试的 Fastify 实例；`src/server.ts` 负责读取运行时配置、在监听前检查本地数据库文件，并监听端口 `3000`。Contract Test 导入 `app.ts` 并调用 `inject()`，不绑定固定端口；由于 `/health` 不访问业务数据库，测试不会依赖或修改开发数据库文件。
+`src/app.ts` 创建可测试的 Fastify 实例；`src/server.ts` 负责读取运行时配置、在监听前检查本地数据库文件，并监听端口 `8080`。Contract Test 导入 `app.ts` 并调用 `inject()`，不绑定固定端口；由于 `/health` 不访问业务数据库，测试不会依赖或修改开发数据库文件。
 
 `fastify-openapi-glue` 忽略 OpenAPI 3.x 的 `servers[].url` 作为路由前缀，因此 `app.ts` 必须明确且只在注册时设置一次 prefix，并显式提供 operation handler 映射：
 
@@ -308,7 +308,7 @@ fastify.register(openapiGlue, {
 
 | 命令 | 行为 |
 | --- | --- |
-| `pnpm dev` | 并行启动 Vite `:5173` 与 Fastify `:3000`；不执行 migration 或 reset。 |
+| `pnpm dev` | 并行启动 Vite `:8081` 与 Fastify `:8080`；不执行 migration 或 reset。 |
 | `pnpm api:lint` | 使用 `@redocly/cli` 解析并检查 OpenAPI 文档、引用和约定。 |
 | `pnpm api:generate` | 使用 `openapi-typescript` 更新 `packages/api-client/src/generated/schema.d.ts`。 |
 | `pnpm typecheck` | 对每个 workspace 包执行无输出的 TypeScript 类型检查。 |
@@ -367,7 +367,7 @@ Vitest 通过 `createApp()` 创建真实 Fastify 应用，并请求 `GET /api/he
 
 完成脚手架后，以下事项必须成立：
 
-1. 安装依赖、生成类型、执行迁移后，`pnpm dev` 同时启动 `http://localhost:5173` 前端和 `http://localhost:3000` Mock Server。
+1. 安装依赖、生成类型、执行迁移后，`pnpm dev` 同时启动 `http://localhost:8081` 前端和 `http://localhost:8080` Mock Server。
 2. Vite 的 `/api` 请求可代理至 Mock Server；前端的开发期健康请求来自共享 Client，非原生 `fetch`。
 3. `GET /api/health` 返回精确的 `200` JSON：`{ "status": "ok" }`，并由 OpenAPI 的 3.1 schema 定义和 Contract Test 验证。
 4. `pnpm api:lint`、`pnpm api:generate`、`pnpm typecheck`、`pnpm test` 和 `pnpm build` 成功。

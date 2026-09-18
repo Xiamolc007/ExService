@@ -3,7 +3,7 @@ import { createApiClient } from '@workspace/api-client'
 /**
  * 前端唯一的 API base URL 来源。
  *
- * - 开发期缺省 `/api`，由 Vite 代理到 Mock Server（`127.0.0.1:3000`）。
+ * - 开发期缺省 `/api`，由 Vite 代理到 Mock Server（`127.0.0.1:8080`）。
  * - 接入 PHP 时，在部署环境把 `VITE_API_BASE_URL` 指向 PHP 的 API 前缀，
  *   业务调用点与共享 Client 都不需要改动。
  *

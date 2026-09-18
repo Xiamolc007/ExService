@@ -45,7 +45,7 @@ Contract 是唯一的中心节点，所有其他部分都是它的消费者：
 ## 前端请求流（开发期）
 
 1. `apps/web/src/api/client.ts` 解析 `VITE_API_BASE_URL`，缺省 `/api`，据此创建唯一的共享 Client 实例。
-2. Vite 把 `/api/*` 转发到 `http://127.0.0.1:3000`，并且**不做 rewrite**：`/api` 前缀由 Mock Server 自己注册。
+2. Vite 把 `/api/*` 转发到 `http://127.0.0.1:8080`，并且**不做 rewrite**：`/api` 前缀由 Mock Server 自己注册。
 3. `apps/web/src/main.tsx` 在 `import.meta.env.DEV` 下经共享 Client 调用 `GET /health`，作为启动期连通性检查；失败只记录开发错误，不渲染任何面板或业务 UI。
 4. 切换到生产实现时，只把 `VITE_API_BASE_URL` 指向 PHP 的 `/api` 前缀，业务调用点与共享 Client 都不改动。
 
