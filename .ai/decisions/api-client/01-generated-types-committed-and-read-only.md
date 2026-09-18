@@ -1,0 +1,46 @@
+# 生成的类型纳入版本控制，共享 Client 以源码形式导出
+
+- 状态：已接受
+- 模块：`api-client`
+- 日期：2026-09-16
+- 来源：`notes/backend-sandbox/specs/2026-09-16-backend-sandbox-scaffold-design.md` §5.1、§9
+
+_最后更新：2026-09-17_
+
+## 背景
+
+前端与共享 Client 需要与 Contract 一致的类型。手写 DTO 会与 Contract 漂移，而且是那种「能编译、运行时才发现字段不对」的漂移。
+
+同时需要决定这个包以什么形态被消费：构建产物，还是源码。
+
+## 决策
+
+- 用 `openapi-typescript` 从 Contract 生成 `packages/api-client/src/generated/schema.d.ts`，**纳入版本控制**，由 `pnpm api:generate` 写入，**禁止人工编辑**；Contract 变更必须同时提交重新生成的结果。
+- 用 `openapi-fetch` 实现 `createApiClient({ baseUrl })`；该函数不定义任何 endpoint。
+- 包以**源码形式**导出：`main` / `types` / `exports` 直接指向 `src/index.ts`，不产出构建产物。
+- 包内不引入 React、Valtio、Framer Motion、业务状态或 endpoint 定义。
+
+## 理由
+
+- 生成物入库让代码评审能看到 API 类型的真实变化；如果只在 CI 生成，评审看到的差异就只是 Contract 的文本改动。
+- 源码导出让消费方（目前只有 Vite）直接编译，省掉一层构建产物与 watch 步骤；这也是它内部可以使用无扩展名相对 import 的前提。
+- 保持包内无 UI、无状态，使它可以在未来被 Node 侧或其他前端复用，而不会把 React 依赖带进去。
+
+## 影响
+
+- 任何 Contract 变更都必须与重新生成的 `schema.d.ts` 在同一个提交里，否则类型与实际 Contract 不一致。
+- 该包**不是 Node 运行时包**：无扩展名的相对 import 在 Node ESM 下会报 `ERR_MODULE_NOT_FOUND`（与 `.ts` 扩展名无关，Node ≥22.18 默认可以剥离类型）。将来若需要在 Node 侧复用，必须先补真正的构建产物与 `exports` 条件，或统一改为显式扩展名的 import 约定。
+- 手工修 `schema.d.ts` 的改动会在下一次 `pnpm api:generate` 时被覆盖。
+
+## 重新审视的条件
+
+- 出现 Node 侧的消费方时（需要构建产物或调整 import 约定）。
+- 生成物体积大到不宜入库时（改为由 CI 生成并校验一致性）。
+
+## 证据
+
+- `package.json` 中的 `api:generate`。
+- `packages/api-client/package.json` 的 `main` / `types` / `exports`。
+- `packages/api-client/src/index.ts` 顶部注释（含 Node v22.22.1 的实测结果）。
+- `packages/api-client/src/client.ts` 与 `src/generated/schema.d.ts`。
+- `AGENTS.md` 的「不可手改的生成物」。
