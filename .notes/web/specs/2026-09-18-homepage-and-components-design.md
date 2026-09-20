@@ -100,5 +100,5 @@
 
 - `packages/components/src/{SiteHeader,Logo,ThemeToggle,AuthArea}.tsx` 与各自的 `.module.scss`、`src/scss.d.ts`、`src/index.ts`、`package.json`、`tsconfig.json`。
 - `apps/web/src/{main.tsx,routes/RootLayout.tsx,pages/Home.tsx,pages/Home.module.scss,styles/index.scss,package.json}`、`apps/web/index.html`。
-- `@exre/exui@0.4.0` 的公开类型与样式表（`dist/index.css`、`dist/tokens/style.css`、`types/components/ui/*.d.ts`），以及其 `src/components/theme-provider.tsx`。
+- `@exre/exui@0.5.0` 的公开类型与样式表（`dist/index.css`、`dist/tokens/style.css`、`types/components/ui/*.d.ts`），以及其 `src/components/theme-provider.tsx`。
 - `.agents/skills/exui-usage/`：ExUI 官方的消费方用法说明，其中 `references/react-setup.md`、`references/theme-usage.md`、`references/component-usage` 与 `guides/EXUI_SCALING_RULES.md` 是 §2.3 三条约束的直接来源。

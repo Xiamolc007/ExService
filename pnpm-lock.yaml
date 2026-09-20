@@ -70,8 +70,8 @@ importers:
   apps/web:
     dependencies:
       '@exre/exui':
-        specifier: ^0.4.0
-        version: 0.4.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        specifier: ^0.5.0
+        version: 0.5.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@workspace/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
@@ -129,8 +129,8 @@ importers:
   packages/components:
     dependencies:
       '@exre/exui':
-        specifier: ^0.4.0
-        version: 0.4.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        specifier: ^0.5.0
+        version: 0.5.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       lucide-react:
         specifier: ^1.47.0
         version: 1.47.0(react@19.3.0)
@@ -619,8 +619,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@exre/exui@0.4.0':
-    resolution: {integrity: sha512-ogqDX9g8AOQxEDqvDzw7CVpmdLjEzU5rr5kBOvDSOrbab9v5cJKnjiCZ0dK46+Rrk3J6Yx+yPdTOcShFkfEQIw==}
+  '@exre/exui@0.5.0':
+    resolution: {integrity: sha512-bDEpAJuGWbUGL1Kn4fXdfiiK0ZQk2J+yX/knFWSg6vfkfZ+5d7lUj9DSUhwSBZZZep+JbH0fiaX5ooZU3FkySg==}
     peerDependencies:
       react: '>=19.0.0 <20'
       react-dom: '>=19.0.0 <20'
@@ -2005,7 +2005,7 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@exre/exui@0.4.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
+  '@exre/exui@0.5.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
       '@fontsource-variable/outfit': 5.3.0
     optionalDependencies:
