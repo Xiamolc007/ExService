@@ -91,4 +91,4 @@ ExUI 的 `Button` 渲染 `<button>` 但**不写** `role="button"`（依赖隐式
 
 - 已安装包内：`dist/index.css`（含 `body{background-color:var(--background);color:var(--foreground)}`、`html{font-family:var(--exui-font-family)}`）、`dist/tokens/style.css`（`:root` / `.dark` / `.pitch-black` 三个主题选择器）、`src/components/theme-provider.tsx`、`src/components/ui/{button,navigation-menu,dropdown-menu}.tsx`、`types/components/ui/*.d.ts`。
 - `apps/web/src/main.tsx`、`apps/web/src/styles/index.scss`、`packages/components/src/SiteHeader.module.scss`。
-- `.agents/skills/exui-usage/references/react-setup.md`、`theme-usage.md`、`icon-usage.md`、`guides/EXUI_SCALING_RULES.md`。
+- `.agents/skills/exui-usage/references/react-setup.md`、`theme-usage.md`、`icon-usage.md`、`guides/EXUI_SCALING_RULES.md`（本机保留、未纳入版本控制，见 `.gitignore`）。

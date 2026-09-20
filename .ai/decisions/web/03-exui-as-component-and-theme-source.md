@@ -49,4 +49,4 @@ _最后更新：2026-09-18_
 - `apps/web/src/main.tsx`（导入点与 `ThemeProvider` 挂载点）、`apps/web/src/styles/index.scss`。
 - `packages/components/src/ThemeToggle.tsx`（三态切换）。
 - 已安装包的 `package.json`、`dist/index.css`、`dist/tokens/style.css`、`src/components/theme-provider.tsx`。
-- `.agents/skills/exui-usage/`（ExUI 官方消费方说明）。
+- `.agents/skills/exui-usage/`（ExUI 官方消费方说明；本机保留、未纳入版本控制，见 `.gitignore`）。
