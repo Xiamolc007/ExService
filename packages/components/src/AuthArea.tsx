@@ -2,8 +2,8 @@ import { useState } from 'react'
 import {
   Avatar,
   AvatarFallback,
+  ActionButton,
   Button,
-  ButtonGroup,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -11,6 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@exre/exui'
+import styles from './AuthArea.module.scss'
 
 /**
  * 假的登录用户。`api/openapi.yaml` 里没有任何认证 operation，
@@ -32,23 +33,25 @@ export function AuthArea() {
 
   if (!isSignedIn) {
     return (
-      <ButtonGroup>
-        <Button
+      <>
+        <ActionButton
+          className={styles.authButton}
           onClick={() => {
             setIsSignedIn(true)
           }}
         >
           登录
-        </Button>
-        <Button
+        </ActionButton>
+        <ActionButton
+          className={styles.authButton}
           variant="outline"
           onClick={() => {
             setIsSignedIn(true)
           }}
         >
           注册
-        </Button>
-      </ButtonGroup>
+        </ActionButton>
+      </>
     )
   }
 

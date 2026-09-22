@@ -9,22 +9,91 @@
    * `var()` 带 fallback，即使该自定义属性缺失也不会塌成 0 高度。
    */
   min-height: calc(100dvh - var(--site-header-height, 0px));
-  padding: 1rem 1.5rem 4rem;
+  padding: 0 0 4rem;
 }
 
-.placeholder {
+.heroStage {
   /* 宽度跟随容器但不溢出，高度由宽高比决定。 */
-  width: min(22.5rem, 100%);
-  aspect-ratio: 36 / 25;
+  width: 98vw;
+  height: calc(100dvh - var(--site-header-height, 0px) - 4rem);
+  aspect-ratio: 16 / 9;
 
-  border: 1px solid var(--exui-border-default);
-  border-radius: var(--density-control-radius, 0.625rem);
-  background: var(--exui-surface-secondary);
+  position: relative;
+
+  .hero {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    border-radius: 4rem;
+    box-shadow: 0px 8px 32px rgba(0, 0, 0, 0.3);
+
+    .shader {
+      width: 100%;
+      height: 100%;
+
+      > div {
+        width: 100% !important;
+        height: 100% !important;
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+    }
+  }
+
+  /**
+   * 玻璃材质（`Card glass`）自己画底色与内描边，这里只喂它两个输入：
+   *
+   * - `--exui-glass-background` 是材质文档化的重着色入口，按浅色与深色主题设置；
+   *   不能再用 `background`，那会盖掉材质自己的 `background-color`。
+   * - 外阴影必须走 `--tw-shadow`。材质把 `box-shadow` 整个重写成
+   *   「内描边 + 宿主外阴影」的组合（见 `@exre/exui/src/glass.css`），
+   *   应用样式在库样式之后加载，直接写 `box-shadow` 会把内描边一起压掉。
+   *   `--tw-shadow` 已用 `@property { inherits: false }` 注册，不会外泄给子元素。
+   */
+  .actionCard {
+    position: absolute;
+    bottom: -2rem;
+    left: 50%;
+    width: max-content;
+    padding: 0.5rem;
+    border-radius: 1rem;
+    --exui-glass-background: rgba(255, 255, 255, 0.4);
+    --tw-shadow: var(--exui-shadow-large);
+    transform: translateX(-50%);
+
+    :global(.dark) & {
+      --exui-glass-background: rgba(255, 255, 255, 0.1);
+    }
+  }
+
 }
 
 .actions {
   /* 把按钮组推到内容区底部，中间自然形成大段留白。 */
-  margin-top: auto;
+  margin: 0;
   display: flex;
   gap: 0.75rem;
+}
+
+.heroAction {
+  height: 3rem;
+  padding-inline: 2rem;
+  font-size: 1rem;
+  letter-spacing: 0.08em;
+}
+
+.fivemAction {
+  background: rgb(0, 0, 0);
+  color: var(--exui-component-button-primary-default-foreground);
+
+  &:hover,
+  &:focus-visible,
+  &:active {
+    background: rgb(0, 0, 0);
+    color: var(--exui-component-button-primary-default-foreground);
+  }
 }

@@ -5,9 +5,20 @@
  * 字体相关的值取自 ExUI 的 Token，避免在应用侧再造一套设计变量。
  */
 .wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
   font-size: 1.25rem;
   font-weight: var(--exui-font-weight-bold);
   letter-spacing: -0.01em;
   color: var(--exui-text-primary);
   text-decoration: none;
+}
+
+.icon {
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  background-color: currentColor;
+  mask: url('/ExIcon.svg') center / contain no-repeat;
 }

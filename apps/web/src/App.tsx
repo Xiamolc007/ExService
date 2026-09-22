@@ -4,7 +4,7 @@ import { NotFound } from './pages/NotFound'
 import { RootLayout } from './routes/RootLayout'
 
 /**
- * 路由表：唯一的根布局挂载首页与兜底页。
+ * 路由表：首页使用站点布局，兜底页独立显示，不挂载顶栏。
  * 首版不含业务页面，因此这就是全部路由；`<BrowserRouter>` 由 `main.tsx` 提供。
  */
 export function App() {
@@ -12,8 +12,8 @@ export function App() {
     <Routes>
       <Route element={<RootLayout />}>
         <Route path="/" element={<Home />} />
-        <Route path="*" element={<NotFound />} />
       </Route>
+      <Route path="*" element={<NotFound />} />
     </Routes>
   )
 }

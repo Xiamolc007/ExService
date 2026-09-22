@@ -36,7 +36,7 @@ const NAV_ITEMS = [
  */
 export function SiteHeader() {
   return (
-    <header className={styles.header}>
+    <header className={styles.header} data-site-header>
       <div className={styles.inner}>
         <div className={styles.start}>
           <Logo />

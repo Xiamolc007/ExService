@@ -87,6 +87,10 @@ ExUI 有 `--exui-border-*`、`--exui-surface-*`、`--exui-text-*`、`--exui-shad
 
 ExUI 的 `Button` 渲染 `<button>` 但**不写** `role="button"`（依赖隐式角色）。因此用 `[role="button"]` 查询它一定查不到，自动化断言要按标签名或 `data-slot` 查。`data-slot="button"` 在 `DropdownMenuTrigger asChild` 场景下会被 Radix 的 `data-slot="dropdown-menu-trigger"` 取代。
 
+### 11. Canvas 配色需要解析 system 主题
+
+`useTheme().theme` 可能为 `system`，不能只用 `theme === 'dark'` 决定 Canvas 的颜色。404 背景在 system 模式下订阅 `prefers-color-scheme`，跟随操作系统实时更新；显式 light/dark 优先于系统偏好。普通 DOM 样式直接继承 provider 在根节点应用的主题 token，避免页面局部强制 `.dark` 造成 Canvas 与组件主题不一致。
+
 ## 证据
 
 - 已安装包内：`dist/index.css`（含 `body{background-color:var(--background);color:var(--foreground)}`、`html{font-family:var(--exui-font-family)}`）、`dist/tokens/style.css`（`:root` / `.dark` / `.pitch-black` 三个主题选择器）、`src/components/theme-provider.tsx`、`src/components/ui/{button,navigation-menu,dropdown-menu}.tsx`、`types/components/ui/*.d.ts`。

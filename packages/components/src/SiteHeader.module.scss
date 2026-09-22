@@ -6,7 +6,7 @@
  * 那一刻，而不是预先建立的设计 token 层。
  */
 :global(:root) {
-  --site-header-height: 4.875rem;
+  --site-header-height: 4rem;
 }
 
 .header {
@@ -14,7 +14,6 @@
   top: 0;
   z-index: 10;
   background: var(--exui-surface-background);
-  border-bottom: 1px solid var(--exui-border-divider);
 
   // `min-height` 必须放在**外层**并配合 `box-sizing: border-box`。
   // 放在内层的话，外层高度会是「内层高度 + 底边框 1px」，比 `--site-header-height`
@@ -24,6 +23,14 @@
   display: flex;
   box-sizing: border-box;
   min-height: var(--site-header-height);
+}
+
+:global(:root:not(.dark)) .header {
+  background: rgb(250, 250, 250);
+}
+
+:global(:root:has(body [data-page='home'])) .header {
+  background: transparent;
 }
 
 .inner {
