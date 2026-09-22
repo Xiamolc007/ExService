@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@exre/exui": "^0.5.0",
+    "@paper-design/shaders-react": "^0.0.81",
     "@workspace/api-client": "workspace:*",
     "@workspace/components": "workspace:*",
     "framer-motion": "^13.3.0",
