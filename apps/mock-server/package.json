@@ -8,13 +8,15 @@
     ".": "./src/app.ts"
   },
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "start": "node dist/server.js",
+    "dev": "node --env-file-if-exists=.env.local --import tsx --watch src/server.ts",
+    "start": "node --env-file-if-exists=.env.local dist/server.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:reset": "tsx src/db/reset.ts && tsx src/db/migrate.ts",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "sso:create": "node --env-file-if-exists=.env.local --import tsx src/cli/sso-create.ts",
+    "sso:inspect": "node --env-file-if-exists=.env.local --import tsx src/cli/sso-inspect.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
