@@ -90,4 +90,4 @@ main.tsx ──<BrowserRouter>──▶ App.tsx（路由表）
 
 ## 数据库边界
 
-本地 Mock 数据库固定在 `apps/mock-server/data/mock.sqlite`，只服务于本地 Mock 环境。它不连接、不共享 PHP/生产数据库，也不接受任意数据库路径或任意文件删除入口。其生命周期与命令语义见 [architectures/mock-server/request-lifecycle.md](mock-server/request-lifecycle.md) 与 [[mock-server/03-database-changes-only-by-explicit-command]]。
+本地 Mock 数据库固定在 `apps/mock-server/data/mock.sqlite`，只服务于本地 Mock 环境。它不连接、不共享 PHP/生产数据库，也不接受任意数据库路径或任意文件删除入口。数据职责与关系见 [数据库模型](../databases/data-model.md)，生命周期与命令语义见 [请求生命周期](mock-server/request-lifecycle.md) 与 [显式迁移决策](../databases/decisions/03-database-changes-only-by-explicit-command.md)。

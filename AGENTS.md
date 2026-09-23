@@ -16,7 +16,7 @@
 ### Durable knowledge extraction
 
 - After completing a module or making a major decision, use `codebase-documenter` to update evidence-backed durable `.ai/` knowledge.
-- `.ai/CONTEXT.md` holds the domain language; `.ai/architectures/`, `.ai/decisions/`, and `.ai/knowledge/` hold system structure, accepted decisions, and non-obvious behavior, each grouped by module. Keep each fact in exactly one of them and link instead of duplicating.
+- `.ai/CONTEXT.md` holds the domain language; `.ai/architectures/`, `.ai/decisions/`, and `.ai/knowledge/` hold system structure, accepted decisions, and non-obvious behavior, each grouped by module. Database model, database-specific decisions, and database-specific operational knowledge live in `.ai/databases/`. Keep each fact in exactly one place and link instead of duplicating.
 - Design documents, RFCs, and implementation plans stay where they are, normally `notes/<module>/`. After a design is complete, ask the user before distilling its stable conclusions into `.ai/`.
 - Do not archive transient task narration, raw test output, unadopted speculation, source-code duplication, or version-control and workspace state. Update `.ai/README.md` and `.ai/decisions/README.md` after structural changes.
 
@@ -136,6 +136,7 @@ pnpm typecheck && pnpm test && pnpm build
 
 ## 数据库边界
 
+- 修改表的职责、关系或数据规则前，先阅读并更新 [`.ai/databases/data-model.md`](.ai/databases/data-model.md)，评审其对本地 SQLite 与未来 PHP + MySQL 目标业务模型的影响，再修改 schema 和 migration。纯索引调整、迁移实现及测试数据变动不要求更新模型文档；实际物理结构以各实现的 schema 和 migration 为准。
 - 本地数据库固定为 `apps/mock-server/data/mock.sqlite`，仅服务于本地 Mock 环境。
 - 不连接、不共享 PHP/生产 MySQL 数据库；不提供任意数据库路径或任意文件删除入口。
 - migration 只能通过显式命令执行；服务启动不建表、不生成 migration、不隐式 reset。

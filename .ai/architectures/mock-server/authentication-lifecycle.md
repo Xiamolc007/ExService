@@ -1,6 +1,6 @@
 # `mock-server` 模块：认证生命周期
 
-本文件说明认证 operation 如何落到状态服务与固定本地 SQLite。HTTP 形状仍以 `api/openapi.yaml` 为唯一事实来源；这里记录控制流和状态边界。
+本文件说明认证 operation 如何落到状态服务与固定本地 SQLite。HTTP 形状仍以 `api/openapi.yaml` 为唯一事实来源；这里记录控制流和状态边界。表的职责与关系见 [数据库模型](../../databases/data-model.md)。
 
 _最后更新：2026-09-23_
 

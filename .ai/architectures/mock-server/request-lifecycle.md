@@ -1,6 +1,6 @@
 # `mock-server` 模块：请求生命周期与数据边界
 
-本文件说明 Mock Server 从创建实例到返回响应、以及本地数据库从迁移到重置的结构与流程。选择理由见 [decisions/mock-server](../../decisions/README.md)，失败模式见 [knowledge/mock-server](../../knowledge/mock-server/database-lifecycle-traps.md)。
+本文件说明 Mock Server 从创建实例到返回响应、以及本地数据库从迁移到重置的结构与流程。表的职责与关系见 [数据库模型](../../databases/data-model.md)，选择理由见 [决策索引](../../decisions/README.md)，失败模式见 [数据库生命周期陷阱](../../databases/knowledge/database-lifecycle-traps.md)。
 
 _最后更新：2026-09-23_
 

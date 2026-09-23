@@ -16,7 +16,7 @@ _最后更新：2026-09-17_
 
 `src/db/migrate.ts` 与 `src/db/reset.ts` 都在模块顶层调用 `assertCliEntry(import.meta.url)`，且都发生在副作用之前。被 import 时抛错，而不是静默返回。
 
-抛错而不是静默返回，是刻意的取舍：静默返回会让 `pnpm db:migrate` 变成一个「退出码 0 但什么都没做」的命令，比误删开发数据库更难发现。这条取舍属于 [[mock-server/03-database-changes-only-by-explicit-command]]。
+抛错而不是静默返回，是刻意的取舍：静默返回会让 `pnpm db:migrate` 变成一个「退出码 0 但什么都没做」的命令，比误删开发数据库更难发现。这条取舍见 [数据库变更只由显式命令执行](../decisions/03-database-changes-only-by-explicit-command.md)。
 
 注意 `runMigrations()` 与 `resetDatabase()` 虽然以具名导出存在，也**不能**被 import：抛错发生在模块顶层，导入即触发。需要复用逻辑时只能 import `src/db/client.ts` 中的纯函数（`openDatabase()`、`ensureDatabaseDirectory()` 等）。
 

@@ -1,10 +1,10 @@
 # 决策索引
 
-本目录记录 ExWebsite 中已接受的设计决策：背景、替代方案、理由、代价，以及重新审视它们的条件。
+本索引记录 ExWebsite 中已接受的设计决策：背景、替代方案、理由、代价，以及重新审视它们的条件。
 
-决策按模块分组，编号在每个模块内从 `01` 开始，编号不重复使用。引用某条决策时使用 `[[<module>/<NN>-<kebab-title>]]`，例如 `[[mock-server/03-database-changes-only-by-explicit-command]]`。
+决策按模块编号，编号在每个模块内从 `01` 开始且不重复使用。数据库专属决策存于 `../databases/decisions/`，沿用原 `mock-server` 编号；引用时使用指向实际文件的 Markdown 链接。
 
-决定「为什么这样做」的内容留在本目录；它产生的结构写在 `../architectures/`，运行中暴露的失败模式写在 `../knowledge/`。
+决定「为什么这样做」的内容留在本目录或 `../databases/decisions/`；它产生的结构写在 `../architectures/` 或 `../databases/data-model.md`，运行中暴露的失败模式写在 `../knowledge/` 或 `../databases/knowledge/`。
 
 _最后更新：2026-09-23_
 
@@ -19,8 +19,8 @@ _最后更新：2026-09-23_
 | 01 | [生成的类型纳入版本控制，共享 Client 以源码形式导出](api-client/01-generated-types-committed-and-read-only.md) | `api-client` | 已接受 | 2026-09-16 |
 | 01 | [共享 UI 组件放在独立工作区包，而不是 app 内部目录](components/01-app-level-shared-component-package.md) | `components` | 已接受 | 2026-09-18 |
 | 01 | [由 Contract 注册路由，并显式声明前缀与 handler 映射](mock-server/01-contract-driven-route-registration.md) | `mock-server` | 已接受 | 2026-09-16 |
-| 02 | [本地 Mock 数据库使用固定路径，不接受覆盖](mock-server/02-fixed-local-sqlite-database.md) | `mock-server` | 已接受 | 2026-09-16 |
-| 03 | [数据库变更只由显式命令执行](mock-server/03-database-changes-only-by-explicit-command.md) | `mock-server` | 已接受 | 2026-09-16 |
+| 02 | [本地 Mock 数据库使用固定路径，不接受覆盖](../databases/decisions/02-fixed-local-sqlite-database.md) | `mock-server` | 已接受 | 2026-09-16 |
+| 03 | [数据库变更只由显式命令执行](../databases/decisions/03-database-changes-only-by-explicit-command.md) | `mock-server` | 已接受 | 2026-09-16 |
 | 04 | [只对外回显安全的错误消息](mock-server/04-safe-error-messages.md) | `mock-server` | 已接受 | 2026-09-16 |
 | 01 | [前端只经共享 Client 调用，base URL 由配置决定](web/01-shared-client-with-configurable-base-url.md) | `web` | 已接受 | 2026-09-16 |
 | 02 | [前端使用 react-router 的声明式路由](web/02-react-route-skeleton.md) | `web` | 已接受 | 2026-09-18 |
@@ -30,7 +30,7 @@ _最后更新：2026-09-23_
 
 ## 模块目录
 
-上表的模块列与磁盘上的目录一一对应：`api/`、`api-client/`、`components/`、`mock-server/`、`web/`、`contract-tests/`。这些目录名与 `../README.md` 中的模块划分保持一致。
+模块列对应 `../README.md` 中的模块划分。除数据库专属决策集中于 `../databases/decisions/` 外，其余决策按模块放在本目录的 `api/`、`api-client/`、`components/`、`mock-server/`、`web/`、`contract-tests/`。
 
 尚未包含的决策领域：API 版本策略与兼容层、完整 Draft 2020-12 支持、PHP 侧 Contract Test 与 CI。它们都不是既有决策的例外，而是尚未开始的独立设计。
 
