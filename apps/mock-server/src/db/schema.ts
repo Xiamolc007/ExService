@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 export const authUsers = sqliteTable(
   'auth_users',
@@ -74,4 +74,18 @@ export const authSsoRequests = sqliteTable(
     check('auth_sso_requests_status_check', sql`${table.status} in ('pending', 'completed')`),
     index('auth_sso_requests_expires_at_idx').on(table.expiresAt),
   ],
+)
+
+export const communityGroups = sqliteTable('community_groups', {
+  code: text('code').primaryKey(),
+  displayName: text('display_name').notNull(),
+})
+
+export const communityGroupMemberships = sqliteTable(
+  'community_group_memberships',
+  {
+    userId: text('user_id').notNull().references(() => authUsers.id),
+    groupCode: text('group_code').notNull().references(() => communityGroups.code),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.groupCode] })],
 )

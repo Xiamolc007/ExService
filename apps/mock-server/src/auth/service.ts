@@ -245,6 +245,9 @@ export class AuthService {
         VALUES (?, ?, ?, ?, ?)
       `).run(userId, row.email, row.nickname, row.password_hash, now)
       this.sqlite.prepare(`
+        INSERT INTO community_group_memberships (user_id, group_code) VALUES (?, 'general')
+      `).run(userId)
+      this.sqlite.prepare(`
         UPDATE auth_registrations
         SET status = 'completed', nickname = NULL, password_hash = NULL,
             completed_user_id = ?, completed_at = ?

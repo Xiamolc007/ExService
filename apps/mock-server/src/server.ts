@@ -3,6 +3,7 @@ import { createApp } from './app.js'
 import { parseAuthCodeHmacKey } from './auth/crypto.js'
 import { assertAuthSchemaAvailable, AuthService } from './auth/service.js'
 import { DATABASE_PATH, openDatabase } from './db/client.js'
+import { assertCommunitySchemaAvailable } from './community/schema-check.js'
 import { ProfileService, publicAvatarBaseUrl } from './profile/service.js'
 import { assertProfileSchemaAvailable } from './profile/schema-check.js'
 
@@ -33,6 +34,7 @@ if (!existsSync(DATABASE_PATH)) {
     const { sqlite } = openDatabase()
     assertAuthSchemaAvailable(sqlite)
     assertProfileSchemaAvailable(sqlite)
+    assertCommunitySchemaAvailable(sqlite)
     const authServices = new AuthService({
       sqlite,
       codeHmacKey: parseAuthCodeHmacKey(process.env.AUTH_CODE_HMAC_KEY),
