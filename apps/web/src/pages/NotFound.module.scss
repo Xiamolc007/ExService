@@ -1,6 +1,7 @@
 ﻿.page {
   position: fixed;
   inset: 0;
+  isolation: isolate;
   box-sizing: border-box;
   display: grid;
   place-items: center;
@@ -11,24 +12,6 @@
   padding: 2rem;
   color: var(--exui-text-primary);
   background: var(--exui-surface-background);
-}
-
-.background {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-
-  // The supplied dimensions are defaults; the background must fill every viewport.
-  > div {
-    width: 100% !important;
-    height: 100% !important;
-  }
-
-  canvas {
-    display: block;
-    width: 100%;
-    height: 100%;
-  }
 }
 
 .frame {

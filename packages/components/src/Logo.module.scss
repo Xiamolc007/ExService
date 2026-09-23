@@ -14,11 +14,3 @@
   color: var(--exui-text-primary);
   text-decoration: none;
 }
-
-.icon {
-  width: 2rem;
-  height: 2rem;
-  flex-shrink: 0;
-  background-color: currentColor;
-  mask: url('/ExIcon.svg') center / contain no-repeat;
-}

@@ -6,7 +6,7 @@ import {
   navigationMenuTriggerStyle,
 } from '@exre/exui'
 import { Link } from 'react-router'
-import { AuthArea } from './AuthArea'
+import { AuthArea, type AuthAreaProps } from './AuthArea'
 import { Logo } from './Logo'
 import { ThemeToggle } from './ThemeToggle'
 import styles from './SiteHeader.module.scss'
@@ -34,7 +34,11 @@ const NAV_ITEMS = [
  * 三区布局用 `1fr auto 1fr` 网格：两侧等宽才能让中间的菜单**真正居中**，
  * 而不是随左右内容宽度漂移。尺寸与颜色全部走 ExUI 的 Token。
  */
-export function SiteHeader() {
+export interface SiteHeaderProps {
+  auth: AuthAreaProps
+}
+
+export function SiteHeader({ auth }: SiteHeaderProps) {
   return (
     <header className={styles.header} data-site-header>
       <div className={styles.inner}>
@@ -60,7 +64,7 @@ export function SiteHeader() {
 
         <div className={styles.end}>
           <ThemeToggle />
-          <AuthArea />
+          <AuthArea {...auth} />
         </div>
       </div>
     </header>

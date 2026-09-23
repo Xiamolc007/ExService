@@ -1,0 +1,96 @@
+.page {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  padding: 5.5rem 1rem 3rem;
+  box-sizing: border-box;
+}
+
+.background {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+
+  > div {
+    width: 100% !important;
+    height: 100% !important;
+  }
+}
+
+.homeLink {
+  position: absolute;
+  top: 1.5rem;
+  left: 1.5rem;
+}
+
+.legal {
+  margin: 1.5rem 0 0;
+  color: var(--exui-text-secondary);
+  text-align: center;
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.panel {
+  display: block;
+  width: min(100%, 32rem);
+  padding: 2rem;
+  border-radius: var(--exui-component-dialog-surface-radius);
+
+  &[data-auth-mode='login'] {
+    --tw-shadow: var(--exui-shadow-large);
+  }
+
+}
+
+.successPanel {
+  display: grid;
+  justify-items: center;
+  gap: 0.75rem;
+  text-align: center;
+
+  h1,
+  p {
+    margin: 0;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+    font-weight: var(--exui-font-weight-bold);
+  }
+
+  p {
+    color: var(--exui-component-dialog-description-foreground);
+  }
+}
+
+.errorContent {
+  display: grid;
+  justify-items: center;
+  gap: 0.75rem;
+  text-align: center;
+
+  h1,
+  p {
+    margin: 0;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+    font-weight: var(--exui-font-weight-bold);
+    color: var(--exui-text-primary);
+  }
+
+  p {
+    color: var(--exui-text-secondary);
+  }
+}
+
+@media (max-width: 36rem) {
+  .panel {
+    padding: 1.25rem;
+  }
+}

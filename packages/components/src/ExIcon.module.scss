@@ -1,0 +1,14 @@
+.base {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: var(--exui-component-dialog-surface-radius);
+  --tw-shadow: var(--exui-shadow-medium);
+}
+
+.mark {
+  width: 85%;
+  height: 85%;
+  background-color: currentColor;
+  mask: url('/ExIcon.svg') center / contain no-repeat;
+}

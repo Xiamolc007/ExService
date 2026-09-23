@@ -17,7 +17,15 @@ describe('Home', () => {
   })
 
   it('renders login and register as separate buttons', () => {
-    const markup = renderToStaticMarkup(<AuthArea />)
+    const markup = renderToStaticMarkup(
+      <AuthArea
+        state={{ status: 'anonymous' }}
+        onLogin={() => undefined}
+        onRegister={() => undefined}
+        onRetry={() => undefined}
+        onLogout={() => undefined}
+      />,
+    )
 
     expect(markup).not.toContain('data-slot="button-group"')
     expect(markup).toContain('data-slot="action-button"')
