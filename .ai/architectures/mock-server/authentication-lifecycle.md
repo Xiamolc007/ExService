@@ -6,7 +6,7 @@ _最后更新：2026-09-23_
 
 ## 组合与依赖
 
-`server.ts` 打开固定 Mock 数据库、检查认证表与验证码 HMAC 密钥，然后构造一个 `AuthService` 注入 `createApp()`。handler 只从 `request.server.authServices` 调用行为，不自行打开数据库，也不复制 Contract schema。
+`server.ts` 打开固定 Mock 数据库、检查认证和资料结构、默认社区身份组与验证码 HMAC 密钥，然后构造 `AuthService` 和 `ProfileService` 注入 `createApp()`。SSO CLI 使用相同的结构前置检查。handler 只调用注入的服务，不自行打开数据库，也不复制 Contract schema。
 
 ```text
 Contract operation
@@ -16,7 +16,9 @@ Contract operation
   → auth_* SQLite 表
 ```
 
-受保护 operation 先由 Glue 的 Bearer security handler 解析本站 token，并把内部会话身份挂到当前请求。退出和 SSO 会话确认在真正写入前会再次检查会话，避免认证检查之后发生撤销或到期。
+受保护 operation 先由 Glue 的 Bearer security handler 解析本站 token，并把内部会话身份挂到当前请求。退出、SSO 会话确认和异步头像处理在真正写入前会再次检查会话，避免认证检查之后发生撤销或到期。头像文件在资料表引用更新之前写入固定本地目录；数据库写入或会话复核失败时删除新文件，替换或移除头像后只清理不再被引用的旧文件。图片只通过当前数据库引用提供，文件目录不作为独立的公开资源目录。
+
+头像 URL 默认使用本机 Mock 地址。通过代理或 HTTPS 隧道访问时，启动 Mock Server 前设置 `MOCK_PUBLIC_AVATAR_BASE_URL` 为浏览器可访问且以 `/api/avatars` 结尾的完整 HTTP(S) 地址；该值来自受控环境配置，不从请求 `Host` 头拼接。
 
 图片验证码取图 operation 当前由 handler 直接返回无缓存的占位 PNG、随机标识和展示用到期时间；它不进入 `AuthService` 或数据库。认证请求的可选 `captcha` 对象当前不参与验证，不能把这个占位接口当作人机防护。未来启用真实校验时需要为挑战与消耗行为增加服务端状态和验证规则。
 
@@ -25,6 +27,8 @@ Contract operation
 ### 注册尝试
 
 注册资料先进入待验证状态。验证码摘要与注册尝试绑定；重发替换摘要、重置错误次数并保留同邮箱冷却。账号只在验证码验证事务中创建，唯一索引和事务共同决定邮箱竞争结果。用户名允许重复，其含义见 [CONTEXT.md](../../CONTEXT.md)。
+
+验证成功的同一事务也插入 `general` 社区组成员关系；任一写入失败则账号创建和注册状态更新一起回滚。既有正式账号由显式增量迁移补齐关系，启动只检查组表与默认组是否存在，不在请求路径隐式回填。组的业务含义见 [数据库模型](../../databases/data-model.md)。
 
 完成、取消或保留期到期后会清除用户名、密码哈希和验证码摘要等不再需要的材料。完成状态在验证码原有效期内保留有限幂等重试能力：正确验证码可重复得到同一成功结果，错误验证码仍累计，不能仅凭注册标识获知完成状态。
 

@@ -41,7 +41,7 @@ Fastify + SQLite 是本地开发实现，未来的 PHP + MySQL 是生产实现�
 3. API 变更先修改 `api/openapi.yaml`，然后执行 `pnpm api:lint` 和 `pnpm api:generate`。
 4. 前端只能通过 `@workspace/api-client` 发起 API 请求；不得直接使用 `fetch`，不得在本仓库内复制 DTO 类型。
 5. Mock Server 只实现 Contract 中带 `operationId` 的 operation；不得新增 Fastify HTTP 路由、静态 JSON mock 路由，也不得用 Fastify schema 反向生成 OpenAPI。
-6. Mock 数据只保留在本地 SQLite（`apps/mock-server/data/mock.sqlite`）；不得提交数据库文件。
+6. Mock 业务数据只保留在本地 SQLite（`apps/mock-server/data/mock.sqlite`）；头像二进制文件是明确例外，固定保存在 `apps/mock-server/data/avatars/`。数据库文件和头像文件均不得提交。`db:reset` 与服务启动均不删除头像目录；清理由显式核对数据库引用的工具或人工操作单独处理。
 7. OpenAPI 3.1 的 schema 只能使用 JSON Schema Draft-07 兼容子集（`type`、`const`、`enum`、`required`、`properties`、`additionalProperties`、数组、`$ref` 等）。引入 Draft 2020-12 专有语义前，必须先单独设计并确认 Fastify 的 validator 与 serializer compiler，不能只改 Contract。
 8. 破坏性 Contract 变更必须显式评审与版本化；当前没有版本策略或兼容层，不要自行发明。
 
