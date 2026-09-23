@@ -116,7 +116,7 @@ const authFixtures: Array<ReturnType<typeof createTestAuth>> = []
 function createTestApp() {
   const fixture = createTestAuth()
   authFixtures.push(fixture)
-  const app = createApp({ authServices: fixture.authServices, logger: false })
+  const app = createApp({ authServices: fixture.authServices, profileServices: fixture.profileServices, logger: false })
   runningApps.push(app)
   return app
 }

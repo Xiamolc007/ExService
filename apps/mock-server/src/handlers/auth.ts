@@ -49,7 +49,7 @@ export async function login(request: FastifyRequest, reply: FastifyReply) {
 
 export async function getCurrentUser(request: FastifyRequest, reply: FastifyReply) {
   noStore(reply)
-  return request.server.authServices.currentUser(requireSession(request))
+  return request.server.profileServices.snapshot(requireSession(request).userId)
 }
 
 export async function logout(request: FastifyRequest, reply: FastifyReply) {
@@ -74,7 +74,7 @@ export async function confirmSsoWithSession(request: FastifyRequest, reply: Fast
   return request.server.authServices.confirmSsoWithSession(ssoRequestId, requireSession(request))
 }
 
-function requireSession(request: FastifyRequest) {
+export function requireSession(request: FastifyRequest) {
   if (request.authSession === undefined) {
     throw new Error('security handler did not attach an authenticated session')
   }

@@ -314,11 +314,6 @@ export class AuthService {
     }
   }
 
-  currentUser(session: SessionIdentity) {
-    this.assertSessionCurrent(session)
-    return { id: session.userId, email: session.email, nickname: session.nickname }
-  }
-
   logout(session: SessionIdentity) {
     this.assertSessionCurrent(session)
     this.sqlite.prepare(`UPDATE auth_sessions SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL`)
@@ -403,7 +398,7 @@ export class AuthService {
     return result
   }
 
-  private assertSessionCurrent(session: SessionIdentity): void {
+  assertSessionCurrent(session: SessionIdentity): void {
     const row = this.sqlite.prepare(`
       SELECT revoked_at, expires_at FROM auth_sessions WHERE token_hash = ? AND user_id = ?
     `).get(session.tokenHash, session.userId) as { revoked_at: number | null; expires_at: number } | undefined

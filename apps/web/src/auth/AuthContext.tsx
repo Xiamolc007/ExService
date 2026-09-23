@@ -9,6 +9,8 @@ interface AuthContextValue {
   openModal: (mode: AuthMode) => void
   closeModal: () => void
   retrySession: () => void
+  refreshProfile: () => Promise<void>
+  invalidateSession: (token: string) => void
   logout: () => void
 }
 
@@ -19,9 +21,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [modalMode, setModalMode] = useState<AuthMode | null>(null)
   const generation = useRef(0)
 
-  const restoreSession = useCallback(async () => {
+  const invalidateSession = useCallback((token: string) => {
+    try {
+      if (readToken(window.localStorage) !== token) return
+      removeMatchingToken(window.localStorage, token)
+      generation.current += 1
+      setState({ status: 'anonymous' })
+    } catch {
+      setState({ status: 'unavailable', message: '浏览器无法读取登录信息' })
+    }
+  }, [])
+
+  const restoreSession = useCallback(async (showLoading = true) => {
     const currentGeneration = ++generation.current
-    setState({ status: 'loading' })
+    if (showLoading) setState({ status: 'loading' })
     let token: string | null
     try {
       token = readToken(window.localStorage)
@@ -45,6 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           status: 'authenticated',
           nickname: data.nickname,
           initial: firstVisibleCharacter(data.nickname),
+          avatarUrl: data.avatarUrl ?? null,
         })
         return
       }
@@ -109,6 +123,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       openModal: setModalMode,
       closeModal: () => setModalMode(null),
       retrySession: () => void restoreSession(),
+      refreshProfile: () => restoreSession(false),
+      invalidateSession,
       logout: () => void logout(),
     }}>
       {children}

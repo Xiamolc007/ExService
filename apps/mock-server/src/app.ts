@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify'
 import openapiGlue from 'fastify-openapi-glue'
 import { AuthError } from './auth/errors.js'
 import type { AuthService } from './auth/service.js'
+import type { ProfileService } from './profile/service.js'
 import { registerErrorHandlers } from './errors.js'
 import {
   cancelRegistration,
@@ -19,6 +20,7 @@ import {
   verifyRegistration,
 } from './handlers/auth.js'
 import { getHealth } from './handlers/health.js'
+import { getAvatarImage, updateCurrentUser, uploadCurrentUserAvatar } from './handlers/profile.js'
 
 /**
  * Fastify 路由前缀。Contract 的 `servers[0].url` 只描述客户端 base URL，
@@ -35,6 +37,7 @@ export const OPENAPI_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..
 
 export interface CreateAppOptions {
   authServices: AuthService
+  profileServices: ProfileService
   /**
    * 测试中保持静默；`server.ts` 开启日志，以便用 requestId 关联日志与响应。
    */
@@ -58,6 +61,9 @@ export const serviceHandlers = {
   verifyRegistration,
   login,
   getCurrentUser,
+  updateCurrentUser,
+  uploadCurrentUserAvatar,
+  getAvatarImage,
   logout,
   inspectSsoRequest,
   loginForSso,
@@ -70,9 +76,10 @@ export const serviceHandlers = {
  * 路由、method、输入校验与响应 schema 全部来自 `api/openapi.yaml`：
  * 这里不手写任何 `app.get(...)`，也不从 Fastify schema 反向生成 OpenAPI。
  */
-export function createApp({ authServices, logger = false }: CreateAppOptions): FastifyInstance {
+export function createApp({ authServices, profileServices, logger = false }: CreateAppOptions): FastifyInstance {
   const app = Fastify({
     logger,
+    bodyLimit: 4 * 1024 * 1024,
     ajv: {
       customOptions: {
         coerceTypes: false,
@@ -82,6 +89,7 @@ export function createApp({ authServices, logger = false }: CreateAppOptions): F
   })
 
   app.decorate('authServices', authServices)
+  app.decorate('profileServices', profileServices)
   app.decorateRequest('authSession', undefined)
   registerErrorHandlers(app)
 

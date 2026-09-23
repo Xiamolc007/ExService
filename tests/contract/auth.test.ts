@@ -14,7 +14,7 @@ describe('POST /api/auth/captcha/challenges', () => {
   it('returns a no-store placeholder PNG with an opaque challenge id', async () => {
     const fixture = createTestAuth()
     authFixtures.push(fixture)
-    const app = createApp({ authServices: fixture.authServices, logger: false })
+    const app = createApp({ authServices: fixture.authServices, profileServices: fixture.profileServices, logger: false })
     runningApps.push(app)
 
     const response = await app.inject({ method: 'POST', url: '/api/auth/captcha/challenges' })
@@ -36,7 +36,7 @@ describe('POST /api/auth/registrations', () => {
   it('creates a verification challenge without exposing the code', async () => {
     const fixture = createTestAuth()
     authFixtures.push(fixture)
-    const app = createApp({ authServices: fixture.authServices, logger: false })
+    const app = createApp({ authServices: fixture.authServices, profileServices: fixture.profileServices, logger: false })
     runningApps.push(app)
 
     const response = await app.inject({
@@ -62,7 +62,7 @@ describe('POST /api/auth/registrations', () => {
   it('normalizes public fields and completes the account, session, and logout lifecycle', async () => {
     const fixture = createTestAuth()
     authFixtures.push(fixture)
-    const app = createApp({ authServices: fixture.authServices, logger: false })
+    const app = createApp({ authServices: fixture.authServices, profileServices: fixture.profileServices, logger: false })
     runningApps.push(app)
 
     const started = await app.inject({
@@ -104,6 +104,9 @@ describe('POST /api/auth/registrations', () => {
       id: '10000000-0000-4000-8000-000000000001',
       email: 'member@example.com',
       nickname: '成员',
+      qq: null,
+      fivemId: null,
+      avatarUrl: null,
     })
 
     const signedOut = await app.inject({
@@ -126,7 +129,7 @@ describe('POST /api/auth/registrations', () => {
   it('commits failed code attempts and requires a resend after the fifth failure', async () => {
     const fixture = createTestAuth()
     authFixtures.push(fixture)
-    const app = createApp({ authServices: fixture.authServices, logger: false })
+    const app = createApp({ authServices: fixture.authServices, profileServices: fixture.profileServices, logger: false })
     runningApps.push(app)
 
     const started = await app.inject({
@@ -164,7 +167,7 @@ describe('POST /api/auth/registrations', () => {
   it('completes SSO without creating a local session', async () => {
     const fixture = createTestAuth()
     authFixtures.push(fixture)
-    const app = createApp({ authServices: fixture.authServices, logger: false })
+    const app = createApp({ authServices: fixture.authServices, profileServices: fixture.profileServices, logger: false })
     runningApps.push(app)
 
     const registration = await fixture.authServices.startRegistration({
@@ -198,7 +201,7 @@ describe('POST /api/auth/registrations', () => {
     const codes = [123456, 654321]
     const fixture = createTestAuth({ randomInteger: () => codes.shift() ?? 111111 })
     authFixtures.push(fixture)
-    const app = createApp({ authServices: fixture.authServices, logger: false })
+    const app = createApp({ authServices: fixture.authServices, profileServices: fixture.profileServices, logger: false })
     runningApps.push(app)
 
     const started = await app.inject({
@@ -258,7 +261,7 @@ describe('POST /api/auth/registrations', () => {
   it('rejects extra fields including the removed QQ field', async () => {
     const fixture = createTestAuth()
     authFixtures.push(fixture)
-    const app = createApp({ authServices: fixture.authServices, logger: false })
+    const app = createApp({ authServices: fixture.authServices, profileServices: fixture.profileServices, logger: false })
     runningApps.push(app)
 
     const extra = await app.inject({
@@ -328,7 +331,7 @@ describe('POST /api/auth/registrations', () => {
     const session = fixture.authServices.authenticateToken(loggedIn.token)
 
     const currentUser = await serviceHandlers.getCurrentUser(rawRequest(fixture, undefined, session), reply)
-    expect(Object.keys(currentUser)).toEqual(['id', 'email', 'nickname'])
+    expect(Object.keys(currentUser)).toEqual(['id', 'email', 'nickname', 'qq', 'fivemId', 'avatarUrl'])
 
     const inspectedRequest = fixture.authServices.createSsoRequest()
     const inspected = await serviceHandlers.inspectSsoRequest(
@@ -382,7 +385,7 @@ function rawRequest(
   return {
     body,
     authSession,
-    server: { authServices: fixture.authServices },
+    server: { authServices: fixture.authServices, profileServices: fixture.profileServices },
   } as unknown as Parameters<typeof serviceHandlers.startRegistration>[0]
 }
 

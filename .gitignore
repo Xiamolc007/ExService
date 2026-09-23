@@ -13,6 +13,7 @@ apps/mock-server/data/mock.sqlite
 apps/mock-server/data/mock.sqlite-journal
 apps/mock-server/data/mock.sqlite-wal
 apps/mock-server/data/mock.sqlite-shm
+apps/mock-server/data/avatars/
 
 # Local environment overrides
 .env.local

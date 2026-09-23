@@ -1,0 +1,34 @@
+.editor {
+  display: grid;
+  gap: 2rem;
+}
+
+.avatarSection {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.avatar {
+  width: 6rem;
+  height: 6rem;
+}
+
+.avatarSection form,
+.textForm {
+  display: grid;
+  gap: 1rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+@media (max-width: 36rem) {
+  .avatarSection {
+    grid-template-columns: 1fr;
+  }
+}

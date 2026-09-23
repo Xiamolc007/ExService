@@ -79,6 +79,7 @@ describe('Home', () => {
         onRegister={() => undefined}
         onRetry={() => undefined}
         onLogout={() => undefined}
+        onProfile={() => undefined}
       />,
     )
 

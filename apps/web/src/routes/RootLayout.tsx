@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router'
+import { Outlet, useNavigate } from 'react-router'
 import { AuthModal, SiteHeader } from '@workspace/components'
 import { AuthFlow } from '../auth/AuthFlow'
 import { useAuth } from '../auth/AuthContext'
@@ -10,6 +10,7 @@ import { useAuth } from '../auth/AuthContext'
  */
 export function RootLayout() {
   const auth = useAuth()
+  const navigate = useNavigate()
 
   return (
     <>
@@ -19,6 +20,7 @@ export function RootLayout() {
         onRegister: () => auth.openModal('register'),
         onRetry: auth.retrySession,
         onLogout: auth.logout,
+        onProfile: () => navigate('/account/profile'),
       }} />
       <Outlet />
       {auth.modalMode !== null && (

@@ -1,6 +1,7 @@
 import {
   Avatar,
   AvatarFallback,
+  AvatarImage,
   ActionButton,
   Button,
   DropdownMenu,
@@ -17,7 +18,7 @@ export type AuthDisplayState =
   | { status: 'loading' }
   | { status: 'anonymous' }
   | { status: 'unavailable'; message: string }
-  | { status: 'authenticated'; nickname: string; initial: string }
+  | { status: 'authenticated'; nickname: string; initial: string; avatarUrl: string | null }
 
 export interface AuthAreaProps {
   state: AuthDisplayState
@@ -25,9 +26,10 @@ export interface AuthAreaProps {
   onRegister: () => void
   onRetry: () => void
   onLogout: () => void
+  onProfile: () => void
 }
 
-export function AuthArea({ state, onLogin, onRegister, onRetry, onLogout }: AuthAreaProps) {
+export function AuthArea({ state, onLogin, onRegister, onRetry, onLogout, onProfile }: AuthAreaProps) {
   if (state.status === 'loading') {
     return <Spinner aria-label="正在恢复登录状态" />
   }
@@ -56,13 +58,16 @@ export function AuthArea({ state, onLogin, onRegister, onRetry, onLogout }: Auth
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" aria-label="用户菜单">
-          <Avatar size="sm"><AvatarFallback>{state.initial}</AvatarFallback></Avatar>
+          <Avatar size="sm">
+            {state.avatarUrl && <AvatarImage src={state.avatarUrl} alt="" />}
+            <AvatarFallback>{state.initial}</AvatarFallback>
+          </Avatar>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>{state.nickname}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem>个人中心</DropdownMenuItem>
+        <DropdownMenuItem onSelect={onProfile}>个人资料</DropdownMenuItem>
         <DropdownMenuItem>设置</DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={onLogout}>退出登录</DropdownMenuItem>

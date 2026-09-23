@@ -1,13 +1,20 @@
 import { sql } from 'drizzle-orm'
-import { check, index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
-export const authUsers = sqliteTable('auth_users', {
-  id: text('id').primaryKey(),
-  email: text('email').notNull().unique(),
-  nickname: text('nickname').notNull(),
-  passwordHash: text('password_hash').notNull(),
-  createdAt: integer('created_at').notNull(),
-})
+export const authUsers = sqliteTable(
+  'auth_users',
+  {
+    id: text('id').primaryKey(),
+    email: text('email').notNull().unique(),
+    nickname: text('nickname').notNull(),
+    passwordHash: text('password_hash').notNull(),
+    createdAt: integer('created_at').notNull(),
+    qq: text('qq'),
+    fivemId: text('fivem_id'),
+    avatarKey: text('avatar_key'),
+  },
+  (table) => [uniqueIndex('auth_users_avatar_key_unique').on(table.avatarKey)],
+)
 
 export const authRegistrations = sqliteTable(
   'auth_registrations',

@@ -16,6 +16,8 @@ export type { ExIconProps } from './ExIcon'
 export type { SiteHeaderProps } from './SiteHeader'
 export { AuthArea } from './AuthArea'
 export type { AuthAreaProps, AuthDisplayState } from './AuthArea'
+export { ProfileEditor } from './ProfileEditor'
+export type { ProfileEditorProps, ProfileTextValues } from './ProfileEditor'
 export { AuthForm } from './auth/AuthForm'
 export type {
   AuthFormErrors,

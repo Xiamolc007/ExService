@@ -4,6 +4,7 @@ import { NotFound } from './pages/NotFound'
 import { AuthPage } from './pages/AuthPage'
 import { SsoSuccess } from './pages/AuthPage/SsoSuccess'
 import { RootLayout } from './routes/RootLayout'
+import { ProfilePage } from './pages/ProfilePage'
 import { AuthProvider } from './auth/AuthContext'
 
 /**
@@ -20,6 +21,7 @@ export function App() {
         <Route path="/sso/*" element={<NotFound />} />
         <Route element={<RootLayout />}>
           <Route path="/" element={<Home />} />
+          <Route path="/account/profile" element={<ProfilePage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

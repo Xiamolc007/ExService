@@ -3,6 +3,8 @@ import { createApp } from './app.js'
 import { parseAuthCodeHmacKey } from './auth/crypto.js'
 import { assertAuthSchemaAvailable, AuthService } from './auth/service.js'
 import { DATABASE_PATH, openDatabase } from './db/client.js'
+import { ProfileService, publicAvatarBaseUrl } from './profile/service.js'
+import { assertProfileSchemaAvailable } from './profile/schema-check.js'
 
 const PORT = 8080
 /** 只绑定回环地址：这是本地 Mock，不对局域网暴露。 */
@@ -30,11 +32,14 @@ if (!existsSync(DATABASE_PATH)) {
   try {
     const { sqlite } = openDatabase()
     assertAuthSchemaAvailable(sqlite)
+    assertProfileSchemaAvailable(sqlite)
     const authServices = new AuthService({
       sqlite,
       codeHmacKey: parseAuthCodeHmacKey(process.env.AUTH_CODE_HMAC_KEY),
     })
-    const app = createApp({ authServices, logger: true })
+    const profileServices = new ProfileService(sqlite, undefined,
+      publicAvatarBaseUrl(process.env.MOCK_PUBLIC_AVATAR_BASE_URL))
+    const app = createApp({ authServices, profileServices, logger: true })
     app.addHook('onClose', () => {
       sqlite.close()
     })

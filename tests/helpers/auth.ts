@@ -1,9 +1,11 @@
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import Database from 'better-sqlite3'
 import { AuthService, type AuthServiceDependencies } from '../../apps/mock-server/src/auth/service'
 import type { PasswordHasher } from '../../apps/mock-server/src/auth/crypto'
+import { ProfileService } from '../../apps/mock-server/src/profile/service'
 
 const migrationPath = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -52,15 +54,21 @@ export function createTestAuth(overrides: Partial<AuthServiceDependencies> = {})
     ...overrides,
   })
 
+  const avatarDirectory = mkdtempSync(resolve(tmpdir(), 'exwebsite-avatars-'))
+  const profileServices = new ProfileService(sqlite, avatarDirectory, 'http://127.0.0.1:8080/api/avatars')
+
   return {
     sqlite,
     authServices,
+    profileServices,
+    avatarDirectory,
     deliveries,
     advance(milliseconds: number) {
       currentTime += milliseconds
     },
     close() {
       sqlite.close()
+      rmSync(avatarDirectory, { recursive: true, force: true })
     },
   }
 }

@@ -1,0 +1,15 @@
+.page {
+  width: min(100% - 2rem, 42rem);
+  margin: 3rem auto 5rem;
+  padding: 2rem;
+  border: 1px solid var(--exui-border-default);
+  border-radius: var(--exui-radius-medium);
+  background: var(--exui-surface-background);
+}
+
+.heading {
+  margin-bottom: 2rem;
+
+  h1 { margin: 0 0 0.5rem; }
+  p { margin: 0; color: var(--exui-text-secondary); }
+}

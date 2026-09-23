@@ -140,6 +140,41 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /** Update the authenticated user's profile */
+        patch: operations["updateCurrentUser"];
+        trace?: never;
+    };
+    "/auth/me/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload and replace the authenticated user's avatar */
+        post: operations["uploadCurrentUserAvatar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/avatars/{avatarId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a currently referenced public avatar image */
+        get: operations["getAvatarImage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -276,6 +311,23 @@ export interface components {
             id: string;
             email: components["schemas"]["Email"];
             nickname: components["schemas"]["Nickname"];
+            qq?: string | null;
+            fivemId?: string | null;
+            /** Format: uri */
+            avatarUrl?: string | null;
+        };
+        UpdateCurrentUserRequest: {
+            nickname?: components["schemas"]["Nickname"];
+            qq?: string | null;
+            fivemId?: string | null;
+            /** @description Clear the current avatar reference. */
+            avatar?: null;
+        };
+        UploadAvatarRequest: {
+            /** @description Base64-encoded image bytes, without a data URL prefix. */
+            imageBase64: string;
+            /** @enum {string} */
+            mediaType: "image/png" | "image/jpeg" | "image/webp";
         };
         LogoutResponse: {
             /** @constant */
@@ -561,6 +613,88 @@ export interface operations {
                 };
             };
             401: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    updateCurrentUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCurrentUserRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated user snapshot */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentUser"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    uploadCurrentUserAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadAvatarRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated user snapshot */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentUser"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            413: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    getAvatarImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                avatarId: components["schemas"]["OpaqueIdentifier"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description WebP avatar bytes */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/webp": string;
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
             default: components["responses"]["ErrorResponse"];
         };
     };
