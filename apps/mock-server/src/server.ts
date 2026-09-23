@@ -1,6 +1,8 @@
 import { existsSync } from 'node:fs'
 import { createApp } from './app.js'
-import { DATABASE_PATH } from './db/client.js'
+import { parseAuthCodeHmacKey } from './auth/crypto.js'
+import { assertAuthSchemaAvailable, AuthService } from './auth/service.js'
+import { DATABASE_PATH, openDatabase } from './db/client.js'
 
 const PORT = 8080
 /** 只绑定回环地址：这是本地 Mock，不对局域网暴露。 */
@@ -25,12 +27,20 @@ if (!existsSync(DATABASE_PATH)) {
   )
   process.exitCode = 1
 } else {
-  const app = createApp({ logger: true })
-
   try {
+    const { sqlite } = openDatabase()
+    assertAuthSchemaAvailable(sqlite)
+    const authServices = new AuthService({
+      sqlite,
+      codeHmacKey: parseAuthCodeHmacKey(process.env.AUTH_CODE_HMAC_KEY),
+    })
+    const app = createApp({ authServices, logger: true })
+    app.addHook('onClose', () => {
+      sqlite.close()
+    })
     await app.listen({ port: PORT, host: HOST })
   } catch (error) {
-    app.log.error(error, 'mock server failed to start')
+    console.error('[mock-server] 启动失败。请确认已运行 pnpm db:migrate，并配置 AUTH_CODE_HMAC_KEY。', error)
     process.exitCode = 1
   }
 }

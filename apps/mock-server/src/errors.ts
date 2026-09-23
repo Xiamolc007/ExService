@@ -1,10 +1,11 @@
 import type { FastifyError, FastifyInstance } from 'fastify'
+import { AuthError, type AuthErrorCode } from './auth/errors.js'
 
 /**
  * Contract 只把 `ErrorEnvelope.error.code` 约束为 string；下列取值是实现侧的约定。
  * 新增取值不需要改 Contract，但必须集中在本文件构造 envelope，并保持 Contract Test 通过。
  */
-export type ErrorCode = 'BAD_REQUEST' | 'INTERNAL_ERROR' | 'NOT_FOUND'
+export type ErrorCode = 'BAD_REQUEST' | 'INTERNAL_ERROR' | 'NOT_FOUND' | AuthErrorCode
 
 export function createErrorEnvelope(code: ErrorCode, message: string, requestId: string) {
   return { error: { code, message, requestId } }
@@ -37,7 +38,8 @@ export function registerErrorHandlers(app: FastifyInstance): void {
 
   // Fastify 5 的 setErrorHandler 默认把错误参数推断为 unknown，因此显式声明 FastifyError。
   app.setErrorHandler<FastifyError>((error, request, reply) => {
-    const reported = typeof error.statusCode === 'number' ? error.statusCode : 500
+    const authError = findAuthError(error)
+    const reported = authError?.statusCode ?? (typeof error.statusCode === 'number' ? error.statusCode : 500)
     const statusCode = reported >= 400 && reported < 600 ? reported : 500
 
     if (statusCode >= 500) {
@@ -46,10 +48,33 @@ export function registerErrorHandlers(app: FastifyInstance): void {
       request.log.warn({ err: error }, 'request rejected')
     }
 
-    const message = resolvePublicMessage(statusCode, error)
+    const message = authError?.publicMessage ?? resolvePublicMessage(statusCode, error)
+    const code = authError?.code ?? codeForStatus(statusCode)
 
-    void reply.status(statusCode).send(createErrorEnvelope(codeForStatus(statusCode), message, request.id))
+    void reply.header('Cache-Control', 'no-store')
+    if (authError?.retryAfterSeconds !== undefined) {
+      void reply.header('Retry-After', String(authError.retryAfterSeconds))
+    }
+    void reply.status(statusCode).send(createErrorEnvelope(code, message, request.id))
   })
+}
+
+function findAuthError(error: unknown): AuthError | undefined {
+  if (error instanceof AuthError) {
+    return error
+  }
+  if (typeof error === 'object' && error !== null && 'errors' in error) {
+    const nested = (error as { errors?: unknown }).errors
+    if (Array.isArray(nested)) {
+      for (const candidate of nested) {
+        const authError = findAuthError(candidate)
+        if (authError !== undefined) {
+          return authError
+        }
+      }
+    }
+  }
+  return undefined
 }
 
 function resolvePublicMessage(statusCode: number, error: FastifyError): string {

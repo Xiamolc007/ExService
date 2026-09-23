@@ -1,39 +1,27 @@
 openapi: 3.1.1
 info:
   title: Backend Sandbox API
-  version: 0.1.0
+  version: 0.3.0
   description: |
     Frontend 与 Backend 之间的唯一 HTTP API Contract。
 
-    该 Contract 同时供本地 Fastify Mock Server（`apps/mock-server`）、TypeScript 客户端
-    （`packages/api-client`）以及未来的 PHP 生产实现使用。任何 API 变更都必须先修改本文件，
-    再执行 `pnpm api:lint` 与 `pnpm api:generate`。
-
-    首版只包含 `GET /health`，用于验证 Contract → 生成类型 → 共享 Client → Vite 代理 →
-    Mock Server → Contract Test 的完整链路；不包含业务资源、认证、分页或过滤。
-
-    所有 schema 限定在 JSON Schema Draft-07 兼容子集内，以匹配 Fastify 默认 Ajv 的校验语义。
-    引入 Draft 2020-12 专有语义前，必须先单独设计并确认 Fastify 的 validator 与 serializer compiler。
+    该 Contract 同时供本地 Fastify Mock Server、TypeScript 客户端以及未来的 PHP
+    生产实现使用。所有 schema 限定在 JSON Schema Draft-07 兼容子集内。
 servers:
   - url: /api
-    description: |
-      客户端 API base URL。Fastify 的路由前缀由 Mock Server 注册 Glue 时显式指定
-      （`prefix: '/api'`），不从该字段推导。
+    description: 客户端 API base URL；Fastify 仍通过 Glue 的 prefix 显式注册该前缀。
 tags:
   - name: system
-    description: Mock Server 自身运行状态，与业务数据无关。
+    description: Mock Server 自身运行状态。
+  - name: authentication
+    description: 本地账号、会话与 SSO 接收端能力。
 paths:
   /health:
     get:
       operationId: getHealth
       summary: Read mock server liveness
-      description: |
-        返回本地 Mock Server 的存活状态。
-
-        该 operation 只表示 Mock Server 已完成监听前置检查（含本地 SQLite 文件存在性检查），
-        不代表业务数据库能够完成业务 CRUD；首版没有业务表。
-      tags:
-        - system
+      security: []
+      tags: [system]
       responses:
         '200':
           description: Mock server is running
@@ -43,24 +31,523 @@ paths:
                 $ref: '#/components/schemas/HealthResponse'
         default:
           $ref: '#/components/responses/ErrorResponse'
+  /auth/captcha/challenges:
+    post:
+      operationId: createCaptchaChallenge
+      summary: Reserve an image captcha challenge for authentication
+      description: The local Mock Server returns a placeholder PNG and does not validate captcha submissions yet.
+      security: []
+      tags: [authentication]
+      responses:
+        '200':
+          description: Image challenge placeholder
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaptchaChallenge'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /auth/registrations:
+    post:
+      operationId: startRegistration
+      summary: Start an email-verified registration
+      security: []
+      tags: [authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Verification code issued
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationChallenge'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/RetryableErrorResponse'
+        '503':
+          $ref: '#/components/responses/RetryableErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /auth/registrations/resend:
+    post:
+      operationId: resendRegistrationCode
+      summary: Issue a replacement verification code
+      security: []
+      tags: [authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrationRef'
+      responses:
+        '200':
+          description: Replacement verification code issued
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationChallenge'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '410':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/RetryableErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /auth/registrations/cancel:
+    post:
+      operationId: cancelRegistration
+      summary: Cancel a pending registration
+      security: []
+      tags: [authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrationRef'
+      responses:
+        '200':
+          description: Registration cancelled
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationCancelled'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /auth/registrations/verify:
+    post:
+      operationId: verifyRegistration
+      summary: Verify a code and create the account
+      security: []
+      tags: [authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyRegistrationRequest'
+      responses:
+        '200':
+          description: Account created
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationVerified'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '410':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /auth/login:
+    post:
+      operationId: login
+      summary: Create a local session
+      security: []
+      tags: [authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Session created
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/RetryableErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      summary: Read the authenticated user
+      security:
+        - bearerAuth: []
+      tags: [authentication]
+      responses:
+        '200':
+          description: Authenticated user
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUser'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: Revoke the current local session
+      security:
+        - bearerAuth: []
+      tags: [authentication]
+      responses:
+        '200':
+          description: Session revoked
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogoutResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /auth/sso/inspect:
+    post:
+      operationId: inspectSsoRequest
+      summary: Inspect a local SSO request
+      security: []
+      tags: [authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SsoRequestRef'
+      responses:
+        '200':
+          description: SSO request state
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SsoRequestInfo'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '410':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /auth/sso/login:
+    post:
+      operationId: loginForSso
+      summary: Complete an SSO request with credentials
+      security: []
+      tags: [authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SsoPasswordRequest'
+      responses:
+        '200':
+          description: SSO request completed
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SsoCompleted'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '410':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/RetryableErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /auth/sso/confirm:
+    post:
+      operationId: confirmSsoWithSession
+      summary: Complete an SSO request with the current session
+      security:
+        - bearerAuth: []
+      tags: [authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SsoRequestRef'
+      responses:
+        '200':
+          description: SSO request completed
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SsoCompleted'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '410':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+  headers:
+    CacheControl:
+      description: Authentication responses are not cacheable.
+      schema:
+        type: string
+        const: no-store
+    RetryAfter:
+      description: Whole seconds before a retry is allowed.
+      required: true
+      schema:
+        type: string
+        pattern: '^[1-9][0-9]*$'
   responses:
     ErrorResponse:
       description: Safe application error response
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    RetryableErrorResponse:
+      description: Safe application error response with a retry delay
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
   schemas:
+    SafeTimestamp:
+      type: integer
+      minimum: 0
+      maximum: 9007199254740991
+    OpaqueIdentifier:
+      type: string
+      pattern: '^[A-Za-z0-9_-]{43}$'
+    Email:
+      type: string
+      minLength: 3
+      maxLength: 254
+      pattern: '^[^\s@]+@[^\s@]+\.[^\s@]+$'
+      description: 服务端先 trim 再转为小写；按大小写不敏感处理。
+    Nickname:
+      type: string
+      minLength: 1
+      maxLength: 32
+      pattern: '^[^\u0000-\u001F\u007F-\u009F]+$'
+      description: 界面称为用户名，仅作显示名称，允许重复，不用于登录。服务端 trim；业务层按 Unicode 码点限制为 1 至 32。
+    Password:
+      type: string
+      minLength: 8
+      maxLength: 64
+      description: 不 trim、不归一化；业务层按 Unicode 码点限制为 8 至 64。
+    VerificationCode:
+      type: string
+      pattern: '^[0-9]{6}$'
+    CaptchaSubmission:
+      type: object
+      additionalProperties: false
+      required: [challengeId, answer]
+      properties:
+        challengeId: {$ref: '#/components/schemas/OpaqueIdentifier'}
+        answer: {type: string, minLength: 1, maxLength: 64}
+    CaptchaChallenge:
+      type: object
+      additionalProperties: false
+      required: [challengeId, imageBase64, expiresAt]
+      properties:
+        challengeId: {$ref: '#/components/schemas/OpaqueIdentifier'}
+        imageBase64:
+          type: string
+          description: Base64-encoded PNG bytes, without a data URL prefix.
+        expiresAt: {$ref: '#/components/schemas/SafeTimestamp'}
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [email, nickname, password]
+      properties:
+        email: {$ref: '#/components/schemas/Email'}
+        nickname: {$ref: '#/components/schemas/Nickname'}
+        password: {$ref: '#/components/schemas/Password'}
+        captcha: {$ref: '#/components/schemas/CaptchaSubmission'}
+    RegistrationRef:
+      type: object
+      additionalProperties: false
+      required: [registrationId]
+      properties:
+        registrationId: {$ref: '#/components/schemas/OpaqueIdentifier'}
+    VerifyRegistrationRequest:
+      type: object
+      additionalProperties: false
+      required: [registrationId, code]
+      properties:
+        registrationId: {$ref: '#/components/schemas/OpaqueIdentifier'}
+        code: {$ref: '#/components/schemas/VerificationCode'}
+    RegistrationChallenge:
+      type: object
+      additionalProperties: false
+      required: [registrationId, email, serverTime, codeExpiresAt, resendAvailableAt]
+      properties:
+        registrationId: {$ref: '#/components/schemas/OpaqueIdentifier'}
+        email: {$ref: '#/components/schemas/Email'}
+        serverTime: {$ref: '#/components/schemas/SafeTimestamp'}
+        codeExpiresAt: {$ref: '#/components/schemas/SafeTimestamp'}
+        resendAvailableAt: {$ref: '#/components/schemas/SafeTimestamp'}
+    RegistrationVerified:
+      type: object
+      additionalProperties: false
+      required: [status, email]
+      properties:
+        status: {type: string, const: registered}
+        email: {$ref: '#/components/schemas/Email'}
+    RegistrationCancelled:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: {type: string, const: cancelled}
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: {$ref: '#/components/schemas/Email'}
+        password: {$ref: '#/components/schemas/Password'}
+        captcha: {$ref: '#/components/schemas/CaptchaSubmission'}
+    LoginResponse:
+      type: object
+      additionalProperties: false
+      required: [token, expiresAt]
+      properties:
+        token: {$ref: '#/components/schemas/OpaqueIdentifier'}
+        expiresAt: {$ref: '#/components/schemas/SafeTimestamp'}
+    CurrentUser:
+      type: object
+      additionalProperties: false
+      required: [id, email, nickname]
+      properties:
+        id:
+          type: string
+          pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        email: {$ref: '#/components/schemas/Email'}
+        nickname: {$ref: '#/components/schemas/Nickname'}
+    LogoutResponse:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: {type: string, const: signed-out}
+    SsoRequestRef:
+      type: object
+      additionalProperties: false
+      required: [ssoRequestId]
+      properties:
+        ssoRequestId: {$ref: '#/components/schemas/OpaqueIdentifier'}
+    SsoPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [ssoRequestId, email, password]
+      properties:
+        ssoRequestId: {$ref: '#/components/schemas/OpaqueIdentifier'}
+        email: {$ref: '#/components/schemas/Email'}
+        password: {$ref: '#/components/schemas/Password'}
+        captcha: {$ref: '#/components/schemas/CaptchaSubmission'}
+    SsoRequestInfo:
+      type: object
+      additionalProperties: false
+      required: [ssoRequestId, status, expiresAt, serverTime]
+      properties:
+        ssoRequestId: {$ref: '#/components/schemas/OpaqueIdentifier'}
+        status: {type: string, enum: [pending, completed]}
+        expiresAt: {$ref: '#/components/schemas/SafeTimestamp'}
+        serverTime: {$ref: '#/components/schemas/SafeTimestamp'}
+    SsoCompleted:
+      type: object
+      additionalProperties: false
+      required: [status, ssoRequestId]
+      properties:
+        status: {type: string, const: completed}
+        ssoRequestId: {$ref: '#/components/schemas/OpaqueIdentifier'}
     HealthResponse:
       type: object
       additionalProperties: false
       required: [status]
       properties:
-        status:
-          type: string
-          const: ok
-          description: 固定为 `ok`，表示 Mock Server 进程可用。
+        status: {type: string, const: ok}
     ErrorEnvelope:
       type: object
       additionalProperties: false
@@ -71,12 +558,6 @@ components:
           additionalProperties: false
           required: [code, message, requestId]
           properties:
-            code:
-              type: string
-              description: 稳定的机器可读错误码。
-            message:
-              type: string
-              description: 面向调用方的安全错误描述，不包含堆栈、SQL 或本地文件路径。
-            requestId:
-              type: string
-              description: Fastify request ID，用于把响应与日志关联起来。
+            code: {type: string}
+            message: {type: string}
+            requestId: {type: string}

@@ -11,16 +11,200 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Read mock server liveness
-         * @description 返回本地 Mock Server 的存活状态。
-         *
-         *     该 operation 只表示 Mock Server 已完成监听前置检查（含本地 SQLite 文件存在性检查），
-         *     不代表业务数据库能够完成业务 CRUD；首版没有业务表。
-         */
+        /** Read mock server liveness */
         get: operations["getHealth"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/captcha/challenges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reserve an image captcha challenge for authentication
+         * @description The local Mock Server returns a placeholder PNG and does not validate captcha submissions yet.
+         */
+        post: operations["createCaptchaChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/registrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start an email-verified registration */
+        post: operations["startRegistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/registrations/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue a replacement verification code */
+        post: operations["resendRegistrationCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/registrations/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel a pending registration */
+        post: operations["cancelRegistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/registrations/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify a code and create the account */
+        post: operations["verifyRegistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a local session */
+        post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the authenticated user */
+        get: operations["getCurrentUser"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke the current local session */
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/sso/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Inspect a local SSO request */
+        post: operations["inspectSsoRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/sso/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete an SSO request with credentials */
+        post: operations["loginForSso"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/sso/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete an SSO request with the current session */
+        post: operations["confirmSsoWithSession"];
         delete?: never;
         options?: never;
         head?: never;
@@ -31,20 +215,101 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        SafeTimestamp: number;
+        OpaqueIdentifier: string;
+        /** @description 服务端先 trim 再转为小写；按大小写不敏感处理。 */
+        Email: string;
+        /** @description 界面称为用户名，仅作显示名称，允许重复，不用于登录。服务端 trim；业务层按 Unicode 码点限制为 1 至 32。 */
+        Nickname: string;
+        /** @description 不 trim、不归一化；业务层按 Unicode 码点限制为 8 至 64。 */
+        Password: string;
+        VerificationCode: string;
+        CaptchaSubmission: {
+            challengeId: components["schemas"]["OpaqueIdentifier"];
+            answer: string;
+        };
+        CaptchaChallenge: {
+            challengeId: components["schemas"]["OpaqueIdentifier"];
+            /** @description Base64-encoded PNG bytes, without a data URL prefix. */
+            imageBase64: string;
+            expiresAt: components["schemas"]["SafeTimestamp"];
+        };
+        RegisterRequest: {
+            email: components["schemas"]["Email"];
+            nickname: components["schemas"]["Nickname"];
+            password: components["schemas"]["Password"];
+            captcha?: components["schemas"]["CaptchaSubmission"];
+        };
+        RegistrationRef: {
+            registrationId: components["schemas"]["OpaqueIdentifier"];
+        };
+        VerifyRegistrationRequest: {
+            registrationId: components["schemas"]["OpaqueIdentifier"];
+            code: components["schemas"]["VerificationCode"];
+        };
+        RegistrationChallenge: {
+            registrationId: components["schemas"]["OpaqueIdentifier"];
+            email: components["schemas"]["Email"];
+            serverTime: components["schemas"]["SafeTimestamp"];
+            codeExpiresAt: components["schemas"]["SafeTimestamp"];
+            resendAvailableAt: components["schemas"]["SafeTimestamp"];
+        };
+        RegistrationVerified: {
+            /** @constant */
+            status: "registered";
+            email: components["schemas"]["Email"];
+        };
+        RegistrationCancelled: {
+            /** @constant */
+            status: "cancelled";
+        };
+        LoginRequest: {
+            email: components["schemas"]["Email"];
+            password: components["schemas"]["Password"];
+            captcha?: components["schemas"]["CaptchaSubmission"];
+        };
+        LoginResponse: {
+            token: components["schemas"]["OpaqueIdentifier"];
+            expiresAt: components["schemas"]["SafeTimestamp"];
+        };
+        CurrentUser: {
+            id: string;
+            email: components["schemas"]["Email"];
+            nickname: components["schemas"]["Nickname"];
+        };
+        LogoutResponse: {
+            /** @constant */
+            status: "signed-out";
+        };
+        SsoRequestRef: {
+            ssoRequestId: components["schemas"]["OpaqueIdentifier"];
+        };
+        SsoPasswordRequest: {
+            ssoRequestId: components["schemas"]["OpaqueIdentifier"];
+            email: components["schemas"]["Email"];
+            password: components["schemas"]["Password"];
+            captcha?: components["schemas"]["CaptchaSubmission"];
+        };
+        SsoRequestInfo: {
+            ssoRequestId: components["schemas"]["OpaqueIdentifier"];
+            /** @enum {string} */
+            status: "pending" | "completed";
+            expiresAt: components["schemas"]["SafeTimestamp"];
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        SsoCompleted: {
+            /** @constant */
+            status: "completed";
+            ssoRequestId: components["schemas"]["OpaqueIdentifier"];
+        };
         HealthResponse: {
-            /**
-             * @description 固定为 `ok`，表示 Mock Server 进程可用。
-             * @constant
-             */
+            /** @constant */
             status: "ok";
         };
         ErrorEnvelope: {
             error: {
-                /** @description 稳定的机器可读错误码。 */
                 code: string;
-                /** @description 面向调用方的安全错误描述，不包含堆栈、SQL 或本地文件路径。 */
                 message: string;
-                /** @description Fastify request ID，用于把响应与日志关联起来。 */
                 requestId: string;
             };
         };
@@ -53,6 +318,18 @@ export interface components {
         /** @description Safe application error response */
         ErrorResponse: {
             headers: {
+                "Cache-Control": components["headers"]["CacheControl"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorEnvelope"];
+            };
+        };
+        /** @description Safe application error response with a retry delay */
+        RetryableErrorResponse: {
+            headers: {
+                "Cache-Control": components["headers"]["CacheControl"];
+                "Retry-After": components["headers"]["RetryAfter"];
                 [name: string]: unknown;
             };
             content: {
@@ -62,7 +339,12 @@ export interface components {
     };
     parameters: never;
     requestBodies: never;
-    headers: never;
+    headers: {
+        /** @description Authentication responses are not cacheable. */
+        CacheControl: "no-store";
+        /** @description Whole seconds before a retry is allowed. */
+        RetryAfter: string;
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
@@ -85,6 +367,315 @@ export interface operations {
                     "application/json": components["schemas"]["HealthResponse"];
                 };
             };
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    createCaptchaChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Image challenge placeholder */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaptchaChallenge"];
+                };
+            };
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    startRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Verification code issued */
+            201: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegistrationChallenge"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RetryableErrorResponse"];
+            503: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    resendRegistrationCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegistrationRef"];
+            };
+        };
+        responses: {
+            /** @description Replacement verification code issued */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegistrationChallenge"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            410: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    cancelRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegistrationRef"];
+            };
+        };
+        responses: {
+            /** @description Registration cancelled */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegistrationCancelled"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    verifyRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyRegistrationRequest"];
+            };
+        };
+        responses: {
+            /** @description Account created */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegistrationVerified"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            410: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Session created */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            503: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    getCurrentUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authenticated user */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentUser"];
+                };
+            };
+            401: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session revoked */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogoutResponse"];
+                };
+            };
+            401: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    inspectSsoRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SsoRequestRef"];
+            };
+        };
+        responses: {
+            /** @description SSO request state */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SsoRequestInfo"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            410: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    loginForSso: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SsoPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description SSO request completed */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SsoCompleted"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            410: components["responses"]["ErrorResponse"];
+            503: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    confirmSsoWithSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SsoRequestRef"];
+            };
+        };
+        responses: {
+            /** @description SSO request completed */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SsoCompleted"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            410: components["responses"]["ErrorResponse"];
             default: components["responses"]["ErrorResponse"];
         };
     };

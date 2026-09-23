@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createApp, serviceHandlers } from '@workspace/mock-server'
+import { createTestAuth } from '../helpers/auth'
 import Ajv, { type ValidateFunction } from 'ajv'
 import { afterEach, describe, expect, it } from 'vitest'
 import { parse as parseYaml } from 'yaml'
@@ -110,15 +111,19 @@ const validateHealthResponse = compileComponentSchema('HealthResponse')
 const validateErrorEnvelope = compileComponentSchema('ErrorEnvelope')
 
 const runningApps: Array<ReturnType<typeof createApp>> = []
+const authFixtures: Array<ReturnType<typeof createTestAuth>> = []
 
 function createTestApp() {
-  const app = createApp({ logger: false })
+  const fixture = createTestAuth()
+  authFixtures.push(fixture)
+  const app = createApp({ authServices: fixture.authServices, logger: false })
   runningApps.push(app)
   return app
 }
 
 afterEach(async () => {
   await Promise.all(runningApps.splice(0).map((app) => app.close()))
+  authFixtures.splice(0).forEach((fixture) => fixture.close())
 })
 
 describe('contract coverage', () => {

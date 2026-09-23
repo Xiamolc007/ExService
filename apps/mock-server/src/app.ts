@@ -1,8 +1,23 @@
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import Fastify, { type FastifyInstance } from 'fastify'
+import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify'
 import openapiGlue from 'fastify-openapi-glue'
+import { AuthError } from './auth/errors.js'
+import type { AuthService } from './auth/service.js'
 import { registerErrorHandlers } from './errors.js'
+import {
+  cancelRegistration,
+  createCaptchaChallenge,
+  confirmSsoWithSession,
+  getCurrentUser,
+  inspectSsoRequest,
+  login,
+  loginForSso,
+  logout,
+  resendRegistrationCode,
+  startRegistration,
+  verifyRegistration,
+} from './handlers/auth.js'
 import { getHealth } from './handlers/health.js'
 
 /**
@@ -19,6 +34,7 @@ export const API_PREFIX = '/api'
 export const OPENAPI_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../../../api/openapi.yaml')
 
 export interface CreateAppOptions {
+  authServices: AuthService
   /**
    * 测试中保持静默；`server.ts` 开启日志，以便用 requestId 关联日志与响应。
    */
@@ -33,7 +49,20 @@ export interface CreateAppOptions {
  * 且 `const` 声明会被强制写入（handler 返回 `{status:'down'}` 时线上仍是 `{"status":"ok"}`）。
  * 因此只断言 HTTP 响应体无法发现 handler 回归，必须同时校验这里注册的 handler。
  */
-export const serviceHandlers = { getHealth } as const
+export const serviceHandlers = {
+  getHealth,
+  createCaptchaChallenge,
+  startRegistration,
+  resendRegistrationCode,
+  cancelRegistration,
+  verifyRegistration,
+  login,
+  getCurrentUser,
+  logout,
+  inspectSsoRequest,
+  loginForSso,
+  confirmSsoWithSession,
+} as const
 
 /**
  * 创建可测试的 Fastify 实例。
@@ -41,15 +70,50 @@ export const serviceHandlers = { getHealth } as const
  * 路由、method、输入校验与响应 schema 全部来自 `api/openapi.yaml`：
  * 这里不手写任何 `app.get(...)`，也不从 Fastify schema 反向生成 OpenAPI。
  */
-export function createApp({ logger = false }: CreateAppOptions = {}): FastifyInstance {
-  const app = Fastify({ logger })
+export function createApp({ authServices, logger = false }: CreateAppOptions): FastifyInstance {
+  const app = Fastify({
+    logger,
+    ajv: {
+      customOptions: {
+        coerceTypes: false,
+        removeAdditional: false,
+      },
+    },
+  })
 
+  app.decorate('authServices', authServices)
+  app.decorateRequest('authSession', undefined)
   registerErrorHandlers(app)
+
+  app.addHook('preValidation', (request, _reply, done) => {
+    if (typeof request.body === 'object' && request.body !== null && !Array.isArray(request.body)) {
+      const body = request.body as Record<string, unknown>
+      if (typeof body.email === 'string') {
+        body.email = body.email.trim().toLowerCase()
+      }
+      if (typeof body.nickname === 'string') {
+        body.nickname = body.nickname.trim()
+      }
+    }
+    done()
+  })
 
   app.register(openapiGlue, {
     specification: OPENAPI_PATH,
     prefix: API_PREFIX,
     serviceHandlers,
+    securityHandlers: {
+      bearerAuth(request: FastifyRequest) {
+        const authorization = request.headers.authorization
+        const match = typeof authorization === 'string'
+          ? /^Bearer ([A-Za-z0-9_-]{43})$/.exec(authorization)
+          : null
+        if (match?.[1] === undefined) {
+          throw new AuthError('SESSION_INVALID')
+        }
+        request.authSession = authServices.authenticateToken(match[1])
+      },
+    },
   })
 
   return app
