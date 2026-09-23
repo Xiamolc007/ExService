@@ -29,3 +29,7 @@ Thumbs.db
 # reading only. Docs under .ai/ and .notes/ cite paths inside it, so it is left
 # in place but intentionally not tracked.
 .agents/
+
+playwright
+.playwright-cli
+output
