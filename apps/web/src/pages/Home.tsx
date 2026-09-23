@@ -1,6 +1,17 @@
-import { ActionButton, Card } from "@exre/exui";
+import { useSyncExternalStore } from "react";
+import { ActionButton, Card, useTheme } from "@exre/exui";
 import { GrainGradient } from "@paper-design/shaders-react";
 import styles from "./Home.module.scss";
+
+function subscribeSystemTheme(onChange: () => void) {
+  const media = window.matchMedia('(prefers-color-scheme: dark)');
+  media.addEventListener('change', onChange);
+  return () => media.removeEventListener('change', onChange);
+}
+
+function isSystemDark() {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
 
 /**
  * 首页。
@@ -12,6 +23,10 @@ import styles from "./Home.module.scss";
  * 且该 health check 由 `main.tsx` 在开发期负责，不属于页面逻辑。
  */
 export function Home() {
+  const { theme } = useTheme();
+  const systemDark = useSyncExternalStore(subscribeSystemTheme, isSystemDark, () => false);
+  const isDark = theme === 'dark' || (theme === 'system' && systemDark);
+
   return (
     <main className={styles.home} data-page="home">
       <div className={styles.heroStage}>
@@ -21,7 +36,7 @@ export function Home() {
               width={1280}
               height={720}
               colors={["#7300ff", "#eba8ff", "#00bfff", "#2b00ff"]}
-              colorBack="#000000"
+              colorBack={isDark ? "#000000" : "#ffffff"}
               softness={0.5}
               intensity={0.5}
               noise={0.25}

@@ -87,13 +87,21 @@
 }
 
 .fivemAction {
-  background: rgb(0, 0, 0);
+  background: var(--exui-control-primary);
   color: var(--exui-component-button-primary-default-foreground);
 
-  &:hover,
-  &:focus-visible,
+  &:hover {
+    background: var(--exui-control-hover);
+    color: var(--exui-component-button-primary-default-foreground);
+  }
+
+  &:focus-visible {
+    background: var(--exui-control-primary);
+    color: var(--exui-component-button-primary-default-foreground);
+  }
+
   &:active {
-    background: rgb(0, 0, 0);
+    background: var(--exui-control-active);
     color: var(--exui-component-button-primary-default-foreground);
   }
 }
