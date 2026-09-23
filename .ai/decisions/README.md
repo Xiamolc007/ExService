@@ -6,7 +6,7 @@
 
 决定「为什么这样做」的内容留在本目录；它产生的结构写在 `../architectures/`，运行中暴露的失败模式写在 `../knowledge/`。
 
-_最后更新：2026-09-18_
+_最后更新：2026-09-23_
 
 ## 索引
 
@@ -15,6 +15,7 @@ _最后更新：2026-09-18_
 | 01 | [以单份 OpenAPI Contract 作为唯一的 API 事实来源](api/01-openapi-as-single-contract.md) | `api` | 已接受 | 2026-09-16 |
 | 02 | [把 Contract schema 限制在 Draft-07 兼容子集](api/02-draft07-compatible-schema-subset.md) | `api` | 已接受 | 2026-09-16 |
 | 03 | [所有错误共用同一个 envelope](api/03-unified-error-envelope.md) | `api` | 已接受 | 2026-09-16 |
+| 04 | [本站会话与 SSO 完成使用不同的 Contract 结果](api/04-separate-local-session-and-sso-completion.md) | `api` | 已接受 | 2026-09-23 |
 | 01 | [生成的类型纳入版本控制，共享 Client 以源码形式导出](api-client/01-generated-types-committed-and-read-only.md) | `api-client` | 已接受 | 2026-09-16 |
 | 01 | [共享 UI 组件放在独立工作区包，而不是 app 内部目录](components/01-app-level-shared-component-package.md) | `components` | 已接受 | 2026-09-18 |
 | 01 | [由 Contract 注册路由，并显式声明前缀与 handler 映射](mock-server/01-contract-driven-route-registration.md) | `mock-server` | 已接受 | 2026-09-16 |
@@ -31,6 +32,6 @@ _最后更新：2026-09-18_
 
 上表的模块列与磁盘上的目录一一对应：`api/`、`api-client/`、`components/`、`mock-server/`、`web/`、`contract-tests/`。这些目录名与 `../README.md` 中的模块划分保持一致。
 
-首版尚未包含的决策领域：认证与授权、API 版本策略与兼容层、完整 Draft 2020-12 支持、PHP 侧 Contract Test 与 CI。它们都不是既有决策的例外，而是尚未开始的独立设计。
+尚未包含的决策领域：API 版本策略与兼容层、完整 Draft 2020-12 支持、PHP 侧 Contract Test 与 CI。它们都不是既有决策的例外，而是尚未开始的独立设计。
 
 `web/02` 把「`RootLayout` 是否加入导航」留成了待决项。该问题已结掉：导航现在是 `RootLayout` 渲染的共享组件，见 [components/01](components/01-app-level-shared-component-package.md) 与 [web/03](web/03-exui-as-component-and-theme-source.md)。

@@ -4,6 +4,10 @@
 
 代码与标识符、Commit message、以及既有文档各自沿用其既定语言约定，不因为这条规则而改动。
 
+## 开发规范
+
+1. 开发或修改 `apps/web/`、`packages/components/` 中的 Form 前，必须先阅读并遵守 [`.ai/rules/frontend-forms.md`](.ai/rules/frontend-forms.md)。
+
 <!-- codebase-worker:start -->
 ## Project AI documentation rules
 

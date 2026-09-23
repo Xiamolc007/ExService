@@ -2,7 +2,7 @@
 
 本文件说明 ExWebsite 的整体结构与请求流。单个模块的内部结构见各模块目录下的文档。
 
-_最后更新：2026-09-18_
+_最后更新：2026-09-23_
 
 ## 系统结构
 
@@ -58,21 +58,19 @@ Contract 是唯一的中心节点，所有其他部分都是它的消费者：
 ```text
 main.tsx ──<BrowserRouter>──▶ App.tsx（路由表）
    │                              │
-   │                              ▼
-   │                   routes/RootLayout.tsx
-   │                     ├── <SiteHeader />（packages/components）
-   │                     └── <Outlet />
-   │                              │
-   │                 ┌────────────┴────────────┐
-   │                 ▼                         ▼
-   │         pages/Home.tsx  `/`      pages/NotFound.tsx  `*`
+   │                              ├── RootLayout.tsx → <SiteHeader /> + <Outlet />
+   │                              │     ├── Home.tsx `/`
+   │                              │     └── NotFound.tsx `*`
+   │                              ├── AuthPage/index.tsx `/login`、`/register`
+   │                              ├── AuthPage/SsoSuccess.tsx `/sso/success`
+   │                              └── NotFound.tsx `/sso/*`
    │
    └── <ThemeProvider>（@exre/exui）包住整个路由树
        导入 `@exre/exui/style.css`，全应用仅此一处
 ```
 
-- 只有这两条路由；`*` 只处理前端路由，不替代 Mock Server 的 404 envelope。
-- 布局层提供嵌套路由的挂载点与站点顶栏。顶栏在这里而不是各页面里，因此所有路由共用、页面切换时不重新挂载。
+- `*` 只处理前端路由，不替代 Mock Server 的 404 envelope。认证路由及其存储、导航边界见 [web/authentication-flow.md](web/authentication-flow.md)。
+- `RootLayout` 提供普通页面的嵌套路由挂载点与站点顶栏；认证页及 `/sso/*` 位于它之外，不显示顶栏。
 - 主题来源是 ExUI 的 `ThemeProvider`，挂在路由之上，所以所有页面（含兜底页）都能用 `useTheme`。`@exre/exui/style.css` 必须排在 `styles/index.scss` 之前，应用样式才能覆盖库的默认值。
 - 代价是 history 路由要求未来的 PHP 部署把未知路径回落到 `index.html`。理由见 [[web/02-react-route-skeleton]]；顶栏归属与 ExUI 引入见 [[web/03-exui-as-component-and-theme-source]] 与 [[components/01-app-level-shared-component-package]]。
 

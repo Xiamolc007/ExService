@@ -2,7 +2,7 @@
 
 本文件说明 Mock Server 从创建实例到返回响应、以及本地数据库从迁移到重置的结构与流程。选择理由见 [decisions/mock-server](../../decisions/README.md)，失败模式见 [knowledge/mock-server](../../knowledge/mock-server/database-lifecycle-traps.md)。
 
-_最后更新：2026-09-17_
+_最后更新：2026-09-23_
 
 ## 组合结构
 
@@ -10,15 +10,15 @@ _最后更新：2026-09-17_
 
 1. 读取 Contract 路径 `OPENAPI_PATH`。
 2. 创建 Fastify 实例（日志由调用方决定：测试静默，`server.ts` 开启）。
-3. `registerErrorHandlers(app)` 注册 404 与错误处理。
-4. 注册 `fastify-openapi-glue`，显式传入 `specification`、`prefix: API_PREFIX`（`/api`）与 `serviceHandlers`。
+3. 注入必需的 `AuthService`，并注册 404 与统一错误处理。
+4. 注册 `fastify-openapi-glue`，显式传入 `specification`、`prefix: API_PREFIX`（`/api`）、`serviceHandlers` 与 Bearer security handler。
 
 `serviceHandlers` 是 `operationId -> handler` 的唯一映射表，并且被导出：Contract Test 需要直接调用它，以校验 handler 的原始返回值。
 
 因此：
 
 - State: 路由、HTTP 方法、输入校验与响应 schema 全部来自 Contract；应用里不存在手写的 `app.get(...)`。
-- `createApp()` 可被 `inject()` 测试，不绑定端口；`server.ts` 才是拥有监听行为与进程生命周期的入口。
+- `createApp({ authServices })` 可被 `inject()` 测试，不绑定端口；`server.ts` 才是拥有数据库连接、监听行为与进程生命周期的入口。
 - 包以源码导出（`exports` 指向 `src/app.ts`），Contract Test 通过 `@workspace/mock-server` 导入 `createApp` 与 `serviceHandlers`。
 
 ## 路径解析
@@ -57,7 +57,7 @@ _最后更新：2026-09-17_
 
 - 只绑定 `127.0.0.1:8080`，不对局域网暴露。
 - 文件缺失时打印包含 `DATABASE_PATH` 与可执行恢复命令的错误信息，并设置非零退出码，**不**隐式创建或重置数据库。
-- 检查通过才 `createApp({ logger: true })` 并监听。
+- 文件存在后还会检查认证表与 `AUTH_CODE_HMAC_KEY`；全部通过才构造 `AuthService`、`createApp({ authServices, logger: true })` 并监听。
 
 ## 数据库层
 
@@ -68,11 +68,11 @@ _最后更新：2026-09-17_
 | `client.ts` | 纯函数 + 常量 | `DATABASE_PATH`、`DATABASE_SIDECAR_PATHS`、`ensureDatabaseDirectory()`、`assertCliEntry()`、`openDatabase()`。 |
 | `migrate.ts` | CLI 入口 | `runMigrations()`：建目录、打开数据库、按 `drizzle/meta/_journal.json` 增量应用 migration。 |
 | `reset.ts` | CLI 入口 | `resetDatabase()`：只删除固定的数据库文件与其 WAL/SHM 伴随文件，不删除目录或源码。 |
-| `schema.ts` | Drizzle schema 入口 | 首版为空：`export {}`。它是后续业务表的唯一合法起点。 |
+| `schema.ts` | Drizzle schema 入口 | 声明认证账号、注册尝试、发送冷却、本站会话与 SSO 请求表。 |
 
 两个 CLI 入口都在模块顶层调用 `assertCliEntry(import.meta.url)`，且都在完成副作用之前调用。因此它们的逻辑可以被复用（纯函数已导出），但整个文件不可被 import。
 
-`openDatabase()` 打开（必要时创建）SQLite 文件并设置 `journal_mode = WAL`，返回 `{ sqlite, db }`；调用方负责 `sqlite.close()`。
+`openDatabase()` 打开（必要时创建）SQLite 文件并设置 `journal_mode = WAL` 与 `foreign_keys = ON`，返回 `{ sqlite, db }`；调用方负责 `sqlite.close()`。认证状态流见 [authentication-lifecycle.md](authentication-lifecycle.md)。
 
 `drizzle.config.ts` 只服务于 `drizzle-kit generate`（生成新的 migration）。`db:migrate` 不读取它，运行时也不依赖 `drizzle-kit`。
 
