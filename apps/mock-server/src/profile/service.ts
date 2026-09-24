@@ -125,7 +125,7 @@ export class ProfileService {
         metadata.width * metadata.height > MAX_PIXELS || (metadata.pages ?? 1) !== 1) {
         throw new ProfileError(400)
       }
-      output = await image.rotate().resize(512, 512, { fit: 'inside', withoutEnlargement: true })
+      output = await image.rotate().resize(512, 512, { fit: 'cover', position: 'centre' })
         .webp({ quality: 85 }).toBuffer()
     } catch (error) {
       if (error instanceof ProfileError) throw error

@@ -1,8 +1,11 @@
 import { readdirSync, unlinkSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createApp, serviceHandlers } from '@workspace/mock-server'
 import { ProfileService, publicAvatarBaseUrl } from '../../apps/mock-server/src/profile/service'
 import { createTestAuth } from '../helpers/auth'
+
+const sharp = createRequire(new URL('../../apps/mock-server/package.json', import.meta.url))('sharp')
 
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEklEQVQImWMwTptpnDaTAUIBAB/uBMm6iK1UAAAAAElFTkSuQmCC'
 const fixtures: Array<ReturnType<typeof createTestAuth>> = []
@@ -31,6 +34,24 @@ async function session(fixture: ReturnType<typeof createTestAuth>) {
 }
 
 describe('profile contract operations', () => {
+  it.each([[1024, 512], [512, 1024], [64, 64]])(
+    'normalizes a %i by %i direct upload to 512 square WebP', async (width, height) => {
+      const { fixture, app } = setup()
+      const authorization = await session(fixture)
+      const source = await sharp({ create: { width, height, channels: 3, background: '#367cad' } })
+        .png().toBuffer()
+      const uploaded = await app.inject({ method: 'POST', url: '/api/auth/me/avatar',
+        headers: { authorization }, payload: { mediaType: 'image/png', imageBase64: source.toString('base64') } })
+      expect(uploaded.statusCode).toBe(200)
+      const avatarUrl = (uploaded.json() as { avatarUrl: string }).avatarUrl
+      const image = await app.inject({ method: 'GET', url: new URL(avatarUrl).pathname })
+      expect(image.statusCode).toBe(200)
+      expect(await sharp(image.rawPayload).metadata()).toMatchObject({
+        width: 512, height: 512, format: 'webp',
+      })
+    },
+  )
+
   it('uses an explicit public avatar address behind a proxy', async () => {
     const { fixture } = setup()
     const authorization = await session(fixture)
