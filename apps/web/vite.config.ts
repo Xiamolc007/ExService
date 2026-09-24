@@ -11,6 +11,7 @@ const MOCK_SERVER_ORIGIN = 'http://127.0.0.1:8080'
 export default defineConfig({
   plugins: [react()],
   server: {
+    host: '127.0.0.1',
     port: 8081,
     strictPort: true,
     proxy: {
