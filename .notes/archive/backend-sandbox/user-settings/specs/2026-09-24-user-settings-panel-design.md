@@ -25,7 +25,7 @@
 - 当前 `api/openapi.yaml` 已声明本人资料读取、局部更新、头像上传及公开头像读取的 operation；网页现有 `ProfilePage` 和共享 `ProfileEditor` 已调用这些能力。
 - `ThemeProvider` 位于整个路由树之上，现有 `ThemeToggle` 已提供浅色、深色、跟随系统三个选项。
 - 登录用户菜单已有“个人资料”入口、未接线的“设置”项和退出登录项；`/account/profile` 已是可访问的页面路径。
-- [用户基础资料设计](../../../user-profile/specs/2026-09-23-user-profile-design.md)与 [数据模型](../../../../../.ai/databases/data-model.md)明确 FiveM ID 未验证且不授予身份或权限。本设置面板不得暗示已验证绑定。
+- `.ai/databases/data-model.md` 明确 FiveM ID 未验证且不授予身份或权限。本设置面板不得暗示已验证绑定。
 
 ## 界面与导航
 

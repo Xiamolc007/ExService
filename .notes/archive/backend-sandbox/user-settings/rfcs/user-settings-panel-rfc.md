@@ -2,7 +2,7 @@
 
 - 状态：待技术评审
 - 日期：2026-09-24
-- 来源：[已确认的设置面板设计](../specs/2026-09-24-user-settings-panel-design.md)
+- 来源：已确认的设置面板设计 `.notes/archive/backend-sandbox/user-settings/specs/2026-09-24-user-settings-panel-design.md`
 
 ## 决策摘要
 
@@ -12,12 +12,12 @@
 
 ## 现状与边界
 
-- [Contract](../../../../../api/openapi.yaml) 已定义 `GET/PATCH /auth/me`、`POST /auth/me/avatar`、`POST /auth/logout` 和公开头像读取；`CurrentUser` 是本人资料 snapshot，FiveM ID 是可空文本。设置 UI 不产生第二份 DTO 或 endpoint 定义。
-- [ProfilePage](../../../../../apps/web/src/pages/ProfilePage.tsx) 自行读取和修改资料，[ProfileEditor](../../../../../packages/components/src/ProfileEditor.tsx) 为整张表单。用户菜单的“设置”尚未接线，“个人资料”当前导航到页面。新设计将字段拆为单项编辑，同时保留旧路径。
-- [AuthContext](../../../../../apps/web/src/auth/AuthContext.tsx) 管理登录状态、匹配 token 的失效处理、资料刷新和退出；`logout()` 对外返回 `void`，失败时置 `unavailable`。设置控制层只消费这些现有方法，不重构该 Context。
-- [ThemeProvider 决策](../../../../../.ai/decisions/web/03-exui-as-component-and-theme-source.md)要求主题由 ExUI 管理。`settingsConfig.general.theme` 只是读取投影，不持久化，也不反向驱动 ExUI。
-- [头像服务](../../../../../apps/mock-server/src/profile/service.ts)当前按 `fit: inside` 且不放大处理，不能保证正方形或固定像素；输入上限 2 MiB、输出上限 512 KiB、像素与边长限制、会话写入检查、旧文件清理均已有实现。
-- 表单必须遵守[前端 Form 规则](../../../../../.ai/rules/frontend-forms.md)：React Hook Form + Zod + ExUI。`packages/components` 不导入 API Client、Valtio、路由表或 ExUI 全局样式。
+- `api/openapi.yaml` 已定义 `GET/PATCH /auth/me`、`POST /auth/me/avatar`、`POST /auth/logout` 和公开头像读取；`CurrentUser` 是本人资料 snapshot，FiveM ID 是可空文本。设置 UI 不产生第二份 DTO 或 endpoint 定义。
+- `apps/web/src/pages/ProfilePage.tsx` 自行读取和修改资料，`packages/components/src/ProfileEditor.tsx` 为整张表单。用户菜单的“设置”尚未接线，“个人资料”当前导航到页面。新设计将字段拆为单项编辑，同时保留旧路径。
+- `apps/web/src/auth/AuthContext.tsx` 管理登录状态、匹配 token 的失效处理、资料刷新和退出；`logout()` 对外返回 `void`，失败时置 `unavailable`。设置控制层只消费这些现有方法，不重构该 Context。
+- `.ai/decisions/web/03-exui-as-component-and-theme-source.md` 要求主题由 ExUI 管理。`settingsConfig.general.theme` 只是读取投影，不持久化，也不反向驱动 ExUI。
+- `apps/mock-server/src/profile/service.ts` 当前按 `fit: inside` 且不放大处理，不能保证正方形或固定像素；输入上限 2 MiB、输出上限 512 KiB、像素与边长限制、会话写入检查、旧文件清理均已有实现。
+- 表单必须遵守 `.ai/rules/frontend-forms.md`：React Hook Form + Zod + ExUI。`packages/components` 不导入 API Client、Valtio、路由表或 ExUI 全局样式。
 
 ## 目标与非目标
 

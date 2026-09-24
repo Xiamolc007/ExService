@@ -6,7 +6,12 @@
 
 ## 开发规范
 
-1. 开发或修改 `apps/web/`、`packages/components/` 中的 Form 前，必须先阅读并遵守 [`.ai/rules/frontend-forms.md`](.ai/rules/frontend-forms.md)。
+1. 开发或修改 `apps/web/`、`packages/components/` 中的 Form 前，必须先阅读并遵守 `.ai/rules/frontend-forms.md`。
+
+### 文档中的文件路径
+
+- 在文档、注释和交付说明中提及仓库内文件或目录时，路径一律以**仓库根目录**为基准，例如 `.ai/databases/data-model.md`、`api/openapi.yaml`。移动文档后仍按仓库根目录填写路径。
+- 仓库内路径使用行内代码表示；不要写以当前文档所在目录为基准的 `./`、`../` 路径或 Markdown 相对链接，也不要写本机绝对路径。代码中的 import 和运行时路径遵循各自的语言与工具约定。
 
 <!-- codebase-worker:start -->
 ## Project AI documentation rules
