@@ -20,6 +20,8 @@ Contract operation
 
 头像 URL 默认使用本机 Mock 地址。通过代理或 HTTPS 隧道访问时，启动 Mock Server 前设置 `MOCK_PUBLIC_AVATAR_BASE_URL` 为浏览器可访问且以 `/api/avatars` 结尾的完整 HTTP(S) 地址；该值来自受控环境配置，不从请求 `Host` 头拼接。
 
+新上传头像在格式与资源上限检查后由 Sharp 按 EXIF 方向旋转、居中裁剪并按需放大，固定编码为 512×512 WebP。直接调用 API 与浏览器裁剪上传都经过这一步；已有头像文件不批量改写。产品规则见[决策](../../decisions/mock-server/05-normalize-new-avatars-to-512-square.md)。
+
 图片验证码取图 operation 当前由 handler 直接返回无缓存的占位 PNG、随机标识和展示用到期时间；它不进入 `AuthService` 或数据库。认证请求的可选 `captcha` 对象当前不参与验证，不能把这个占位接口当作人机防护。未来启用真实校验时需要为挑战与消耗行为增加服务端状态和验证规则。
 
 ## 三类状态

@@ -4,7 +4,7 @@
 
 本站的知识文档只记录**阅读代码无法直接得到**的内容：模块边界与依赖方向、已接受决策及其理由、以及源码中看不出的失败模式。`databases/` 另存跨实现的数据模型、数据库专属决策与运行知识；`rules/` 存放由 `AGENTS.md` 指向的专项开发规则。Task 进行中的状态、版本控制状态与源码的直接复述都不在这里。
 
-_最后更新：2026-09-23_
+_最后更新：2026-09-24_
 
 ## 模块划分
 
@@ -20,6 +20,8 @@ _最后更新：2026-09-23_
 | `contract-tests` | `tests/contract/` | 以真实 Fastify app 的 `inject()` 验证 HTTP Contract，而不是单测 handler。 | [architectures/contract-tests/test-layers.md](architectures/contract-tests/test-layers.md) · [decisions/contract-tests](decisions/README.md) · [knowledge/contract-tests](knowledge/contract-tests/contract-parsing-constraints.md) |
 
 `api-client` 与 `components` 目前没有独立的架构文档：它们的结构由 [architectures/overview.md](architectures/overview.md) 一并说明。只在该模块出现第一份文档时才创建模块子目录。
+
+用户设置面板的两条已接受决策是[设置状态与认证边界](decisions/web/04-settings-state-separate-from-auth-context.md)和[新头像尺寸](decisions/mock-server/05-normalize-new-avatars-to-512-square.md)。实现结构见上表所链的架构文档与源码；设计背景保留在[设置面板 RFC](../.notes/user-settings/rfcs/user-settings-panel-rfc.md)。
 
 ## 导航
 

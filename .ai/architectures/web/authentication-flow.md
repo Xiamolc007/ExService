@@ -2,7 +2,7 @@
 
 本文件说明共享认证 UI、应用流程和浏览器存储之间的边界。HTTP operation 与字段形状以 `api/openapi.yaml` 和生成 Client 类型为准。
 
-_最后更新：2026-09-23_
+_最后更新：2026-09-24_
 
 ## 责任分层
 
@@ -16,7 +16,7 @@ apps/web
   @workspace/api-client
 ```
 
-共享组件只管理字段、校验、焦点和可访问状态。它不读取浏览器存储、不调用 API、不决定导航。`apps/web` 负责请求分支、token 生命周期、SSO 上下文和整页跳转。个人资料页将资料表单留在共享组件中，通过应用层的生成 Client 读取、更新及上传头像。
+共享组件只管理字段、校验、焦点和可访问状态。它不读取浏览器存储、不调用 API、不决定导航。`apps/web` 负责请求分支、token 生命周期、SSO 上下文和整页跳转。设置 Modal 与 `/account/profile` 通过同一个设置控制层读取、更新及上传本人资料，界面由共享组件接收值和回调。
 
 登录、注册与验证码表单使用 React Hook Form 与 Zod；服务端字段错误通过 `setError` 展示。登录与注册由 `AuthForm` 分派，应用层负责请求与流程状态。登录中的 Google、QQ 入口仅为禁用占位，不发请求，也不代表已经接入第三方认证。
 
@@ -37,6 +37,12 @@ apps/web
 普通登录成功后先把 token 写入 `localStorage` 的 `exwebsite.auth.token`，成功写入后才整页导航。`AuthProvider` 在启动与其他标签页 storage 事件后调用 `/auth/me` 恢复身份；浏览器存储本身不作为身份依据。
 
 明确的 `SESSION_INVALID` 只删除仍与本次请求匹配的 token，避免迟到响应清掉较新的登录；资料页读取或修改收到此错误时同步更新顶栏认证状态。临时网络错误保留 token 并显示可重试状态，资料读取失败也结束等待并允许重试。主动退出成功或退出请求收到会话失效后清除匹配 token 并刷新。
+
+## 用户设置
+
+登录用户菜单的“设置”和“个人资料”打开同一 Modal，分别默认选中通用和个人资料；`/account/profile` 以页面容器复用相同主体。共享界面负责分类、单项表单和头像裁剪；`apps/web/src/settings/` 负责经生成 Client 请求本人资料。通用分类的主题由 ExUI `ThemeProvider` 决定，Valtio 中的值只是读取投影。
+
+设置资料只缓存在内存，按当前 token 归属并用请求代次拒绝迟到结果。重新打开会刷新，明确失效或账号切换会清空。保存成功先采用服务器返回的完整本人资料，再调用既有 `AuthContext.refreshProfile()` 同步顶栏；顶栏刷新失败不会回滚已经保存的设置。退出仍交给 `AuthContext.logout()`。设置状态与认证状态的职责依据见[决策](../../decisions/web/04-settings-state-separate-from-auth-context.md)。
 
 ## SSO 接收流程
 

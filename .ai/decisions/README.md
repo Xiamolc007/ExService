@@ -22,10 +22,12 @@ _最后更新：2026-09-24_
 | 02 | [本地 Mock 数据库使用固定路径，不接受覆盖](../databases/decisions/02-fixed-local-sqlite-database.md) | `mock-server` | 已接受 | 2026-09-16 |
 | 03 | [数据库变更只由显式命令执行](../databases/decisions/03-database-changes-only-by-explicit-command.md) | `mock-server` | 已接受 | 2026-09-16 |
 | 04 | [只对外回显安全的错误消息](mock-server/04-safe-error-messages.md) | `mock-server` | 已接受 | 2026-09-16 |
+| 05 | [新上传头像统一为 512×512 WebP](mock-server/05-normalize-new-avatars-to-512-square.md) | `mock-server` | 已实现 | 2026-09-24 |
 | 06 | [普通身份隐含，管理员身份显式记录](../databases/decisions/06-implicit-ordinary-explicit-admin-membership.md) | `mock-server` | 已接受 | 2026-09-24 |
 | 01 | [前端只经共享 Client 调用，base URL 由配置决定](web/01-shared-client-with-configurable-base-url.md) | `web` | 已接受 | 2026-09-16 |
 | 02 | [前端使用 react-router 的声明式路由](web/02-react-route-skeleton.md) | `web` | 已接受 | 2026-09-18 |
 | 03 | [以 ExUI 作为组件库与主题来源](web/03-exui-as-component-and-theme-source.md) | `web` | 已接受 | 2026-09-18 |
+| 04 | [设置状态与 AuthContext 保持独立](web/04-settings-state-separate-from-auth-context.md) | `web` | 已实现 | 2026-09-24 |
 | 01 | [Contract Test 必须断言 handler 的原始返回值](contract-tests/01-assert-raw-handler-output.md) | `contract-tests` | 已接受 | 2026-09-16 |
 | 02 | [测试直接以 Contract 为 schema 来源，并做双向覆盖检查](contract-tests/02-contract-as-sole-schema-source.md) | `contract-tests` | 已接受 | 2026-09-16 |
 
