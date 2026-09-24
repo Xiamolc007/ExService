@@ -12,12 +12,12 @@
 
 ## 现状与边界
 
-- [Contract](../../../api/openapi.yaml) 已定义 `GET/PATCH /auth/me`、`POST /auth/me/avatar`、`POST /auth/logout` 和公开头像读取；`CurrentUser` 是本人资料 snapshot，FiveM ID 是可空文本。设置 UI 不产生第二份 DTO 或 endpoint 定义。
-- [ProfilePage](../../../apps/web/src/pages/ProfilePage.tsx) 自行读取和修改资料，[ProfileEditor](../../../packages/components/src/ProfileEditor.tsx) 为整张表单。用户菜单的“设置”尚未接线，“个人资料”当前导航到页面。新设计将字段拆为单项编辑，同时保留旧路径。
-- [AuthContext](../../../apps/web/src/auth/AuthContext.tsx) 管理登录状态、匹配 token 的失效处理、资料刷新和退出；`logout()` 对外返回 `void`，失败时置 `unavailable`。设置控制层只消费这些现有方法，不重构该 Context。
-- [ThemeProvider 决策](../../../.ai/decisions/web/03-exui-as-component-and-theme-source.md)要求主题由 ExUI 管理。`settingsConfig.general.theme` 只是读取投影，不持久化，也不反向驱动 ExUI。
-- [头像服务](../../../apps/mock-server/src/profile/service.ts)当前按 `fit: inside` 且不放大处理，不能保证正方形或固定像素；输入上限 2 MiB、输出上限 512 KiB、像素与边长限制、会话写入检查、旧文件清理均已有实现。
-- 表单必须遵守[前端 Form 规则](../../../.ai/rules/frontend-forms.md)：React Hook Form + Zod + ExUI。`packages/components` 不导入 API Client、Valtio、路由表或 ExUI 全局样式。
+- [Contract](../../../../../api/openapi.yaml) 已定义 `GET/PATCH /auth/me`、`POST /auth/me/avatar`、`POST /auth/logout` 和公开头像读取；`CurrentUser` 是本人资料 snapshot，FiveM ID 是可空文本。设置 UI 不产生第二份 DTO 或 endpoint 定义。
+- [ProfilePage](../../../../../apps/web/src/pages/ProfilePage.tsx) 自行读取和修改资料，[ProfileEditor](../../../../../packages/components/src/ProfileEditor.tsx) 为整张表单。用户菜单的“设置”尚未接线，“个人资料”当前导航到页面。新设计将字段拆为单项编辑，同时保留旧路径。
+- [AuthContext](../../../../../apps/web/src/auth/AuthContext.tsx) 管理登录状态、匹配 token 的失效处理、资料刷新和退出；`logout()` 对外返回 `void`，失败时置 `unavailable`。设置控制层只消费这些现有方法，不重构该 Context。
+- [ThemeProvider 决策](../../../../../.ai/decisions/web/03-exui-as-component-and-theme-source.md)要求主题由 ExUI 管理。`settingsConfig.general.theme` 只是读取投影，不持久化，也不反向驱动 ExUI。
+- [头像服务](../../../../../apps/mock-server/src/profile/service.ts)当前按 `fit: inside` 且不放大处理，不能保证正方形或固定像素；输入上限 2 MiB、输出上限 512 KiB、像素与边长限制、会话写入检查、旧文件清理均已有实现。
+- 表单必须遵守[前端 Form 规则](../../../../../.ai/rules/frontend-forms.md)：React Hook Form + Zod + ExUI。`packages/components` 不导入 API Client、Valtio、路由表或 ExUI 全局样式。
 
 ## 目标与非目标
 
@@ -40,19 +40,21 @@ ProfilePage ── SettingsPage（默认个人资料） ├─ SettingsControlle
 
 `RootLayout` 在认证用户菜单的两个条目上设置本地 Modal 初始分类，不再让该菜单的“个人资料”执行路由跳转；直接访问 `/account/profile` 仍渲染页面容器。Modal 的开关、分类选择、编辑对话框、裁剪坐标和缩放值都是局部状态。Modal 关闭时卸载内部编辑/裁剪 UI，清理文件预览的 object URL；页面与 Modal 共用 `SettingsController`，不复制网络调用。
 
-`SettingsPanel` 负责分类导航和内容区域，容器传入当前分类、分类切换回调和该分类内容。共享包内的个人资料卡、账号卡、单项编辑 Dialog 和裁剪 Dialog 只接收显示用标量值及操作回调；由 `apps/web` 将生成的 `CurrentUser` 类型映射为这些 props。共享包不导出与 `CurrentUser` 同形的 DTO。`react-easy-crop` 由 `packages/components` 声明依赖；`valtio` 保留在已有的 `apps/web` 依赖中。
+`SettingsPanel` 负责分类导航和内容区域。左侧分类顺序为个人资料、通用、账号，退出登录作为侧栏底部的 ExUI `ghost` 按钮，以透明背景和红色文字显示；“设置”入口默认通用，“个人资料”入口及旧页面默认个人资料。右侧以当前分类标题作为显著的 Title；通用和账号用分组标题和平面设置行展示内容，每行左侧为字号大于说明文字的 Label 和可选说明，右侧为当前值或操作控件。主题等选项设置使用 ExUI Select；可编辑的纯文字值使用透明背景、无描边、有左右留白并带右箭头的按钮。个人资料页改为居中的独立头像与用户名区域：Avatar 加 `ex-glass`，无头像时放大 fallback 字，头像下方的名字按钮打开现有单项编辑 Dialog，点击头像打开上传和移除操作；不渲染头像或用户名设置行。QQ 迁入账号“关联信息”，与 FiveM ID 共用单项编辑机制。共享包内的设置行、单项编辑 Dialog 和裁剪 Dialog 只接收显示用标量值及操作回调；由 `apps/web` 将生成的 `CurrentUser` 类型映射为这些 props。Modal 顶部没有可见标题，但保留可访问名称。共享包不导出与 `CurrentUser` 同形的 DTO。`react-easy-crop` 由 `packages/components` 声明依赖；`valtio` 保留在已有的 `apps/web` 依赖中。
 
-`ContentAreaState` 使用互斥的公开 props：`{ status: 'loading'; skeleton: ReactNode }`、`{ status: 'error'; errorMessage: string; onRetry: () => void }`、`{ status: 'ready'; children: ReactNode }`。它填满宿主分配的内容区域，加载时渲染传入的骨架和可访问状态文本，错误时渲染错误与按钮，成功时渲染子内容；它不请求数据。设置提供标题及卡片行骨架。未来文档页可传入自己的骨架，不修改组件状态语义。通用分类仅依赖主题，始终直接进入 `ready`。
+Modal 使用宽度 `clamp(42rem, 72vw, 64rem)`、高度 `clamp(32rem, 72dvh, 48rem)`，再以视口四周 2rem 留白约束最大值。宽度不超过 38rem 或高度不超过 34rem 时改为 `100vw × 100dvh` 全屏；手机顶部分类菜单包含退出操作，中间内容区 `overflow-y: auto` 且网格轨道允许收缩。动态视口高度用于跟随移动浏览器工具栏变化。
+
+`ContentAreaState` 使用互斥的公开 props：`{ status: 'loading'; skeleton: ReactNode }`、`{ status: 'error'; errorMessage: string; onRetry: () => void }`、`{ status: 'ready'; children: ReactNode }`。它填满宿主分配的内容区域，加载时渲染传入的骨架和可访问状态文本，错误时渲染错误与按钮，成功时渲染子内容；它不请求数据。设置提供标题及平面设置行骨架。未来文档页可传入自己的骨架，不修改组件状态语义。通用分类仅依赖主题，始终直接进入 `ready`。
 
 ## 全局设置读取模型
 
-`settingsConfig` 在 `apps/web` 维护 `general.theme` 只读投影，以及 `profile.snapshot: CurrentUser | null`、`profile.status: idle | loading | ready | error` 和安全的读取错误文案。`ready` 必有 snapshot；重开刷新时即使旧 snapshot 尚在内存，`loading` 仍显示整块骨架；刷新失败时 `error` 显示整块错误，而不展示过期资料。当前分类、表单草稿、操作进行中与退出进行中不进入全局对象。设置资料仅存内存；token 不写入 Valtio、日志或 UI props。主题以 `useTheme()` 为来源：适配层观察其值并同步投影，所有主题修改仍调用 `setTheme()`。顶栏继续直接使用 ExUI `useTheme()` 与 `AuthContext`。
+`settingsConfig` 在 `apps/web` 维护 `general.theme` 只读投影，以及 `profile.snapshot: CurrentUser | null`、`profile.status: idle | loading | ready | error` 和安全的读取错误文案。`ready` 必有 snapshot；重开刷新时即使旧 snapshot 尚在内存，`loading` 仍显示整块骨架；刷新失败时 `error` 显示整块错误，而不展示过期资料。当前分类、表单草稿、操作进行中与退出进行中不进入全局对象。设置资料仅存内存；token 不写入 Valtio、日志或 UI props。主题以 `useTheme()` 为来源：适配层观察其值并同步投影，所有主题修改仍调用 `setTheme()`。设置面板使用 ExUI `useTheme()`；顶栏继续使用 `AuthContext`。
 
 设置动作内部保留当前 token 所属会话标识与请求代次。打开 Modal 或进入页面时读取当前 token；首次进入个人资料/账号若无 snapshot 则请求 `GET /auth/me`，Modal 重开时重新请求。刷新时当前内容区显示骨架；失败时显示整块错误与重试。两个资料分类共用一次读取状态。每个请求完成前检查 token 是否仍相同且代次仍有效；设置写操作开始时使较早的读取结果失效。token 改变、会话明确失效或 `AuthContext` 转为 `anonymous` 时清空缓存并使在途请求失效；仅临时 `unavailable` 且 token 未变时保留缓存供重试。监听已有 token 的 storage 事件并在当前标签主动执行会话动作后同步检查，使账号切换先于迟到请求写入。
 
 同一时刻只允许一个本人资料写操作。单项文本编辑在共享包用 React Hook Form + Zod 校验，使用已有 `nickname`、`qq`、`fivemId` 规则；每次 `PATCH /auth/me` 仅发送被编辑的一个字段，QQ/FiveM ID 清空映射为 `null`。邮箱只读，FiveM ID 始终显示“未验证”，不作为认证或权限依据。写成功时用返回的完整 snapshot 更新设置缓存，再调用现有 `auth.refreshProfile()`；若顶栏刷新失败，服务器写入仍视为成功，不回滚或重复提交写请求。此时 `AuthContext` 可能转为 `unavailable`：若 token 未变，已打开的设置容器仍可显示缓存中刚保存的结果及顶栏刷新失败提示，并提供现有 `auth.retrySession()`；在认证恢复前禁用后续资料写入。若打开设置时 `AuthContext` 已不可用且没有当前 token 的缓存，则显示认证错误与重试。写失败时保留草稿与 Dialog，允许重试。`SESSION_INVALID` 调用现有 `auth.invalidateSession(requestToken)`，关闭设置并清空其缓存；其他网络错误不删除 token。
 
-账号卡退出调用现有 `auth.logout()`，不直接调用退出 operation。点击后禁用重复操作；由于该方法返回 `void`，设置层观察随后出现的 `unavailable` 并在仍打开的 Modal 中显示 AuthContext 的错误文案与重试；`anonymous` 时关闭设置，成功时由现有页面刷新结束界面。该观察方式和现有退出路径必须在集成测试中验证。
+桌面侧栏底部和手机顶部菜单的退出操作调用现有 `auth.logout()`，不直接调用退出 operation，且从任意分类都可使用。点击后禁用重复操作；由于该方法返回 `void`，设置层观察随后出现的 `unavailable` 并在仍打开的 Modal 中显示 AuthContext 的错误文案与重试；`anonymous` 时关闭设置，成功时由现有页面刷新结束界面。该观察方式和现有退出路径必须在集成测试中验证。
 
 ## 头像处理
 
@@ -98,7 +100,7 @@ Mock Server 中的 Sharp 在已有格式、大小、像素、单页检查后，�
 - 组件测试：入口默认分类、单项提交与 `null` 清空、FiveM 未验证文案、整块骨架/错误/重试、取消裁剪无请求、保存失败保留草稿、退出失败保留 Modal。
 - 设置控制层测试：同一资料 snapshot 被两分类共用；重开刷新；写成功后调用现有 `refreshProfile()`；在途读取与写入、账号切换、`SESSION_INVALID` 的迟到响应均不能污染缓存；`AuthContext` 接口不变。
 - Contract Test：通过真实 Fastify app 上传正方、横向、纵向及小于 512 像素的受支持图片，再读取公开头像并检查 Sharp metadata 为 512×512 WebP；保留伪装格式、超限、会话撤销、文件/数据库故障断言。
-- 浏览器检查：桌面和窄屏 Modal/页面布局、主题与顶栏同步、裁剪 Dialog 的尺寸稳定、键盘与焦点回退、Escape 顺序、输出预览与实际头像一致。当前仓库如无 `TESTING.md`，遵守现有测试惯例。
+- 浏览器检查：桌面和窄屏 Modal/页面布局、主题切换生效、裁剪 Dialog 的尺寸稳定、键盘与焦点回退、Escape 顺序、输出预览与实际头像一致。当前仓库如无 `TESTING.md`，遵守现有测试惯例。
 
 ## 待决事项
 

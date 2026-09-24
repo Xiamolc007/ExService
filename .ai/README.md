@@ -21,7 +21,7 @@ _最后更新：2026-09-24_
 
 `api-client` 与 `components` 目前没有独立的架构文档：它们的结构由 [architectures/overview.md](architectures/overview.md) 一并说明。只在该模块出现第一份文档时才创建模块子目录。
 
-用户设置面板的两条已接受决策是[设置状态与认证边界](decisions/web/04-settings-state-separate-from-auth-context.md)和[新头像尺寸](decisions/mock-server/05-normalize-new-avatars-to-512-square.md)。实现结构见上表所链的架构文档与源码；设计背景保留在[设置面板 RFC](../.notes/user-settings/rfcs/user-settings-panel-rfc.md)。
+用户设置面板的两条已接受决策是[设置状态与认证边界](decisions/web/04-settings-state-separate-from-auth-context.md)和[新头像尺寸](decisions/mock-server/05-normalize-new-avatars-to-512-square.md)。实现结构见上表所链的架构文档与源码；设计背景保留在[设置面板 RFC](../.notes/archive/backend-sandbox/user-settings/rfcs/user-settings-panel-rfc.md)。
 
 ## 导航
 
