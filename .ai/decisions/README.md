@@ -6,7 +6,7 @@
 
 决定「为什么这样做」的内容留在本目录或 `../databases/decisions/`；它产生的结构写在 `../architectures/` 或 `../databases/data-model.md`，运行中暴露的失败模式写在 `../knowledge/` 或 `../databases/knowledge/`。
 
-_最后更新：2026-09-23_
+_最后更新：2026-09-24_
 
 ## 索引
 
@@ -22,6 +22,7 @@ _最后更新：2026-09-23_
 | 02 | [本地 Mock 数据库使用固定路径，不接受覆盖](../databases/decisions/02-fixed-local-sqlite-database.md) | `mock-server` | 已接受 | 2026-09-16 |
 | 03 | [数据库变更只由显式命令执行](../databases/decisions/03-database-changes-only-by-explicit-command.md) | `mock-server` | 已接受 | 2026-09-16 |
 | 04 | [只对外回显安全的错误消息](mock-server/04-safe-error-messages.md) | `mock-server` | 已接受 | 2026-09-16 |
+| 06 | [普通身份隐含，管理员身份显式记录](../databases/decisions/06-implicit-ordinary-explicit-admin-membership.md) | `mock-server` | 已接受 | 2026-09-24 |
 | 01 | [前端只经共享 Client 调用，base URL 由配置决定](web/01-shared-client-with-configurable-base-url.md) | `web` | 已接受 | 2026-09-16 |
 | 02 | [前端使用 react-router 的声明式路由](web/02-react-route-skeleton.md) | `web` | 已接受 | 2026-09-18 |
 | 03 | [以 ExUI 作为组件库与主题来源](web/03-exui-as-component-and-theme-source.md) | `web` | 已接受 | 2026-09-18 |
