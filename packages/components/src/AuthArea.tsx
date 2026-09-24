@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
   Spinner,
 } from '@exre/exui'
+import type { Ref } from 'react'
 import styles from './AuthArea.module.scss'
 
 export type AuthDisplayState =
@@ -27,9 +28,12 @@ export interface AuthAreaProps {
   onRetry: () => void
   onLogout: () => void
   onProfile: () => void
+  onSettings: () => void
+  menuButtonRef?: Ref<HTMLSpanElement>
 }
 
-export function AuthArea({ state, onLogin, onRegister, onRetry, onLogout, onProfile }: AuthAreaProps) {
+export function AuthArea({ state, onLogin, onRegister, onRetry, onLogout, onProfile, onSettings,
+  menuButtonRef }: AuthAreaProps) {
   if (state.status === 'loading') {
     return <Spinner aria-label="正在恢复登录状态" />
   }
@@ -56,19 +60,21 @@ export function AuthArea({ state, onLogin, onRegister, onRetry, onLogout, onProf
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="用户菜单">
-          <Avatar size="sm">
-            {state.avatarUrl && <AvatarImage src={state.avatarUrl} alt="" />}
-            <AvatarFallback>{state.initial}</AvatarFallback>
-          </Avatar>
-        </Button>
-      </DropdownMenuTrigger>
+      <span ref={menuButtonRef}>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" aria-label="用户菜单">
+            <Avatar size="sm">
+              {state.avatarUrl && <AvatarImage src={state.avatarUrl} alt="" />}
+              <AvatarFallback>{state.initial}</AvatarFallback>
+            </Avatar>
+          </Button>
+        </DropdownMenuTrigger>
+      </span>
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>{state.nickname}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={onProfile}>个人资料</DropdownMenuItem>
-        <DropdownMenuItem>设置</DropdownMenuItem>
+        <DropdownMenuItem onSelect={onSettings}>设置</DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={onLogout}>退出登录</DropdownMenuItem>
       </DropdownMenuContent>

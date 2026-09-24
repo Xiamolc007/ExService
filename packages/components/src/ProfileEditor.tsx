@@ -3,26 +3,10 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { Alert, AlertDescription, Avatar, AvatarFallback, AvatarImage, Button, Field, FieldContent,
   FieldError, FieldGroup, FieldLabel, Input, Spinner } from '@exre/exui'
 import { useForm } from 'react-hook-form'
-import { z } from 'zod'
+import { avatarSchema, profileTextSchema, type ProfileTextValues } from './profileValidation'
 import styles from './ProfileEditor.module.scss'
 
-const textSchema = z.object({
-  nickname: z.string().trim().refine((value) => Array.from(value).length >= 1 &&
-    Array.from(value).length <= 32 && !/[\u0000-\u001F\u007F-\u009F]/u.test(value), '用户名须为 1 至 32 个有效字符'),
-  qq: z.string().refine((value) => value === '' || /^[0-9]{1,20}$/.test(value), 'QQ 须为 1 至 20 位数字'),
-  fivemId: z.string().refine((value) => value === '' ||
-    (value.length <= 64 && /^fivem:[0-9]+$/.test(value)), 'FiveM ID 须为 fivem:数字ID'),
-})
-
-const avatarSchema = z.object({
-  image: z.custom<FileList>((value) => typeof value === 'object' && value !== null &&
-    'length' in value && value.length === 1 && 'item' in value && typeof value.item === 'function' &&
-    value.item(0) instanceof File && value.item(0)!.size <= 2 * 1024 * 1024 &&
-    ['image/png', 'image/jpeg', 'image/webp'].includes(value.item(0)!.type),
-  '请选择不超过 2 MiB 的 PNG、JPEG 或 WebP 图片'),
-})
-
-export type ProfileTextValues = z.infer<typeof textSchema>
+export type { ProfileTextValues } from './profileValidation'
 
 export interface ProfileEditorProps {
   initial: ProfileTextValues
@@ -34,8 +18,8 @@ export interface ProfileEditorProps {
 
 export function ProfileEditor({ initial, avatarUrl, onSave, onUpload, onRemoveAvatar }: ProfileEditorProps) {
   const id = useId()
-  const textForm = useForm<ProfileTextValues>({ resolver: zodResolver(textSchema), defaultValues: initial })
-  const imageForm = useForm<z.infer<typeof avatarSchema>>({ resolver: zodResolver(avatarSchema) })
+  const textForm = useForm<ProfileTextValues>({ resolver: zodResolver(profileTextSchema), defaultValues: initial })
+  const imageForm = useForm<{ image: FileList }>({ resolver: zodResolver(avatarSchema) })
   const { dirtyFields } = textForm.formState
 
   useEffect(() => {

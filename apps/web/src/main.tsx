@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router'
 import { ThemeProvider, GlassSeed } from '@exre/exui'
 import { api } from './api/client'
 import { App } from './App'
+import { SettingsThemeProjection } from './settings/SettingsThemeProjection'
 // ExUI 的组件样式表，已内含 Token CSS 与字体 CSS，每个应用只导入这一次。
 // 它必须排在 `./styles/index.scss` 之前：应用自己的样式要能覆盖库的默认值。
 import '@exre/exui/style.css'
@@ -31,6 +32,7 @@ if (!container) {
 createRoot(container).render(
   <StrictMode>
     <ThemeProvider>
+      <SettingsThemeProjection />
       <GlassSeed />
       <BrowserRouter>
         <App />

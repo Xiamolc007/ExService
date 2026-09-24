@@ -1,23 +1,40 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { writeToken } from '../auth/storage'
+import { removeMatchingToken, writeToken } from '../auth/storage'
+import { bindSettingsToken } from '../settings/settingsConfig'
 
 const get = vi.hoisted(() => vi.fn())
 const invalidateSession = vi.hoisted(() => vi.fn())
 vi.mock('../api/client', () => ({ api: { GET: get } }))
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({
   state: { status: 'authenticated' }, openModal: vi.fn(), invalidateSession,
+  refreshProfile: vi.fn(), retrySession: vi.fn(), logout: vi.fn(),
 }) }))
-vi.mock('@workspace/components', () => ({ ProfileEditor: () => <div>资料表单</div> }))
+vi.mock('@exre/exui', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@exre/exui')>()),
+  useTheme: () => ({ theme: 'system', setTheme: vi.fn() }),
+}))
+vi.mock('@workspace/components', () => ({
+  SettingsPanel: ({ profileStatus, profileError, onRetry }: {
+    profileStatus: string; profileError: string | null; onRetry: () => void
+  }) => <div>{profileStatus === 'error' ? <><p role="alert">{profileError}</p>
+    <button onClick={onRetry}>重试读取资料</button></> :
+    profileStatus === 'ready' ? <p>设置资料</p> : <p>正在读取个人资料</p>}</div>,
+}))
 
 import { ProfilePage } from './ProfilePage'
+
+beforeEach(() => invalidateSession.mockImplementation((token: string) => {
+  removeMatchingToken(window.localStorage, token)
+}))
 
 afterEach(() => {
   cleanup()
   get.mockReset()
   invalidateSession.mockReset()
+  bindSettingsToken(null)
   window.localStorage.clear()
 })
 
@@ -31,9 +48,9 @@ describe('ProfilePage loading errors', () => {
       } })
     render(<ProfilePage />)
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', '暂时无法读取')
-    expect(screen.queryByLabelText('正在读取个人资料')).toBeNull()
+    expect(screen.queryByText('正在读取个人资料')).toBeNull()
     await userEvent.click(screen.getByRole('button', { name: '重试读取资料' }))
-    expect(await screen.findByText('资料表单')).toBeTruthy()
+    expect(await screen.findByText('设置资料')).toBeTruthy()
     expect(get).toHaveBeenCalledTimes(2)
   })
 

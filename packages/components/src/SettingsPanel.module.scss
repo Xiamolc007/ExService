@@ -1,0 +1,58 @@
+.panel {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr);
+  min-height: 30rem;
+  max-height: min(75vh, 48rem);
+  overflow: hidden;
+}
+.navigation {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.25rem;
+  padding: 1rem;
+  border-right: 1px solid var(--exui-border-default);
+}
+.navigation button { justify-content: flex-start; }
+.content { min-width: 0; overflow-y: auto; padding: 1.5rem; }
+.content h2 { margin: 0 0 1.25rem; }
+.card {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--exui-border-default);
+  border-radius: var(--exui-radius-medium);
+  background: var(--exui-surface-background);
+}
+.card h3, .card p { margin: 0; }
+.card p { color: var(--exui-text-secondary); }
+.themeOptions, .rowActions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.themeOption {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--exui-border-default);
+  border-radius: var(--exui-radius-medium);
+  cursor: pointer;
+}
+.row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-width: 0; }
+.row > div { display: grid; gap: 0.25rem; min-width: 0; }
+.row strong { overflow-wrap: anywhere; font-weight: 500; }
+.avatarRow { display: flex; align-items: center; gap: 1.25rem; }
+.avatar { width: 5rem; height: 5rem; flex: none; }
+.avatarForm { display: grid; gap: 0.75rem; min-width: 0; }
+.editForm { display: grid; gap: 1rem; }
+.editDialog { max-width: 28rem; }
+.cropDialog { max-width: 34rem; animation: none; }
+.cropArea { position: relative; width: 100%; height: min(44vh, 20rem); min-height: 14rem; }
+.zoomSlider { width: 100%; accent-color: var(--exui-text-primary); }
+@media (max-width: 38rem) {
+  .panel { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); max-height: 80vh; }
+  .navigation { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--exui-border-default); }
+  .navigation button { white-space: nowrap; }
+  .content { padding: 1rem; }
+  .avatarRow { align-items: flex-start; flex-direction: column; }
+  .row { align-items: flex-start; flex-direction: column; }
+}

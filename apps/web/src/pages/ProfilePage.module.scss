@@ -1,10 +1,20 @@
 .page {
-  width: min(100% - 2rem, 42rem);
+  width: min(100% - 2rem, 60rem);
   margin: 3rem auto 5rem;
-  padding: 2rem;
+  padding: 0;
   border: 1px solid var(--exui-border-default);
   border-radius: var(--exui-radius-medium);
   background: var(--exui-surface-background);
+}
+
+.message { padding: 2rem; }
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
 }
 
 .heading {

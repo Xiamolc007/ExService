@@ -80,6 +80,7 @@ describe('Home', () => {
         onRetry={() => undefined}
         onLogout={() => undefined}
         onProfile={() => undefined}
+        onSettings={() => undefined}
       />,
     )
 
