@@ -15,17 +15,22 @@ export function RootLayout() {
   const auth = useAuth()
   const [settingsCategory, setSettingsCategory] = useState<SettingsCategory | null>(null)
   const menuButton = useRef<HTMLSpanElement>(null)
+  const mobileMenuButton = useRef<HTMLSpanElement>(null)
   useEffect(() => {
     if (auth.state.status === 'anonymous') setSettingsCategory(null)
   }, [auth.state.status])
   const closeSettings = () => {
     setSettingsCategory(null)
-    requestAnimationFrame(() => menuButton.current?.querySelector('button')?.focus())
+    requestAnimationFrame(() => {
+      const isMobile = window.matchMedia('(max-width: 52rem)').matches
+      const target = isMobile ? mobileMenuButton.current : menuButton.current
+      target?.querySelector('button')?.focus()
+    })
   }
 
   return (
     <>
-      <SiteHeader auth={{
+      <SiteHeader mobileMenuButtonRef={mobileMenuButton} auth={{
         state: auth.state,
         onLogin: () => auth.openModal('login'),
         onRegister: () => auth.openModal('register'),

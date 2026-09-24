@@ -1,14 +1,26 @@
 import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
   NavigationMenu,
   NavigationMenuList,
   NavigationMenuItem,
   NavigationMenuLink,
   navigationMenuTriggerStyle,
+  SelectContent,
+  SelectField,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+  Spinner,
 } from '@exre/exui'
-import { Link } from 'react-router'
+import { Menu, UserRound } from 'lucide-react'
+import type { Ref } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router'
 import { AuthArea, type AuthAreaProps } from './AuthArea'
 import { Logo } from './Logo'
-import { ThemeToggle } from './ThemeToggle'
 import styles from './SiteHeader.module.scss'
 
 /**
@@ -27,7 +39,8 @@ const NAV_ITEMS = [
 ] as const
 
 /**
- * 站点顶栏：左侧字标、中间导航菜单、右侧主题切换与登录区。
+ * 站点顶栏：桌面端左侧字标、中间导航菜单、右侧登录区；手机端左侧导航
+ * Select、中间字标、右侧账号 Select。
  *
  * 挂在 `apps/web/src/routes/RootLayout.tsx`，因此所有路由（含兜底页）共用。
  *
@@ -36,9 +49,15 @@ const NAV_ITEMS = [
  */
 export interface SiteHeaderProps {
   auth: AuthAreaProps
+  mobileMenuButtonRef?: Ref<HTMLSpanElement>
 }
 
-export function SiteHeader({ auth }: SiteHeaderProps) {
+export function SiteHeader({ auth, mobileMenuButtonRef }: SiteHeaderProps) {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const selectedNavigation = NAV_ITEMS.some(({ to }) => to === location.pathname)
+    ? location.pathname : ''
+
   return (
     <header className={styles.header} data-site-header>
       <div className={styles.inner}>
@@ -63,10 +82,78 @@ export function SiteHeader({ auth }: SiteHeaderProps) {
         </div>
 
         <div className={styles.end}>
-          <ThemeToggle />
           <AuthArea {...auth} />
+        </div>
+
+        <div className={styles.mobileNav}>
+          <SelectField value={selectedNavigation} onValueChange={(value) => {
+            if (NAV_ITEMS.some(({ to }) => to === value)) navigate(value)
+          }}>
+            <SelectTrigger className={styles.mobileNavTrigger} aria-label="打开导航菜单">
+              <Menu aria-hidden="true" />
+              <SelectValue placeholder="导航菜单" />
+            </SelectTrigger>
+            <SelectContent position="popper" align="end">
+              <SelectGroup>
+                <SelectLabel>导航</SelectLabel>
+                {NAV_ITEMS.map(({ to, label }) =>
+                  <SelectItem key={to} value={to}>{label}</SelectItem>)}
+              </SelectGroup>
+            </SelectContent>
+          </SelectField>
+        </div>
+
+        <div className={styles.mobileAccount}>
+          <MobileAccountSelect auth={auth} triggerRef={mobileMenuButtonRef} />
         </div>
       </div>
     </header>
   )
+}
+
+function MobileAccountSelect({ auth, triggerRef }: {
+  auth: AuthAreaProps
+  triggerRef?: Ref<HTMLSpanElement>
+}) {
+  if (auth.state.status === 'loading') {
+    return <Spinner aria-label="正在恢复登录状态" />
+  }
+
+  const selectAccountItem = (value: string) => {
+    if (value === 'login') auth.onLogin()
+    else if (value === 'register') auth.onRegister()
+    else if (value === 'retry') auth.onRetry()
+    else if (value === 'profile') auth.onProfile()
+    else if (value === 'settings') auth.onSettings()
+    else if (value === 'logout') auth.onLogout()
+  }
+
+  return <SelectField value="" onValueChange={selectAccountItem}>
+    <span ref={triggerRef}>
+      <SelectTrigger className={`${styles.mobileAccountTrigger} ${auth.state.status === 'authenticated'
+        ? styles.mobileAvatarTrigger : ''}`} aria-label="用户菜单">
+        {auth.state.status === 'authenticated' ? <Avatar size="sm" className={styles.mobileAvatar}>
+          {auth.state.avatarUrl && <AvatarImage src={auth.state.avatarUrl} alt="" />}
+          <AvatarFallback>{auth.state.initial}</AvatarFallback>
+        </Avatar> : <UserRound aria-hidden="true" />}
+        <SelectValue placeholder="用户菜单" />
+      </SelectTrigger>
+    </span>
+    <SelectContent position="popper" align="end">
+      <SelectGroup>
+        <SelectLabel>{auth.state.status === 'authenticated' ? auth.state.nickname : '账号'}</SelectLabel>
+        {auth.state.status === 'anonymous' && <>
+          <SelectItem value="login">登录</SelectItem>
+          <SelectItem value="register">注册</SelectItem>
+        </>}
+        {auth.state.status === 'authenticated' && <>
+          <SelectItem value="profile">个人资料</SelectItem>
+          <SelectItem value="settings">设置</SelectItem>
+          <SelectItem value="logout">退出登录</SelectItem>
+        </>}
+        {auth.state.status === 'unavailable' &&
+          <SelectItem value="retry">重试登录状态</SelectItem>}
+      </SelectGroup>
+    </SelectContent>
+  </SelectField>
 }

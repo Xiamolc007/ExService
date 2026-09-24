@@ -62,8 +62,8 @@ export function AuthArea({ state, onLogin, onRegister, onRetry, onLogout, onProf
     <DropdownMenu>
       <span ref={menuButtonRef}>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" aria-label="用户菜单">
-            <Avatar size="sm">
+          <Button className={styles.avatarButton} variant="ghost" size="icon" aria-label="用户菜单">
+            <Avatar size="sm" className={styles.avatar}>
               {state.avatarUrl && <AvatarImage src={state.avatarUrl} alt="" />}
               <AvatarFallback>{state.initial}</AvatarFallback>
             </Avatar>
