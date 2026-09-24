@@ -22,10 +22,17 @@ export function ContentAreaState(props: ContentAreaStateProps) {
   return <div className={styles.area}>{props.children}</div>
 }
 
-export function SettingsContentSkeleton() {
+export function SettingsContentSkeleton({ profile = false }: { profile?: boolean }) {
   return <div className={styles.skeleton} aria-hidden="true">
     <Skeleton className={styles.title} />
-    <Skeleton className={styles.card} />
-    <Skeleton className={styles.card} />
+    {profile ? <div className={styles.profile}>
+      <Skeleton className={styles.avatar} />
+      <Skeleton className={styles.name} />
+      <Skeleton className={styles.action} />
+    </div> : <>
+      <Skeleton className={styles.row} />
+      <Skeleton className={styles.row} />
+      <Skeleton className={styles.row} />
+    </>}
   </div>
 }

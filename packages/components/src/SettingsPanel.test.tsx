@@ -29,26 +29,100 @@ function props(overrides: Partial<SettingsPanelProps> = {}): SettingsPanelProps 
 afterEach(() => { cleanup(); cropperCallbacks.current = null })
 
 describe('SettingsPanel', () => {
-  it('shows mutually exclusive theme choices without waiting for profile data', async () => {
-    const onThemeChange = vi.fn()
-    render(<SettingsPanel {...props({ profile: null, profileStatus: 'loading', onThemeChange })} />)
-    expect(screen.getByRole('radio', { name: '跟随系统' }).getAttribute('aria-checked')).toBe('true')
-    await userEvent.click(screen.getByRole('radio', { name: '深色' }))
-    expect(onThemeChange).toHaveBeenCalledWith('dark')
+  it('puts profile first while keeping the selected category controlled by its caller', () => {
+    render(<SettingsPanel {...props()} />)
+    const categories = screen.getByRole('navigation', { name: '设置分类' })
+      .querySelectorAll('button')
+    expect(Array.from(categories, (button) => button.textContent))
+      .toEqual(['个人资料', '通用', '账号'])
+    expect(screen.getByRole('button', { name: '通用' }).getAttribute('aria-current')).toBe('page')
   })
 
-  it('labels a hand-entered FiveM ID as unverified and keeps email read-only', () => {
+  it('offers mobile category selection and logout from the top menu', async () => {
+    const originalScrollIntoView = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = vi.fn()
+    const onCategoryChange = vi.fn()
+    const onLogout = vi.fn()
+    try {
+      render(<SettingsPanel {...props({ category: 'profile', onCategoryChange, onLogout })} />)
+      const picker = screen.getByRole('combobox', { name: '选择设置页面' })
+      picker.focus()
+      await userEvent.keyboard('[Space]')
+      expect(screen.getByRole('option', { name: '退出登录' })).toBeTruthy()
+      await userEvent.keyboard('[ArrowDown]')
+      await userEvent.keyboard('[Enter]')
+      expect(onCategoryChange).toHaveBeenCalledWith('general')
+    } finally {
+      if (originalScrollIntoView) Element.prototype.scrollIntoView = originalScrollIntoView
+      else Reflect.deleteProperty(Element.prototype, 'scrollIntoView')
+    }
+  })
+
+  it('shows the current profile value inside the control that opens its editor', async () => {
+    render(<SettingsPanel {...props({ category: 'profile' })} />)
+    const edit = screen.getByRole('button', { name: '编辑用户名' })
+    expect(edit.textContent).toContain('Person')
+    expect(screen.queryByText('用户名')).toBeNull()
+    expect(screen.queryByRole('button', { name: '编辑QQ' })).toBeNull()
+    await userEvent.click(edit)
+    expect(screen.getByRole('dialog', { name: '编辑用户名' })).toBeTruthy()
+  })
+
+  it('opens avatar upload from the glass avatar and then opens the image picker', async () => {
+    render(<SettingsPanel {...props({ category: 'profile' })} />)
+    expect(screen.queryByText('上传头像')).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: '编辑头像' }))
+    expect(screen.getByRole('dialog', { name: '上传头像' })).toBeTruthy()
+    const imageInput = screen.getByLabelText('头像图片') as HTMLInputElement
+    const openPicker = vi.spyOn(imageInput, 'click')
+    await userEvent.click(screen.getByRole('button', { name: '选择图片' }))
+    expect(openPicker).toHaveBeenCalledOnce()
+  })
+
+  it('offers avatar removal inside the upload dialog', async () => {
+    const onRemoveAvatar = vi.fn(async () => undefined)
+    render(<SettingsPanel {...props({ category: 'profile',
+      profile: { ...profile, avatarUrl: '/avatar.webp' }, onRemoveAvatar })} />)
+    await userEvent.click(screen.getByRole('button', { name: '编辑头像' }))
+    await userEvent.click(screen.getByRole('button', { name: '移除头像' }))
+    await waitFor(() => expect(onRemoveAvatar).toHaveBeenCalledOnce())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '上传头像' })).toBeNull())
+  })
+
+  it('changes the theme through a select without waiting for profile data', async () => {
+    const originalScrollIntoView = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = vi.fn()
+    const onThemeChange = vi.fn()
+    try {
+      render(<SettingsPanel {...props({ profile: null, profileStatus: 'loading', onThemeChange })} />)
+      const theme = screen.getByRole('combobox', { name: '网站主题' })
+      expect(theme.textContent).toContain('跟随系统')
+      theme.focus()
+      await userEvent.keyboard('[Space]')
+      await userEvent.keyboard('[ArrowUp]')
+      await userEvent.keyboard('[Enter]')
+      expect(onThemeChange).toHaveBeenCalledWith('dark')
+    } finally {
+      if (originalScrollIntoView) Element.prototype.scrollIntoView = originalScrollIntoView
+      else Reflect.deleteProperty(Element.prototype, 'scrollIntoView')
+    }
+  })
+
+  it('groups QQ and an unverified FiveM ID under account while keeping email read-only', () => {
     render(<SettingsPanel {...props({ category: 'account' })} />)
     expect(screen.getByText('person@example.com')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '编辑QQ' })).toBeTruthy()
     expect(screen.getByText(/未验证。此信息由用户手填/)).toBeTruthy()
     expect(screen.queryByRole('textbox', { name: '登录邮箱' })).toBeNull()
   })
 
-  it('keeps logout available for retry after an auth failure', async () => {
+  it('keeps logout at the end of navigation and shows its failure from general settings', async () => {
     const onLogout = vi.fn()
     const onRetryAuth = vi.fn()
-    render(<SettingsPanel {...props({ category: 'account', authMessage: '退出失败，请稍后重试',
+    render(<SettingsPanel {...props({ category: 'general', authMessage: '退出失败，请稍后重试',
       onLogout, onRetryAuth })} />)
+    const navigation = screen.getByRole('navigation', { name: '设置分类' })
+    expect(navigation.parentElement?.lastElementChild?.textContent).toContain('退出登录')
     expect(screen.getByRole('alert').textContent).toContain('退出失败，请稍后重试')
     await userEvent.click(screen.getByRole('button', { name: '退出登录' }))
     await userEvent.click(screen.getByRole('button', { name: '重试登录状态' }))
@@ -58,11 +132,11 @@ describe('SettingsPanel', () => {
 
   it('validates a single QQ edit and preserves the draft after a failed save', async () => {
     const onSave = vi.fn().mockRejectedValueOnce(new Error('保存失败')).mockResolvedValueOnce(undefined)
-    render(<SettingsPanel {...props({ category: 'profile', onSave })} />)
+    render(<SettingsPanel {...props({ category: 'account', onSave })} />)
     await userEvent.click(screen.getByRole('button', { name: '编辑QQ' }))
     const input = screen.getByRole('textbox', { name: 'QQ' })
     await userEvent.clear(input)
-    await userEvent.type(input, 'wrong')
+    await userEvent.type(input, 'invalid')
     await userEvent.click(screen.getByRole('button', { name: '保存' }))
     expect(await screen.findByText('QQ 须为 1 至 20 位数字')).toBeTruthy()
     expect(onSave).not.toHaveBeenCalled()
@@ -95,9 +169,10 @@ describe('SettingsPanel', () => {
       const onUpload = vi.fn()
       render(<StrictMode><SettingsPanel {...props({ category: 'profile', onUpload })} /></StrictMode>)
       const image = new File(['image'], 'avatar.png', { type: 'image/png' })
+      await userEvent.click(screen.getByRole('button', { name: '编辑头像' }))
       await userEvent.upload(screen.getByLabelText('头像图片'), image)
-      await userEvent.click(screen.getByRole('button', { name: '裁剪并上传' }))
       expect(await screen.findByRole('heading', { name: '裁剪头像' })).toBeTruthy()
+      expect(screen.queryByRole('dialog', { name: '上传头像' })).toBeNull()
       expect(created.length).toBeGreaterThan(0)
       expect(revoked).not.toContain(created.at(-1))
       await userEvent.click(screen.getByRole('button', { name: '取消' }))
@@ -119,9 +194,9 @@ describe('SettingsPanel', () => {
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: () => undefined })
     try {
       render(<SettingsPanel {...props({ category: 'profile' })} />)
+      await userEvent.click(screen.getByRole('button', { name: '编辑头像' }))
       await userEvent.upload(screen.getByLabelText('头像图片'),
         new File(['image'], 'avatar.png', { type: 'image/png' }))
-      await userEvent.click(screen.getByRole('button', { name: '裁剪并上传' }))
       expect(await screen.findByTestId('cropper')).toBeTruthy()
       const callbacks = cropperCallbacks.current
       expect(callbacks?.setMediaSize).toBeTypeOf('function')

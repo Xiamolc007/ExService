@@ -1,10 +1,12 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
   Alert, AlertDescription, Avatar, AvatarFallback, AvatarImage, Button, Dialog,
   DialogContent, DialogDescription, DialogHeader, DialogTitle, Field, FieldContent,
-  FieldError, FieldLabel, Input, RadioGroup, RadioGroupItem, Spinner,
+  FieldError, FieldLabel, Input, SelectContent, SelectField, SelectItem,
+  SelectSeparator, SelectTrigger, SelectValue, Spinner,
 } from '@exre/exui'
+import { ChevronRight, Menu } from 'lucide-react'
 import Cropper, { type Area, type MediaSize, type Size } from 'react-easy-crop'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -37,42 +39,78 @@ export interface SettingsPanelProps {
 }
 
 const categories: { value: SettingsCategory; label: string }[] = [
-  { value: 'general', label: '通用' }, { value: 'profile', label: '个人资料' },
+  { value: 'profile', label: '个人资料' }, { value: 'general', label: '通用' },
   { value: 'account', label: '账号' },
 ]
 
 export function SettingsPanel(props: SettingsPanelProps) {
   const profile = props.profile
   return <div className={styles.panel}>
-    <nav className={styles.navigation} aria-label="设置分类">
-      {categories.map(({ value, label }) => <Button key={value} type="button"
-        variant={props.category === value ? 'secondary' : 'ghost'}
-        aria-current={props.category === value ? 'page' : undefined}
-        onClick={() => props.onCategoryChange(value)}>{label}</Button>)}
-    </nav>
+    <div className={styles.sidebar}>
+      <nav className={styles.navigation} aria-label="设置分类">
+        {categories.map(({ value, label }) => <Button key={value} type="button"
+          variant={props.category === value ? 'secondary' : 'ghost'}
+          aria-current={props.category === value ? 'page' : undefined}
+          onClick={() => props.onCategoryChange(value)}>{label}</Button>)}
+      </nav>
+      <Button className={styles.logoutAction} type="button" variant="ghost"
+        disabled={props.logoutPending} onClick={props.onLogout}>
+        {props.logoutPending ? <Spinner aria-hidden="true" /> : null}退出登录
+      </Button>
+    </div>
+    <header className={styles.mobileNavigation}>
+      <SelectField value={props.category} onValueChange={(value) => {
+        if (value === 'logout') props.onLogout()
+        else if (value === 'profile' || value === 'general' || value === 'account') {
+          props.onCategoryChange(value)
+        }
+      }}>
+        <SelectTrigger className={styles.mobileCategoryTrigger} aria-label="选择设置页面">
+          <Menu aria-hidden="true" />
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent position="popper" align="start">
+          {categories.map(({ value, label }) =>
+            <SelectItem key={value} value={value}>{label}</SelectItem>)}
+          <SelectSeparator />
+          <SelectItem className={styles.mobileLogoutOption} value="logout"
+            disabled={props.logoutPending}>退出登录</SelectItem>
+        </SelectContent>
+      </SelectField>
+      <h2 className={styles.mobileTitle}>{categories.find(({ value }) => value === props.category)?.label}</h2>
+    </header>
     <div className={styles.content}>
+      {props.authMessage && (props.category === 'general' ||
+        (props.profileStatus === 'ready' && profile)) && <Alert variant="destructive" role="alert">
+        <AlertDescription>{props.authMessage}</AlertDescription>
+        {props.onRetryAuth && <Button type="button" onClick={props.onRetryAuth}>重试登录状态</Button>}
+      </Alert>}
       {props.category === 'general' ? <ContentAreaState status="ready">
-        <h2>通用</h2><section className={styles.card} aria-label="外观">
-          <h3>外观</h3><p>选择网站的显示主题。</p>
-          <RadioGroup className={styles.themeOptions} aria-label="网站主题" value={props.theme}
-            onValueChange={(value) => {
-              if (value === 'light' || value === 'dark' || value === 'system') props.onThemeChange(value)
-            }}>
-            {([['light', '浅色'], ['dark', '深色'], ['system', '跟随系统']] as const)
-              .map(([value, label]) => <label className={styles.themeOption} key={value}>
-                <RadioGroupItem value={value} />{label}</label>)}
-          </RadioGroup>
+        <header className={styles.contentHeader}><h2>通用</h2></header>
+        <section className={styles.group} aria-label="外观">
+          <h3>外观</h3>
+          <SettingItem label="网站主题" description="选择网站的显示主题。">
+            <SelectField value={props.theme}
+              onValueChange={(value) => {
+                if (value === 'light' || value === 'dark' || value === 'system') props.onThemeChange(value)
+              }}>
+              <SelectTrigger className={styles.themeSelect} aria-label="网站主题">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="light">浅色</SelectItem>
+                <SelectItem value="dark">深色</SelectItem>
+                <SelectItem value="system">跟随系统</SelectItem>
+              </SelectContent>
+            </SelectField>
+          </SettingItem>
         </section>
       </ContentAreaState> : props.profileStatus === 'ready' && profile ? <ContentAreaState status="ready">
-        {props.authMessage && <Alert variant="destructive" role="alert">
-          <AlertDescription>{props.authMessage}</AlertDescription>
-          {props.onRetryAuth && <Button type="button" onClick={props.onRetryAuth}>重试登录状态</Button>}
-        </Alert>}
         {props.category === 'profile' ? <ProfileContent {...props} profile={profile} /> :
           <AccountContent {...props} profile={profile} />}
       </ContentAreaState> : props.profileStatus === 'error' ? <ContentAreaState status="error"
         errorMessage={props.profileError ?? '无法读取设置资料'} onRetry={props.onRetry} /> :
-        <ContentAreaState status="loading" skeleton={<SettingsContentSkeleton />} />}
+        <ContentAreaState status="loading" skeleton={<SettingsContentSkeleton profile={props.category === 'profile'} />} />}
     </div>
   </div>
 }
@@ -80,52 +118,45 @@ export function SettingsPanel(props: SettingsPanelProps) {
 type ReadyProps = SettingsPanelProps & { profile: NonNullable<SettingsPanelProps['profile']> }
 
 function ProfileContent(props: ReadyProps) {
-  const [editField, setEditField] = useState<SettingsField | null>(null)
+  const [editField, setEditField] = useState<'nickname' | null>(null)
+  const [uploadOpen, setUploadOpen] = useState(false)
   const [cropFile, setCropFile] = useState<File | null>(null)
   const editTrigger = useRef<HTMLButtonElement | null>(null)
-  const cropTrigger = useRef<HTMLButtonElement | null>(null)
+  const avatarTrigger = useRef<HTMLButtonElement | null>(null)
   const [removeError, setRemoveError] = useState<string | null>(null)
   const [removing, setRemoving] = useState(false)
-  const id = useId()
-  const imageForm = useForm<{ image: FileList }>({ resolver: zodResolver(avatarSchema) })
-  const selectImage = imageForm.handleSubmit(({ image }, event) => {
-    cropTrigger.current = (event?.nativeEvent as SubmitEvent | undefined)?.submitter as HTMLButtonElement | null
-    setCropFile(image.item(0))
-  })
   const closeEdit = () => { setEditField(null); requestAnimationFrame(() => editTrigger.current?.focus()) }
-  const closeCrop = () => { setCropFile(null); imageForm.reset(); requestAnimationFrame(() => cropTrigger.current?.focus()) }
+  const closeUpload = () => { setUploadOpen(false); requestAnimationFrame(() => avatarTrigger.current?.focus()) }
+  const closeCrop = () => { setCropFile(null); requestAnimationFrame(() => avatarTrigger.current?.focus()) }
+  const removeAvatar = async () => {
+    setRemoving(true); setRemoveError(null)
+    try { await props.onRemoveAvatar(); closeUpload() }
+    catch (error) { setRemoveError(message(error, '移除头像失败')) }
+    finally { setRemoving(false) }
+  }
 
   return <>
-    <h2>个人资料</h2><section className={styles.card} aria-label="公开资料">
-      <h3>公开资料</h3>
-      <div className={styles.avatarRow}>
-        <Avatar className={styles.avatar}>
+    <header className={styles.contentHeader}><h2>个人资料</h2></header>
+    <section className={styles.profileHero} aria-label="公开资料">
+      <Button ref={avatarTrigger} className={styles.avatarTrigger} type="button" variant="ghost"
+        aria-label="编辑头像" disabled={props.actionPending}
+        onClick={() => { setRemoveError(null); setUploadOpen(true) }}>
+        <Avatar className={`${styles.avatar} ex-glass`}>
           {props.profile.avatarUrl && <AvatarImage src={props.profile.avatarUrl} alt="当前头像" />}
-          <AvatarFallback>{Array.from(props.profile.nickname)[0] ?? '?'}</AvatarFallback>
+          <AvatarFallback className={styles.avatarFallback}>
+            {Array.from(props.profile.nickname)[0] ?? '?'}
+          </AvatarFallback>
         </Avatar>
-        <form onSubmit={selectImage} noValidate className={styles.avatarForm}>
-          <Field data-invalid={imageForm.formState.errors.image ? true : undefined}>
-            <FieldContent><FieldLabel htmlFor={`${id}-image`}>头像图片</FieldLabel>
-              <Input id={`${id}-image`} type="file" accept="image/png,image/jpeg,image/webp"
-                {...imageForm.register('image')} aria-invalid={imageForm.formState.errors.image ? true : undefined} />
-              {imageForm.formState.errors.image && <FieldError>{imageForm.formState.errors.image.message}</FieldError>}
-            </FieldContent>
-          </Field>
-          <div className={styles.rowActions}>
-            <Button type="submit" disabled={props.actionPending}>裁剪并上传</Button>
-            {props.profile.avatarUrl && <Button type="button" variant="outline" disabled={props.actionPending || removing}
-              onClick={() => { setRemoving(true); setRemoveError(null); void props.onRemoveAvatar()
-                .catch((error: unknown) => setRemoveError(message(error, '移除头像失败')))
-                .finally(() => setRemoving(false)) }}>移除头像</Button>}
-          </div>
-          {removeError && <p role="alert">{removeError}</p>}
-        </form>
-      </div>
-      <SettingRow label="用户名" value={props.profile.nickname} onEdit={(trigger) => {
-        editTrigger.current = trigger; setEditField('nickname') }} />
-      <SettingRow label="QQ" value={props.profile.qq ?? '未设置'} onEdit={(trigger) => {
-        editTrigger.current = trigger; setEditField('qq') }} />
+      </Button>
+      <Button ref={editTrigger} className={styles.profileName} type="button" variant="ghost"
+        aria-label="编辑用户名" onClick={() => setEditField('nickname')}>
+        <span>{props.profile.nickname}</span><ChevronRight aria-hidden="true" />
+      </Button>
     </section>
+    {uploadOpen && <AvatarUploadDialog hasAvatar={Boolean(props.profile.avatarUrl)}
+      disabled={props.actionPending || Boolean(props.authMessage)} removing={removing}
+      removeError={removeError} onClose={closeUpload} onRemove={() => void removeAvatar()}
+      onSelect={(file) => { setUploadOpen(false); setCropFile(file) }} />}
     {editField && <EditDialog field={editField}
       initial={props.profile[editField] ?? ''} onClose={closeEdit}
       onSave={props.onSave} disabled={props.actionPending || Boolean(props.authMessage)} />}
@@ -134,35 +165,83 @@ function ProfileContent(props: ReadyProps) {
   </>
 }
 
+function AvatarUploadDialog({ hasAvatar, disabled, removing, removeError, onClose, onRemove, onSelect }: {
+  hasAvatar: boolean; disabled: boolean; removing: boolean; removeError: string | null
+  onClose: () => void; onRemove: () => void; onSelect: (file: File) => void
+}) {
+  const id = useId()
+  const fileInput = useRef<HTMLInputElement | null>(null)
+  const imageForm = useForm<{ image: FileList }>({ resolver: zodResolver(avatarSchema) })
+  const imageInput = imageForm.register('image')
+  const selectImage = imageForm.handleSubmit(({ image }) => {
+    const file = image.item(0)
+    if (file) onSelect(file)
+  })
+  return <Dialog open onOpenChange={(open) => { if (!open && !removing) onClose() }}>
+    <DialogContent className={styles.uploadDialog}>
+      <DialogHeader><DialogTitle>上传头像</DialogTitle>
+        <DialogDescription>选择 PNG、JPEG 或 WebP 图片，裁剪后上传。</DialogDescription></DialogHeader>
+      <form noValidate className={styles.uploadForm}>
+        <Field data-invalid={imageForm.formState.errors.image ? true : undefined}>
+          <FieldContent><FieldLabel className={styles.visuallyHidden} htmlFor={`${id}-image`}>头像图片</FieldLabel>
+            <Input id={`${id}-image`} type="file" accept="image/png,image/jpeg,image/webp"
+              {...imageInput} ref={(element) => { imageInput.ref(element); fileInput.current = element }}
+              onChange={async (event) => { await imageInput.onChange(event); await selectImage() }}
+              className={styles.visuallyHidden}
+              aria-invalid={imageForm.formState.errors.image ? true : undefined} />
+            {imageForm.formState.errors.image && <FieldError>{imageForm.formState.errors.image.message}</FieldError>}
+          </FieldContent>
+        </Field>
+        {removeError && <p role="alert">{removeError}</p>}
+        <div className={styles.rowActions}>
+          {hasAvatar && <Button className={styles.removeAvatarAction} type="button" variant="ghost"
+            disabled={disabled || removing} onClick={onRemove}>移除头像</Button>}
+          <Button type="button" variant="outline" disabled={removing} onClick={onClose}>取消</Button>
+          <Button type="button" disabled={disabled || removing}
+            onClick={() => fileInput.current?.click()}>选择图片</Button>
+        </div>
+      </form>
+    </DialogContent>
+  </Dialog>
+}
+
 function AccountContent(props: ReadyProps) {
-  const [edit, setEdit] = useState(false)
+  const [editField, setEditField] = useState<'qq' | 'fivemId' | null>(null)
   const editTrigger = useRef<HTMLButtonElement | null>(null)
   return <>
-    <h2>账号</h2>
-    <section className={styles.card} aria-label="登录信息"><h3>登录信息</h3>
-      <div className={styles.row}><span>登录邮箱</span><strong>{props.profile.email}</strong></div>
-      <p>当前不可修改登录邮箱。</p>
+    <header className={styles.contentHeader}><h2>账号</h2></header>
+    <section className={styles.group} aria-label="登录信息"><h3>登录信息</h3>
+      <SettingItem label="邮箱" description="当前不可修改邮箱。">
+        <span className={styles.readonlyValue}>{props.profile.email}</span>
+      </SettingItem>
     </section>
-    <section className={styles.card} aria-label="关联信息"><h3>关联信息</h3>
-      <SettingRow label="FiveM ID" value={props.profile.fivemId ?? '未设置'} onEdit={(trigger) => {
-        editTrigger.current = trigger; setEdit(true) }} />
-      <p>未验证。此信息由用户手填，不用于身份认证、社区组归属或权限判断。</p>
+    <section className={styles.group} aria-label="关联信息"><h3>关联信息</h3>
+      <SettingRow label="QQ" value={props.profile.qq ?? '未设置'} onEdit={(trigger) => {
+        editTrigger.current = trigger; setEditField('qq') }} />
+      <SettingRow label="FiveM ID" description="未验证。此信息由用户手填，不用于身份认证、社区组归属或权限判断。"
+        value={props.profile.fivemId ?? '未设置'} onEdit={(trigger) => {
+        editTrigger.current = trigger; setEditField('fivemId') }} />
     </section>
-    <section className={styles.card} aria-label="会话"><h3>会话</h3>
-      <Button type="button" variant="outline" disabled={props.logoutPending}
-        onClick={props.onLogout}>{props.logoutPending ? <Spinner aria-hidden="true" /> : null}退出登录</Button>
-    </section>
-    {edit && <EditDialog field="fivemId" initial={props.profile.fivemId ?? ''}
-      onClose={() => { setEdit(false); requestAnimationFrame(() => editTrigger.current?.focus()) }} onSave={props.onSave}
+    {editField && <EditDialog field={editField} initial={props.profile[editField] ?? ''}
+      onClose={() => { setEditField(null); requestAnimationFrame(() => editTrigger.current?.focus()) }} onSave={props.onSave}
       disabled={props.actionPending || Boolean(props.authMessage)} />}
   </>
 }
 
-function SettingRow({ label, value, onEdit }: { label: string; value: string;
+function SettingItem({ label, description, children }: { label: string; description?: string; children: ReactNode }) {
+  return <div className={styles.item}>
+    <div className={styles.itemText}><span className={styles.itemLabel}>{label}</span>
+      {description && <p>{description}</p>}</div>
+    <div className={styles.itemControl}>{children}</div>
+  </div>
+}
+
+function SettingRow({ label, description, value, onEdit }: { label: string; description?: string; value: string;
   onEdit: (trigger: HTMLButtonElement) => void }) {
-  return <div className={styles.row}><div><span>{label}</span><strong>{value}</strong></div>
-    <Button type="button" variant="outline" onClick={(event) => onEdit(event.currentTarget)}>
-      编辑{label}</Button></div>
+  return <SettingItem label={label} description={description}>
+    <Button className={styles.valueAction} type="button" variant="ghost" aria-label={`编辑${label}`}
+      onClick={(event) => onEdit(event.currentTarget)}><span>{value}</span><ChevronRight aria-hidden="true" /></Button>
+  </SettingItem>
 }
 
 function EditDialog({ field, initial, onClose, onSave, disabled }: {
@@ -184,8 +263,10 @@ function EditDialog({ field, initial, onClose, onSave, disabled }: {
         <DialogDescription>保存后更新你的设置资料。</DialogDescription></DialogHeader>
       <form onSubmit={submit} noValidate className={styles.editForm}>
         <Field data-invalid={form.formState.errors.value ? true : undefined}><FieldContent>
-          <FieldLabel htmlFor={`${id}-value`}>{label}</FieldLabel>
-          <Input id={`${id}-value`} {...form.register('value')}
+          <FieldLabel className={field === 'qq' ? styles.qqLabel : undefined}
+            htmlFor={`${id}-value`}>{label}</FieldLabel>
+          <Input id={`${id}-value`} inputMode={field === 'qq' ? 'numeric' : undefined}
+            {...form.register('value')}
             aria-invalid={form.formState.errors.value ? true : undefined} />
           {form.formState.errors.value && <FieldError>{form.formState.errors.value.message}</FieldError>}
         </FieldContent></Field>

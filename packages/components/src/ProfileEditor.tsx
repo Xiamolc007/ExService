@@ -98,7 +98,7 @@ export function ProfileEditor({ initial, avatarUrl, onSave, onUpload, onRemoveAv
           </Field>
           <Field data-invalid={textForm.formState.errors.qq ? true : undefined}>
             <FieldContent>
-              <FieldLabel htmlFor={`${id}-qq`}>QQ</FieldLabel>
+              <FieldLabel className={styles.qqLabel} htmlFor={`${id}-qq`}>QQ</FieldLabel>
               <Input id={`${id}-qq`} inputMode="numeric" {...textForm.register('qq')}
                 aria-invalid={textForm.formState.errors.qq ? true : undefined} />
               {textForm.formState.errors.qq && <FieldError>{textForm.formState.errors.qq.message}</FieldError>}

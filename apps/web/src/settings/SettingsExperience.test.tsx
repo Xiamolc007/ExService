@@ -24,7 +24,7 @@ vi.mock('@workspace/components', () => ({
     <button onClick={() => onCategoryChange('profile')}>个人资料分类</button></div>,
 }))
 
-import { SettingsExperience } from './SettingsExperience'
+import { SettingsExperience, SettingsModal } from './SettingsExperience'
 
 const user = { id: 'user', email: 'person@example.com', nickname: 'Person',
   qq: null, fivemId: null, avatarUrl: null }
@@ -33,6 +33,12 @@ afterEach(() => { cleanup(); get.mockReset(); invalidateSession.mockReset(); bin
   window.localStorage.clear(); authState.status = 'authenticated' })
 
 describe('SettingsExperience', () => {
+  it('names the settings dialog without the extra top description', () => {
+    render(<SettingsModal initialCategory="general" onClose={vi.fn()} />)
+    expect(screen.getByRole('dialog', { name: '设置' })).toBeTruthy()
+    expect(screen.queryByText('管理外观、个人资料和账号。')).toBeNull()
+  })
+
   it('keeps first-open general settings available and refreshes a cached snapshot on reopen', async () => {
     writeToken(window.localStorage, 'current-token')
     get.mockResolvedValue({ data: user })

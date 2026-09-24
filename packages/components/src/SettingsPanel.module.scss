@@ -1,58 +1,150 @@
 .panel {
   display: grid;
   grid-template-columns: 11rem minmax(0, 1fr);
-  min-height: 30rem;
-  max-height: min(75vh, 48rem);
+  height: 100%;
+  min-height: min(32rem, 100dvh);
   overflow: hidden;
+}
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 1rem;
+  border-right: 1px solid var(--exui-border-default);
 }
 .navigation {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 0.25rem;
-  padding: 1rem;
-  border-right: 1px solid var(--exui-border-default);
 }
 .navigation button { justify-content: flex-start; }
-.content { min-width: 0; overflow-y: auto; padding: 1.5rem; }
-.content h2 { margin: 0 0 1.25rem; }
-.card {
+.logoutAction {
+  margin-top: auto;
+  justify-content: flex-start;
+}
+.logoutAction, .removeAvatarAction {
+  --exui-component-button-ghost-default-foreground: var(--exui-control-danger);
+  --exui-component-button-ghost-hover-foreground: var(--exui-control-danger);
+  --exui-component-button-ghost-active-foreground: var(--exui-control-danger);
+  --exui-component-button-ghost-focus-foreground: var(--exui-control-danger);
+}
+.mobileNavigation { display: none; }
+.mobileLogoutOption {
+  --exui-component-menu-item-default-foreground: var(--exui-control-danger);
+  --exui-component-menu-item-hover-foreground: var(--exui-control-danger);
+  --exui-component-menu-item-focus-foreground: var(--exui-control-danger);
+  --exui-component-menu-item-active-foreground: var(--exui-control-danger);
+}
+.content {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1.5rem 2rem;
+}
+.contentHeader { padding-right: 2rem; margin-bottom: 2rem; }
+.contentHeader h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.group { margin-bottom: 1.75rem; }
+.group h3 { margin: 0 0 0.5rem; }
+.item {
   display: grid;
-  gap: 1rem;
-  padding: 1.25rem;
-  margin-bottom: 1rem;
-  border: 1px solid var(--exui-border-default);
-  border-radius: var(--exui-radius-medium);
-  background: var(--exui-surface-background);
-}
-.card h3, .card p { margin: 0; }
-.card p { color: var(--exui-text-secondary); }
-.themeOptions, .rowActions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-.themeOption {
-  display: inline-flex;
+  grid-template-columns: minmax(0, 1fr) minmax(12rem, 1fr);
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--exui-border-default);
-  border-radius: var(--exui-radius-medium);
-  cursor: pointer;
+  gap: 1rem;
+  min-width: 0;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--exui-border-default);
 }
-.row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-width: 0; }
-.row > div { display: grid; gap: 0.25rem; min-width: 0; }
-.row strong { overflow-wrap: anywhere; font-weight: 500; }
-.avatarRow { display: flex; align-items: center; gap: 1.25rem; }
-.avatar { width: 5rem; height: 5rem; flex: none; }
-.avatarForm { display: grid; gap: 0.75rem; min-width: 0; }
+.itemText { min-width: 0; }
+.itemLabel { font-size: 1rem; line-height: 1.5; font-weight: 500; }
+.itemText p { margin: 0.25rem 0 0; color: var(--exui-text-secondary); font-size: 0.875rem; line-height: 1.4; }
+.itemControl { display: flex; justify-content: flex-end; min-width: 0; }
+.itemControl button { max-width: 100%; overflow-wrap: anywhere; }
+.valueAction { min-width: 0; padding-inline: 0.75rem; white-space: normal; text-align: right; }
+.valueAction span { min-width: 0; overflow-wrap: anywhere; }
+.valueAction svg { flex: none; }
+.readonlyValue { overflow-wrap: anywhere; text-align: right; }
+.themeSelect { width: 11rem; max-width: 100%; }
+.rowActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; }
+.profileHero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 2rem 1rem;
+  text-align: center;
+}
+.avatarTrigger { width: 7rem; height: 7rem; padding: 0; border-radius: 50%; }
+.avatar { width: 100%; height: 100%; flex: none; overflow: hidden; box-shadow: var(--exui-shadow-medium); }
+.avatar .avatarFallback {
+  background: transparent;
+  color: var(--exui-glass-foreground);
+  font-size: 2rem;
+  font-weight: 600;
+}
+.profileName { max-width: 100%; padding-inline: 0.75rem; font-size: 1.25rem; font-weight: 600; white-space: normal; }
+.profileName span { min-width: 0; overflow-wrap: anywhere; }
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .editForm { display: grid; gap: 1rem; }
+.qqLabel { color: var(--exui-text-primary); }
+.uploadForm { display: grid; gap: 1rem; }
 .editDialog { max-width: 28rem; }
+.uploadDialog { max-width: 28rem; }
 .cropDialog { max-width: 34rem; animation: none; }
 .cropArea { position: relative; width: 100%; height: min(44vh, 20rem); min-height: 14rem; }
 .zoomSlider { width: 100%; accent-color: var(--exui-text-primary); }
 @media (max-width: 38rem) {
-  .panel { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); max-height: 80vh; }
-  .navigation { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--exui-border-default); }
-  .navigation button { white-space: nowrap; }
-  .content { padding: 1rem; }
-  .avatarRow { align-items: flex-start; flex-direction: column; }
-  .row { align-items: flex-start; flex-direction: column; }
+  .panel { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .sidebar { display: none; }
+  .mobileNavigation {
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+    padding: 0.75rem 3.5rem 0.75rem 1rem;
+    border-bottom: 1px solid var(--exui-border-default);
+  }
+  .mobileCategoryTrigger {
+    flex: none;
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0;
+    justify-content: center;
+  }
+  .mobileCategoryTrigger > svg:last-child { display: none; }
+  .mobileCategoryTrigger [data-slot="select-value"] { display: none; }
+  .mobileTitle {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: var(--exui-text-primary);
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .content { grid-row: 2; padding: 1rem; }
+  .contentHeader { display: none; }
+  .item { grid-template-columns: 1fr; gap: 0.75rem; }
+  .itemControl { justify-content: flex-start; }
+  .profileHero { padding: 1.5rem 0; }
+  .valueAction { text-align: left; }
+  .readonlyValue { text-align: left; }
 }

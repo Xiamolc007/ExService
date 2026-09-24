@@ -1,9 +1,34 @@
 .modal {
   display: grid;
   gap: 0;
-  width: min(94vw, 60rem);
-  max-width: 60rem;
+  width: clamp(42rem, 72vw, 64rem);
+  height: clamp(32rem, 72dvh, 48rem);
+  max-width: calc(100vw - 2rem);
+  max-height: calc(100dvh - 2rem);
   padding: 0;
   overflow: hidden;
 }
-.header { padding: 1.25rem 1.5rem 0.75rem; }
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 38rem), (max-height: 34rem) {
+  .modal {
+    inset: 0;
+    width: 100vw;
+    height: 100dvh;
+    max-width: 100vw;
+    max-height: 100dvh;
+    transform: none;
+    translate: none;
+    border: 0;
+    border-radius: 0;
+  }
+}

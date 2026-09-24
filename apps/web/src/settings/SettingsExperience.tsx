@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@exre/exui'
+import { Dialog, DialogContent, DialogTitle } from '@exre/exui'
 import { SettingsPanel, type SettingsCategory } from '@workspace/components'
 import { useAuth } from '../auth/AuthContext'
 import { useSettingsController } from './useSettingsController'
@@ -47,10 +47,7 @@ export function SettingsModal({ initialCategory, onClose }: {
   useEffect(() => { if (auth.state.status === 'anonymous') onClose() }, [auth.state.status, onClose])
   return <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
     <DialogContent className={styles.modal}>
-      <DialogHeader className={styles.header}>
-        <DialogTitle>设置</DialogTitle>
-        <DialogDescription>管理外观、个人资料和账号。</DialogDescription>
-      </DialogHeader>
+      <DialogTitle className={styles.visuallyHidden}>设置</DialogTitle>
       <SettingsExperience initialCategory={initialCategory} />
     </DialogContent>
   </Dialog>

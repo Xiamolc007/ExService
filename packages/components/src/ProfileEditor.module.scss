@@ -3,6 +3,10 @@
   gap: 2rem;
 }
 
+.qqLabel {
+  color: var(--exui-text-primary);
+}
+
 .avatarSection {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
