@@ -11,6 +11,8 @@
  * 该导入点在 `apps/web/src/main.tsx`。
  */
 export { SiteHeader } from './SiteHeader'
+export { ExMessage } from './ExMessage'
+export type { ExMessagePlacement, ExMessageProps, LoadingHandle, MessageOptions } from './ExMessage'
 export { ExIcon } from './ExIcon'
 export type { ExIconProps } from './ExIcon'
 export type { SiteHeaderProps } from './SiteHeader'
