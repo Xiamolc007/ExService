@@ -4,7 +4,7 @@
 
 本站的知识文档只记录**阅读代码无法直接得到**的内容：模块边界与依赖方向、已接受决策及其理由、以及源码中看不出的失败模式。`databases/` 另存跨实现的数据模型、数据库专属决策与运行知识；`rules/` 存放由 `AGENTS.md` 指向的专项开发规则。Task 进行中的状态、版本控制状态与源码的直接复述都不在这里。
 
-_最后更新：2026-09-24_
+_最后更新：2026-09-27_
 
 ## 模块划分
 
@@ -12,25 +12,28 @@ _最后更新：2026-09-24_
 
 | 模块 | 仓库路径 | 责任 | 本站文档 |
 | --- | --- | --- | --- |
-| `api` | `api/` | 定义唯一的 HTTP API Contract：路径、operation、请求/响应/错误 schema。 | [architectures/api/contract-layout.md](architectures/api/contract-layout.md) · [decisions/api](decisions/README.md) |
-| `api-client` | `packages/api-client/` | 导出 Contract 生成的类型与 `createApiClient({ baseUrl })` 工厂。 | [architectures/overview.md](architectures/overview.md) · [decisions/api-client](decisions/README.md) |
+| `api` | `api/` | 定义唯一的 HTTP API Contract：路径、operation、请求/响应/错误 schema。 | `.ai/architectures/api/contract-layout.md` · `.ai/decisions/README.md` |
+| `api-client` | `packages/api-client/` | 导出 Contract 生成的类型与 `createApiClient({ baseUrl })` 工厂。 | `.ai/architectures/overview.md` · `.ai/decisions/README.md` |
 | `components` | `packages/components/` | 应用级共享 UI 组件（站点顶栏等），基于 ExUI 组装；不定义路由表、不发请求。 | `.ai/architectures/overview.md` · `.ai/decisions/README.md` · `.ai/knowledge/components/ex-message-host-lifecycle.md`（ExMessage 宿主生命周期） |
-| `mock-server` | `apps/mock-server/` | 按 Contract 注册 Fastify 路由、实现 handler、执行受控的本地 SQLite 访问。 | [请求生命周期](architectures/mock-server/request-lifecycle.md) · [认证生命周期](architectures/mock-server/authentication-lifecycle.md) · [decisions/mock-server](decisions/README.md) · [数据库模型](databases/data-model.md) |
-| `web` | `apps/web/` | Vite/React 前端外壳：声明前端路由表，决定 API base URL 与主题来源，并在开发期经代理访问 Mock Server。 | [architectures/overview.md](architectures/overview.md) · [认证 UI 流程](architectures/web/authentication-flow.md) · [decisions/web](decisions/README.md) · [knowledge/web](knowledge/web/exui-integration-traps.md) |
-| `contract-tests` | `tests/contract/` | 以真实 Fastify app 的 `inject()` 验证 HTTP Contract，而不是单测 handler。 | [architectures/contract-tests/test-layers.md](architectures/contract-tests/test-layers.md) · [decisions/contract-tests](decisions/README.md) · [knowledge/contract-tests](knowledge/contract-tests/contract-parsing-constraints.md) |
+| `mock-server` | `apps/mock-server/` | 按 Contract 注册 Fastify 路由、实现 handler、执行受控的本地 SQLite 访问。 | `.ai/architectures/mock-server/request-lifecycle.md` · `.ai/architectures/mock-server/authentication-lifecycle.md` · `.ai/decisions/README.md` · `.ai/databases/data-model.md` |
+| `web` | `apps/web/` | Vite/React 前端外壳：声明前端路由表，决定 API base URL 与主题来源，并在开发期经代理访问 Mock Server。 | `.ai/architectures/overview.md` · `.ai/architectures/web/authentication-flow.md` · `.ai/decisions/README.md` · `.ai/knowledge/web/exui-integration-traps.md` |
+| `contract-tests` | `tests/contract/` | 以真实 Fastify app 的 `inject()` 验证 HTTP Contract，而不是单测 handler。 | `.ai/architectures/contract-tests/test-layers.md` · `.ai/decisions/README.md` · `.ai/knowledge/contract-tests/contract-parsing-constraints.md` |
 
-`api-client` 与 `components` 目前没有独立的架构文档：它们的结构由 [architectures/overview.md](architectures/overview.md) 一并说明。只在该模块出现第一份文档时才创建模块子目录。
+`api-client` 与 `components` 目前没有独立的架构文档：它们的结构由 `.ai/architectures/overview.md` 一并说明。只在该模块出现第一份文档时才创建模块子目录。
 
 用户设置面板的两条已接受决策是 `.ai/decisions/web/04-settings-state-separate-from-auth-context.md`（设置状态与认证边界）和 `.ai/decisions/mock-server/05-normalize-new-avatars-to-512-square.md`（新头像尺寸）。实现结构见上表所列架构文档与源码；设计背景保留在 `.notes/archive/backend-sandbox/user-settings/rfcs/user-settings-panel-rfc.md`。
 
 ## 导航
 
-- [CONTEXT.md](CONTEXT.md) — 领域语言（ubiquitous language）。
-- [architectures/overview.md](architectures/overview.md) — 跨模块结构与请求流。
-- [decisions/README.md](decisions/README.md) — 已接受决策的索引。
-- [databases/data-model.md](databases/data-model.md) — 数据表的职责、关系和跨实现目标规则；数据库专属决策与运行知识在相邻子目录。
+完整加入申请的表单/查询边界见 `.ai/architectures/web/authentication-flow.md`，multipart 插件与容量回收陷阱见 `.ai/knowledge/mock-server/multipart-lifecycle-traps.md`。一次申请、历史登记和版本损坏判定只记录在 `.ai/databases/data-model.md`；编码技术修正保留于 `.notes/join-registration/rfcs/join-application-pages-implementation-notes.md`。
+
+- `.ai/CONTEXT.md` — 领域语言（ubiquitous language）。
+- `.ai/architectures/overview.md` — 跨模块结构与请求流。
+- `.ai/decisions/README.md` — 已接受决策的索引。
+- `.ai/databases/data-model.md` — 数据表的职责、关系和跨实现目标规则；数据库专属决策与运行知识在相邻子目录。
 - `knowledge/<module>/` — 非显而易见的运行行为：失败模式、运行约束、集成陷阱。
-- [rules/frontend-forms.md](rules/frontend-forms.md) — 开发或修改前端 Form 时必须遵守的规则。
+- `.ai/rules/frontend-forms.md` — 开发或修改前端 Form 时必须遵守的规则。
+- `.ai/rules/frontend-notifications.md` — 开发或修改全站临时通知时必须遵守的 ExMessage 接入规则。
 
 ## 每类知识的归属
 
