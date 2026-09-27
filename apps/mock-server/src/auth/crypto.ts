@@ -27,14 +27,21 @@ class PasswordWorkGate {
         throw new AuthError('AUTH_BUSY', { retryAfterSeconds: 1 })
       }
       await new Promise<void>((resolve) => this.waiters.push(resolve))
+    } else {
+      this.active += 1
     }
 
-    this.active += 1
     try {
       return await operation()
     } finally {
-      this.active -= 1
-      this.waiters.shift()?.()
+      const next = this.waiters.shift()
+      // Hand the occupied slot directly to the waiter. Its resumed continuation
+      // already owns this reservation, so an intervening request cannot steal it.
+      if (next !== undefined) {
+        next()
+      } else {
+        this.active -= 1
+      }
     }
   }
 }
