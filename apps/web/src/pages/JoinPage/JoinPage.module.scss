@@ -1,0 +1,10 @@
+.page { width: min(100% - 3rem, 70rem); margin: 4rem auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: 4rem; }
+.description h1 { font-size: 2.75rem; margin: 0.5rem 0 1rem; }
+.description p { color: var(--exui-text-secondary); line-height: 1.7; }
+.eyebrow { letter-spacing: 0.125rem; font-size: 0.875rem; }
+.stages { padding-left: 1.5rem; display: grid; gap: 0.75rem; }
+.stages h2 { font-size: 1.125rem; margin: 0; }
+.stages p { margin: 0.375rem 0; }
+.panel { padding: 2rem; min-width: 0; }
+.panel p { line-height: 1.7; }
+@media (max-width: 52rem) { .page { grid-template-columns: minmax(0, 1fr); gap: 1.5rem; margin-block: 2rem; width: min(100% - 2rem, 38rem); } .description h1 { font-size: 2rem; } .panel { padding: 1.5rem; } }

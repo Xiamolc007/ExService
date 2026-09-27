@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Backend Sandbox API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     Frontend 与 Backend 之间的唯一 HTTP API Contract。
 
@@ -50,134 +50,347 @@ paths:
                 $ref: '#/components/schemas/CaptchaChallenge'
         default:
           $ref: '#/components/responses/ErrorResponse'
-  /auth/registrations:
+  /join/applications:
     post:
-      operationId: startRegistration
-      summary: Start an email-verified registration
+      operationId: submitJoinApplication
+      summary: submitJoinApplication
       security: []
-      tags: [authentication]
+      tags:
+        - authentication
+      responses:
+        "202":
+          description: Successful operation
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JoinApplicationReceived"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RetryableErrorResponse"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RegisterRequest'
+              $ref: "#/components/schemas/JoinApplicationRequest"
+  /admin/join/applications:
+    get:
+      operationId: listJoinApplications
+      summary: listJoinApplications
+      security: []
+      tags:
+        - authentication
       responses:
-        '201':
-          description: Verification code issued
+        "200":
+          description: Successful operation
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CacheControl'
+              $ref: "#/components/headers/CacheControl"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RegistrationChallenge'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '409':
-          $ref: '#/components/responses/ErrorResponse'
-        '429':
-          $ref: '#/components/responses/RetryableErrorResponse'
-        '503':
-          $ref: '#/components/responses/RetryableErrorResponse'
+                $ref: "#/components/schemas/JoinApplicationList"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
         default:
-          $ref: '#/components/responses/ErrorResponse'
-  /auth/registrations/resend:
-    post:
-      operationId: resendRegistrationCode
-      summary: Issue a replacement verification code
+          $ref: "#/components/responses/ErrorResponse"
+      parameters:
+        - name: view
+          in: query
+          schema:
+            type: string
+            enum:
+              - pending
+              - all
+            default: pending
+        - name: limit
+          in: query
+          schema:
+            type: string
+            pattern: ^([1-9]|[1-4][0-9]|50)$
+            default: "20"
+        - name: offset
+          in: query
+          schema:
+            type: string
+            pattern: ^(0|[1-9][0-9]{0,8})$
+            default: "0"
+  /admin/join/applications/{applicationId}:
+    get:
+      operationId: getJoinApplication
+      summary: getJoinApplication
       security: []
-      tags: [authentication]
+      tags:
+        - authentication
+      responses:
+        "200":
+          description: Successful operation
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JoinApplicationDetail"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+      parameters:
+        - name: applicationId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+  /admin/join/applications/{applicationId}/approve:
+    post:
+      operationId: approveJoinApplication
+      summary: approveJoinApplication
+      security: []
+      tags:
+        - authentication
+      responses:
+        "200":
+          description: Successful operation
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JoinApplicationDetail"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "409":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RetryableErrorResponse"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RegistrationRef'
+              $ref: "#/components/schemas/JoinReviewRequest"
+      parameters:
+        - name: applicationId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+  /admin/join/applications/{applicationId}/reject:
+    post:
+      operationId: rejectJoinApplication
+      summary: rejectJoinApplication
+      security: []
+      tags:
+        - authentication
       responses:
-        '200':
-          description: Replacement verification code issued
+        "200":
+          description: Successful operation
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CacheControl'
+              $ref: "#/components/headers/CacheControl"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RegistrationChallenge'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '404':
-          $ref: '#/components/responses/ErrorResponse'
-        '409':
-          $ref: '#/components/responses/ErrorResponse'
-        '410':
-          $ref: '#/components/responses/ErrorResponse'
-        '429':
-          $ref: '#/components/responses/RetryableErrorResponse'
+                $ref: "#/components/schemas/JoinApplicationDetail"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "409":
+          $ref: "#/components/responses/ErrorResponse"
         default:
-          $ref: '#/components/responses/ErrorResponse'
-  /auth/registrations/cancel:
-    post:
-      operationId: cancelRegistration
-      summary: Cancel a pending registration
-      security: []
-      tags: [authentication]
+          $ref: "#/components/responses/ErrorResponse"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RegistrationRef'
+              $ref: "#/components/schemas/JoinReviewRequest"
+      parameters:
+        - name: applicationId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+  /admin/join/applications/{applicationId}/invitations:
+    post:
+      operationId: resendJoinInvitation
+      summary: resendJoinInvitation
+      security: []
+      tags:
+        - authentication
       responses:
-        '200':
-          description: Registration cancelled
+        "200":
+          description: Successful operation
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CacheControl'
+              $ref: "#/components/headers/CacheControl"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RegistrationCancelled'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '404':
-          $ref: '#/components/responses/ErrorResponse'
-        '409':
-          $ref: '#/components/responses/ErrorResponse'
+                $ref: "#/components/schemas/JoinApplicationDetail"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "409":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RetryableErrorResponse"
         default:
-          $ref: '#/components/responses/ErrorResponse'
-  /auth/registrations/verify:
-    post:
-      operationId: verifyRegistration
-      summary: Verify a code and create the account
-      security: []
-      tags: [authentication]
+          $ref: "#/components/responses/ErrorResponse"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/VerifyRegistrationRequest'
+              $ref: "#/components/schemas/JoinReviewRequest"
+      parameters:
+        - name: applicationId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+  /auth/invitations/check:
+    post:
+      operationId: checkInvitationEligibility
+      summary: checkInvitationEligibility
+      security: []
+      tags:
+        - authentication
       responses:
-        '200':
-          description: Account created
+        "200":
+          description: Successful operation
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CacheControl'
+              $ref: "#/components/headers/CacheControl"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RegistrationVerified'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '404':
-          $ref: '#/components/responses/ErrorResponse'
-        '409':
-          $ref: '#/components/responses/ErrorResponse'
-        '410':
-          $ref: '#/components/responses/ErrorResponse'
+                $ref: "#/components/schemas/InvitationEligibility"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "409":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RetryableErrorResponse"
         default:
-          $ref: '#/components/responses/ErrorResponse'
+          $ref: "#/components/responses/ErrorResponse"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationEligibilityRequest"
+  /auth/invitations/code:
+    post:
+      operationId: requestInvitationCode
+      summary: requestInvitationCode
+      security: []
+      tags:
+        - authentication
+      responses:
+        "202":
+          description: Successful operation
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationCodeAccepted"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RetryableErrorResponse"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationCodeRequest"
+  /auth/invitations/verify:
+    post:
+      operationId: verifyInvitationCode
+      summary: verifyInvitationCode
+      security: []
+      tags:
+        - authentication
+      responses:
+        "200":
+          description: Successful operation
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationVerified"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RetryableErrorResponse"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationVerifyRequest"
+  /auth/invitations/complete:
+    post:
+      operationId: completeInvitationRegistration
+      summary: completeInvitationRegistration
+      security: []
+      tags:
+        - authentication
+      responses:
+        "200":
+          description: Successful operation
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationRegistrationCompleted"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "409":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RetryableErrorResponse"
+        "503":
+          $ref: "#/components/responses/RetryableErrorResponse"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationCompleteRequest"
   /auth/login:
     post:
       operationId: login
@@ -521,51 +734,320 @@ components:
           type: string
           description: Base64-encoded PNG bytes, without a data URL prefix.
         expiresAt: {$ref: '#/components/schemas/SafeTimestamp'}
-    RegisterRequest:
+    Uuid:
+      type: string
+      pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+    NullableUuid:
+      type:
+        - string
+        - "null"
+      pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+    JoinReviewRequest:
       type: object
       additionalProperties: false
-      required: [email, nickname, password]
-      properties:
-        email: {$ref: '#/components/schemas/Email'}
-        nickname: {$ref: '#/components/schemas/Nickname'}
-        password: {$ref: '#/components/schemas/Password'}
-        captcha: {$ref: '#/components/schemas/CaptchaSubmission'}
-    RegistrationRef:
+    JoinApplicationRequest:
       type: object
       additionalProperties: false
-      required: [registrationId]
+      required:
+        - email
+        - nickname
+        - qq
       properties:
-        registrationId: {$ref: '#/components/schemas/OpaqueIdentifier'}
-    VerifyRegistrationRequest:
+        email:
+          $ref: "#/components/schemas/Email"
+        nickname:
+          $ref: "#/components/schemas/Nickname"
+        qq:
+          type: string
+          pattern: ^[0-9]{1,20}$
+    JoinApplicationReceived:
       type: object
       additionalProperties: false
-      required: [registrationId, code]
+      required:
+        - status
       properties:
-        registrationId: {$ref: '#/components/schemas/OpaqueIdentifier'}
-        code: {$ref: '#/components/schemas/VerificationCode'}
-    RegistrationChallenge:
+        status:
+          type: string
+          const: received
+    InvitationEligibilityRequest:
       type: object
       additionalProperties: false
-      required: [registrationId, email, serverTime, codeExpiresAt, resendAvailableAt]
+      required:
+        - email
       properties:
-        registrationId: {$ref: '#/components/schemas/OpaqueIdentifier'}
-        email: {$ref: '#/components/schemas/Email'}
-        serverTime: {$ref: '#/components/schemas/SafeTimestamp'}
-        codeExpiresAt: {$ref: '#/components/schemas/SafeTimestamp'}
-        resendAvailableAt: {$ref: '#/components/schemas/SafeTimestamp'}
-    RegistrationVerified:
+        email:
+          $ref: "#/components/schemas/Email"
+    InvitationCodeRequest:
       type: object
       additionalProperties: false
-      required: [status, email]
+      required:
+        - email
       properties:
-        status: {type: string, const: registered}
-        email: {$ref: '#/components/schemas/Email'}
-    RegistrationCancelled:
+        email:
+          $ref: "#/components/schemas/Email"
+    InvitationEligibility:
       type: object
       additionalProperties: false
-      required: [status]
+      required:
+        - status
+        - email
+        - serverTime
+        - resendAvailableAt
       properties:
-        status: {type: string, const: cancelled}
+        status:
+          type: string
+          const: eligible
+        email:
+          $ref: "#/components/schemas/Email"
+        serverTime:
+          $ref: "#/components/schemas/SafeTimestamp"
+        resendAvailableAt:
+          $ref: "#/components/schemas/SafeTimestamp"
+    InvitationCodeAccepted:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - serverTime
+        - resendAvailableAt
+      properties:
+        status:
+          type: string
+          const: accepted
+        serverTime:
+          $ref: "#/components/schemas/SafeTimestamp"
+        resendAvailableAt:
+          $ref: "#/components/schemas/SafeTimestamp"
+    InvitationVerifyRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - code
+      properties:
+        email:
+          $ref: "#/components/schemas/Email"
+        code:
+          $ref: "#/components/schemas/VerificationCode"
+    InvitationVerified:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - completionToken
+        - email
+        - nickname
+        - serverTime
+        - completionExpiresAt
+      properties:
+        status:
+          type: string
+          const: verified
+        completionToken:
+          $ref: "#/components/schemas/OpaqueIdentifier"
+        email:
+          $ref: "#/components/schemas/Email"
+        nickname:
+          $ref: "#/components/schemas/Nickname"
+        serverTime:
+          $ref: "#/components/schemas/SafeTimestamp"
+        completionExpiresAt:
+          $ref: "#/components/schemas/SafeTimestamp"
+    InvitationCompleteRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - completionToken
+        - nickname
+        - password
+      properties:
+        completionToken:
+          $ref: "#/components/schemas/OpaqueIdentifier"
+        nickname:
+          $ref: "#/components/schemas/Nickname"
+        password:
+          $ref: "#/components/schemas/Password"
+    InvitationRegistrationCompleted:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - email
+      properties:
+        status:
+          type: string
+          const: registered
+        email:
+          $ref: "#/components/schemas/Email"
+    JoinApplicationSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - email
+        - nickname
+        - qq
+        - status
+        - createdAt
+        - reviewedAt
+        - reviewedByUserId
+        - invitationStatus
+        - deliveryStatus
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        email:
+          $ref: "#/components/schemas/Email"
+        nickname:
+          $ref: "#/components/schemas/Nickname"
+        qq:
+          type: string
+          pattern: ^[0-9]{1,20}$
+        status:
+          type: string
+          enum:
+            - pending
+            - approved
+            - rejected
+        createdAt:
+          $ref: "#/components/schemas/SafeTimestamp"
+        reviewedAt:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+          maximum: 9007199254740991
+        reviewedByUserId:
+          $ref: "#/components/schemas/NullableUuid"
+        invitationStatus:
+          type:
+            - string
+            - "null"
+          enum:
+            - active
+            - expired
+            - completed
+            - null
+        deliveryStatus:
+          type:
+            - string
+            - "null"
+          enum:
+            - pending
+            - sent
+            - failed
+            - null
+    InvitationDeliverySummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - status
+        - startedAt
+        - finishedAt
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        status:
+          type: string
+          enum:
+            - pending
+            - sent
+            - failed
+        startedAt:
+          $ref: "#/components/schemas/SafeTimestamp"
+        finishedAt:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+          maximum: 9007199254740991
+    InvitationSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - status
+        - issuedAt
+        - expiresAt
+        - codeExpiresAt
+        - completedAt
+        - completedUserId
+        - resendAvailableAt
+        - latestDelivery
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        status:
+          type: string
+          enum:
+            - active
+            - expired
+            - completed
+        issuedAt:
+          $ref: "#/components/schemas/SafeTimestamp"
+        expiresAt:
+          $ref: "#/components/schemas/SafeTimestamp"
+        codeExpiresAt:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+          maximum: 9007199254740991
+        completedAt:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+          maximum: 9007199254740991
+        completedUserId:
+          $ref: "#/components/schemas/NullableUuid"
+        resendAvailableAt:
+          $ref: "#/components/schemas/SafeTimestamp"
+        latestDelivery:
+          anyOf:
+            - $ref: "#/components/schemas/InvitationDeliverySummary"
+            - type: "null"
+    JoinApplicationDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - application
+        - invitation
+        - serverTime
+      properties:
+        application:
+          $ref: "#/components/schemas/JoinApplicationSummary"
+        invitation:
+          anyOf:
+            - $ref: "#/components/schemas/InvitationSummary"
+            - type: "null"
+        serverTime:
+          $ref: "#/components/schemas/SafeTimestamp"
+    JoinApplicationList:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - total
+        - offset
+        - limit
+        - serverTime
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/JoinApplicationSummary"
+        total:
+          $ref: "#/components/schemas/SafeTimestamp"
+        offset:
+          $ref: "#/components/schemas/SafeTimestamp"
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 50
+        serverTime:
+          $ref: "#/components/schemas/SafeTimestamp"
     LoginRequest:
       type: object
       additionalProperties: false

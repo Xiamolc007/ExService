@@ -1,6 +1,6 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import { randomBytes } from 'node:crypto'
-import type { LoginInput, RegistrationInput } from '../auth/service.js'
+import type { LoginInput } from '../auth/service.js'
 
 function noStore(reply: FastifyReply): void {
   void reply.header('Cache-Control', 'no-store')
@@ -16,30 +16,6 @@ export async function createCaptchaChallenge(_request: FastifyRequest, reply: Fa
     imageBase64: PLACEHOLDER_PNG,
     expiresAt: Date.now() + 5 * 60 * 1000,
   }
-}
-
-export async function startRegistration(request: FastifyRequest, reply: FastifyReply) {
-  noStore(reply)
-  void reply.code(201)
-  return request.server.authServices.startRegistration(request.body as RegistrationInput)
-}
-
-export async function resendRegistrationCode(request: FastifyRequest, reply: FastifyReply) {
-  noStore(reply)
-  const { registrationId } = request.body as { registrationId: string }
-  return request.server.authServices.resendRegistrationCode(registrationId)
-}
-
-export async function cancelRegistration(request: FastifyRequest, reply: FastifyReply) {
-  noStore(reply)
-  const { registrationId } = request.body as { registrationId: string }
-  return request.server.authServices.cancelRegistration(registrationId)
-}
-
-export async function verifyRegistration(request: FastifyRequest, reply: FastifyReply) {
-  noStore(reply)
-  const { registrationId, code } = request.body as { registrationId: string; code: string }
-  return request.server.authServices.verifyRegistration(registrationId, code)
 }
 
 export async function login(request: FastifyRequest, reply: FastifyReply) {

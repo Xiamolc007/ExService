@@ -27,7 +27,7 @@ vi.mock('./pages/AuthPage/SsoSuccess', () => ({
 import { App } from './App'
 
 describe('auth routes', () => {
-  it.each([['/login', '登录到 Exre'], ['/register', '创建 Exre 账号']])('renders %s without the site navbar', (path, title) => {
+  it.each([['/login', '登录到 Exre'], ['/register', '邀请注册']])('renders %s without the site navbar', (path, title) => {
     const markup = renderToStaticMarkup(
       <MemoryRouter initialEntries={[path]}>
         <App />

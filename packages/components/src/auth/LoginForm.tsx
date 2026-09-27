@@ -42,14 +42,13 @@ export const LoginForm = forwardRef<AuthFormHandle, AuthFormProps>(function Logi
   initialEmail = "",
   busy,
   onContinueLogin,
-  onSwitchMode,
+  onJoin,
 }: AuthFormProps, ref) {
   const id = useId();
   const [visible, setVisible] = useState(false);
   const {
     register,
     handleSubmit,
-    getValues,
     getFieldState,
     setValue,
     setError,
@@ -96,9 +95,9 @@ export const LoginForm = forwardRef<AuthFormHandle, AuthFormProps>(function Logi
             type="button"
             variant="link"
             disabled={disabled}
-            onClick={() => onSwitchMode("register", getValues("email"))}
+            onClick={onJoin}
           >
-            注册
+            加入我们
           </Button>
         </p>
       </div>

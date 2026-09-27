@@ -1,0 +1,8 @@
+.page { width: min(100% - 3rem, 70rem); margin: 3rem auto; display: flex; flex-direction: column; gap: 1.5rem; }
+.header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; }
+.header h1 { margin: 0; font-size: 2rem; }.header p { color: var(--exui-text-secondary); }
+.list { padding: 0; overflow: hidden; }.tableScroll { overflow-x: auto; }
+.list table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }.list th, .list td { padding: 1rem; text-align: left; border-bottom: 1px solid var(--exui-border-default); white-space: nowrap; }.list th { color: var(--exui-text-secondary); }
+.empty { padding: 1rem; color: var(--exui-text-secondary); }.pagination { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 1rem; font-size: 0.875rem; }
+.details { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1rem; margin: 1rem 0; }.details dt { color: var(--exui-text-secondary); }.details dd { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 52rem) { .page { width: calc(100% - 2rem); margin-block: 2rem; }.header h1 { font-size: 1.5rem; } }

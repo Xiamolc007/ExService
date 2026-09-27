@@ -14,6 +14,8 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 8081,
     strictPort: true,
+    // Vite 注入的开发脚本早于 HTML meta，响应头必须先保护邀请 URL。
+    headers: { 'Referrer-Policy': 'no-referrer' },
     proxy: {
       // 原样转发 `/api/*`：Mock Server 自己注册 `/api` 前缀，因此这里不做 rewrite。
       '/api': {

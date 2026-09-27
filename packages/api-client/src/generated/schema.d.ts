@@ -41,7 +41,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/auth/registrations": {
+    "/join/applications": {
         parameters: {
             query?: never;
             header?: never;
@@ -50,49 +50,49 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start an email-verified registration */
-        post: operations["startRegistration"];
+        /** submitJoinApplication */
+        post: operations["submitJoinApplication"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/auth/registrations/resend": {
+    "/admin/join/applications": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** listJoinApplications */
+        get: operations["listJoinApplications"];
         put?: never;
-        /** Issue a replacement verification code */
-        post: operations["resendRegistrationCode"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/auth/registrations/cancel": {
+    "/admin/join/applications/{applicationId}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** getJoinApplication */
+        get: operations["getJoinApplication"];
         put?: never;
-        /** Cancel a pending registration */
-        post: operations["cancelRegistration"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/auth/registrations/verify": {
+    "/admin/join/applications/{applicationId}/approve": {
         parameters: {
             query?: never;
             header?: never;
@@ -101,8 +101,110 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Verify a code and create the account */
-        post: operations["verifyRegistration"];
+        /** approveJoinApplication */
+        post: operations["approveJoinApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/join/applications/{applicationId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** rejectJoinApplication */
+        post: operations["rejectJoinApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/join/applications/{applicationId}/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** resendJoinInvitation */
+        post: operations["resendJoinInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/invitations/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** checkInvitationEligibility */
+        post: operations["checkInvitationEligibility"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/invitations/code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** requestInvitationCode */
+        post: operations["requestInvitationCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/invitations/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** verifyInvitationCode */
+        post: operations["verifyInvitationCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/invitations/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** completeInvitationRegistration */
+        post: operations["completeInvitationRegistration"];
         delete?: never;
         options?: never;
         head?: never;
@@ -269,34 +371,105 @@ export interface components {
             imageBase64: string;
             expiresAt: components["schemas"]["SafeTimestamp"];
         };
-        RegisterRequest: {
+        Uuid: string;
+        NullableUuid: string | null;
+        JoinReviewRequest: Record<string, never>;
+        JoinApplicationRequest: {
             email: components["schemas"]["Email"];
             nickname: components["schemas"]["Nickname"];
-            password: components["schemas"]["Password"];
-            captcha?: components["schemas"]["CaptchaSubmission"];
+            qq: string;
         };
-        RegistrationRef: {
-            registrationId: components["schemas"]["OpaqueIdentifier"];
+        JoinApplicationReceived: {
+            /** @constant */
+            status: "received";
         };
-        VerifyRegistrationRequest: {
-            registrationId: components["schemas"]["OpaqueIdentifier"];
-            code: components["schemas"]["VerificationCode"];
+        InvitationEligibilityRequest: {
+            email: components["schemas"]["Email"];
         };
-        RegistrationChallenge: {
-            registrationId: components["schemas"]["OpaqueIdentifier"];
+        InvitationCodeRequest: {
+            email: components["schemas"]["Email"];
+        };
+        InvitationEligibility: {
+            /** @constant */
+            status: "eligible";
             email: components["schemas"]["Email"];
             serverTime: components["schemas"]["SafeTimestamp"];
-            codeExpiresAt: components["schemas"]["SafeTimestamp"];
             resendAvailableAt: components["schemas"]["SafeTimestamp"];
         };
-        RegistrationVerified: {
+        InvitationCodeAccepted: {
+            /** @constant */
+            status: "accepted";
+            serverTime: components["schemas"]["SafeTimestamp"];
+            resendAvailableAt: components["schemas"]["SafeTimestamp"];
+        };
+        InvitationVerifyRequest: {
+            email: components["schemas"]["Email"];
+            code: components["schemas"]["VerificationCode"];
+        };
+        InvitationVerified: {
+            /** @constant */
+            status: "verified";
+            completionToken: components["schemas"]["OpaqueIdentifier"];
+            email: components["schemas"]["Email"];
+            nickname: components["schemas"]["Nickname"];
+            serverTime: components["schemas"]["SafeTimestamp"];
+            completionExpiresAt: components["schemas"]["SafeTimestamp"];
+        };
+        InvitationCompleteRequest: {
+            completionToken: components["schemas"]["OpaqueIdentifier"];
+            nickname: components["schemas"]["Nickname"];
+            password: components["schemas"]["Password"];
+        };
+        InvitationRegistrationCompleted: {
             /** @constant */
             status: "registered";
             email: components["schemas"]["Email"];
         };
-        RegistrationCancelled: {
-            /** @constant */
-            status: "cancelled";
+        JoinApplicationSummary: {
+            id: components["schemas"]["Uuid"];
+            email: components["schemas"]["Email"];
+            nickname: components["schemas"]["Nickname"];
+            qq: string;
+            /** @enum {string} */
+            status: "pending" | "approved" | "rejected";
+            createdAt: components["schemas"]["SafeTimestamp"];
+            reviewedAt: number | null;
+            reviewedByUserId: components["schemas"]["NullableUuid"];
+            /** @enum {string|null} */
+            invitationStatus: "active" | "expired" | "completed" | null;
+            /** @enum {string|null} */
+            deliveryStatus: "pending" | "sent" | "failed" | null;
+        };
+        InvitationDeliverySummary: {
+            id: components["schemas"]["Uuid"];
+            /** @enum {string} */
+            status: "pending" | "sent" | "failed";
+            startedAt: components["schemas"]["SafeTimestamp"];
+            finishedAt: number | null;
+        };
+        InvitationSummary: {
+            id: components["schemas"]["Uuid"];
+            /** @enum {string} */
+            status: "active" | "expired" | "completed";
+            issuedAt: components["schemas"]["SafeTimestamp"];
+            expiresAt: components["schemas"]["SafeTimestamp"];
+            codeExpiresAt: number | null;
+            completedAt: number | null;
+            completedUserId: components["schemas"]["NullableUuid"];
+            resendAvailableAt: components["schemas"]["SafeTimestamp"];
+            latestDelivery: components["schemas"]["InvitationDeliverySummary"] | null;
+        };
+        JoinApplicationDetail: {
+            application: components["schemas"]["JoinApplicationSummary"];
+            invitation: components["schemas"]["InvitationSummary"] | null;
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        JoinApplicationList: {
+            items: components["schemas"]["JoinApplicationSummary"][];
+            total: components["schemas"]["SafeTimestamp"];
+            offset: components["schemas"]["SafeTimestamp"];
+            limit: number;
+            serverTime: components["schemas"]["SafeTimestamp"];
         };
         LoginRequest: {
             email: components["schemas"]["Email"];
@@ -444,7 +617,7 @@ export interface operations {
             default: components["responses"]["ErrorResponse"];
         };
     };
-    startRegistration: {
+    submitJoinApplication: {
         parameters: {
             query?: never;
             header?: never;
@@ -453,114 +626,287 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RegisterRequest"];
+                "application/json": components["schemas"]["JoinApplicationRequest"];
             };
         };
         responses: {
-            /** @description Verification code issued */
-            201: {
+            /** @description Successful operation */
+            202: {
                 headers: {
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RegistrationChallenge"];
+                    "application/json": components["schemas"]["JoinApplicationReceived"];
                 };
             };
             400: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    listJoinApplications: {
+        parameters: {
+            query?: {
+                view?: "pending" | "all";
+                limit?: string;
+                offset?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful operation */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JoinApplicationList"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    getJoinApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful operation */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JoinApplicationDetail"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    approveJoinApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JoinReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful operation */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JoinApplicationDetail"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    rejectJoinApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JoinReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful operation */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JoinApplicationDetail"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    resendJoinInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JoinReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful operation */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JoinApplicationDetail"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    checkInvitationEligibility: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationEligibilityRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful operation */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationEligibility"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    requestInvitationCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful operation */
+            202: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationCodeAccepted"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    verifyInvitationCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful operation */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationVerified"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    completeInvitationRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful operation */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationRegistrationCompleted"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
             409: components["responses"]["ErrorResponse"];
             429: components["responses"]["RetryableErrorResponse"];
             503: components["responses"]["RetryableErrorResponse"];
-            default: components["responses"]["ErrorResponse"];
-        };
-    };
-    resendRegistrationCode: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RegistrationRef"];
-            };
-        };
-        responses: {
-            /** @description Replacement verification code issued */
-            200: {
-                headers: {
-                    "Cache-Control": components["headers"]["CacheControl"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegistrationChallenge"];
-                };
-            };
-            400: components["responses"]["ErrorResponse"];
-            404: components["responses"]["ErrorResponse"];
-            409: components["responses"]["ErrorResponse"];
-            410: components["responses"]["ErrorResponse"];
-            429: components["responses"]["RetryableErrorResponse"];
-            default: components["responses"]["ErrorResponse"];
-        };
-    };
-    cancelRegistration: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RegistrationRef"];
-            };
-        };
-        responses: {
-            /** @description Registration cancelled */
-            200: {
-                headers: {
-                    "Cache-Control": components["headers"]["CacheControl"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegistrationCancelled"];
-                };
-            };
-            400: components["responses"]["ErrorResponse"];
-            404: components["responses"]["ErrorResponse"];
-            409: components["responses"]["ErrorResponse"];
-            default: components["responses"]["ErrorResponse"];
-        };
-    };
-    verifyRegistration: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["VerifyRegistrationRequest"];
-            };
-        };
-        responses: {
-            /** @description Account created */
-            200: {
-                headers: {
-                    "Cache-Control": components["headers"]["CacheControl"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegistrationVerified"];
-                };
-            };
-            400: components["responses"]["ErrorResponse"];
-            404: components["responses"]["ErrorResponse"];
-            409: components["responses"]["ErrorResponse"];
-            410: components["responses"]["ErrorResponse"];
             default: components["responses"]["ErrorResponse"];
         };
     };

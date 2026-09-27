@@ -32,6 +32,7 @@ function codeForStatus(statusCode: number): ErrorCode {
 export function registerErrorHandlers(app: FastifyInstance): void {
   app.setNotFoundHandler((request, reply) => {
     void reply
+      .header('Cache-Control', 'no-store')
       .status(404)
       .send(createErrorEnvelope('NOT_FOUND', 'The requested route is not part of the API contract.', request.id))
   })
@@ -42,14 +43,16 @@ export function registerErrorHandlers(app: FastifyInstance): void {
     const reported = authError?.statusCode ?? (typeof error.statusCode === 'number' ? error.statusCode : 500)
     const statusCode = reported >= 400 && reported < 600 ? reported : 500
 
-    if (statusCode >= 500) {
-      request.log.error({ err: error }, 'request failed')
-    } else {
-      request.log.warn({ err: error }, 'request rejected')
-    }
-
     const message = authError?.publicMessage ?? resolvePublicMessage(statusCode, error)
     const code = authError?.code ?? codeForStatus(statusCode)
+
+    // Exceptions from hashing, delivery or SQLite can contain submitted secrets.
+    // Request ID remains attached by Fastify; log only the safe classification.
+    if (statusCode >= 500) {
+      request.log.error({ code, statusCode }, 'request failed')
+    } else {
+      request.log.warn({ code, statusCode }, 'request rejected')
+    }
 
     void reply.header('Cache-Control', 'no-store')
     if (authError?.retryAfterSeconds !== undefined) {

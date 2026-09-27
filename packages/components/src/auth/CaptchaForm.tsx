@@ -17,7 +17,7 @@ const captchaSchema = z.object({
 type CaptchaFields = z.infer<typeof captchaSchema>
 
 export const CaptchaForm = forwardRef<AuthFormHandle, AuthFormProps>(function CaptchaForm({
-  mode, busy, onCaptchaSubmit,
+  busy, onCaptchaSubmit,
 }, ref) {
   const id = useId()
   const { register, handleSubmit, setError, clearErrors, getFieldState,
@@ -61,7 +61,7 @@ export const CaptchaForm = forwardRef<AuthFormHandle, AuthFormProps>(function Ca
       </Field>
       <p className={styles.captchaNotice} id={`${id}-notice`}>验证码功能开发中，当前输入不校验；留空也可继续。</p>
       <Button type="submit" disabled={disabled} className={styles.submit}>
-        {disabled ? <><Spinner aria-hidden="true" />处理中</> : mode === 'login' ? '登录' : '注册'}
+        {disabled ? <><Spinner aria-hidden="true" />处理中</> : '登录'}
       </Button>
     </form>
   )

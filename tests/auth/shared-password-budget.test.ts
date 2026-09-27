@@ -1,6 +1,9 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import type { ScryptOptions } from 'node:crypto'
+import { createApp } from '@workspace/mock-server'
 import { ScryptPasswordHasher } from '../../apps/mock-server/src/auth/crypto'
+import { createAuthServices } from '../../apps/mock-server/src/auth/create-services'
+import { approvedInvitation, createTestAuth } from '../helpers/auth'
 
 const work = vi.hoisted(() => ({
   callbacks: [] as Array<() => void>, active: 0, peak: 0, started: 0,
@@ -16,14 +19,68 @@ vi.mock('node:crypto', async importOriginal => ({
   },
 }))
 
+const fixtures: Array<ReturnType<typeof createTestAuth>> = []
+const apps: Array<ReturnType<typeof createApp>> = []
 afterEach(async () => {
   // Also drain held primitives when an assertion fails, so regressions do not hang cleanup.
   while (work.callbacks.length > 0) {
     work.callbacks.splice(0).forEach(finish => finish())
     await new Promise<void>(resolve => setImmediate(resolve))
   }
+  await Promise.all(apps.splice(0).map(app => app.close()))
+  fixtures.splice(0).forEach(fixture => fixture.close())
   vi.restoreAllMocks()
   Object.assign(work, { callbacks: [], active: 0, peak: 0, started: 0 })
+})
+
+it('shares the production two-active/sixteen-waiting budget between login and invitation completion', async () => {
+  const fixture = createTestAuth({ now: Date.now })
+  fixtures.push(fixture)
+  const approved = await approvedInvitation(fixture)
+  const grant = fixture.invitationServices.verifyCode(approved.email, approved.code)
+  const encodedHash = `scrypt$v1$N=32768,r=8,p=1$${Buffer.alloc(16).toString('base64url')}$${Buffer.alloc(64).toString('base64url')}`
+  fixture.sqlite.prepare('INSERT INTO auth_users (id,email,nickname,password_hash,created_at) VALUES (?,?,?,?,?)')
+    .run('10000000-0000-4000-8000-000000000001', 'existing@example.com', 'Existing', encodedHash, Date.now())
+  const hash = vi.spyOn(ScryptPasswordHasher.prototype, 'hash')
+  const verify = vi.spyOn(ScryptPasswordHasher.prototype, 'verify')
+  // This is the same pure assembly function used by server.ts, not a test-only hasher assembly.
+  const services = createAuthServices({ sqlite: fixture.sqlite, codeHmacKey: Buffer.alloc(32, 7) })
+  const app = createApp({ ...services, profileServices: fixture.profileServices })
+  apps.push(app)
+  const login = () => app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'existing@example.com', password: 'valid password' } })
+  const complete = () => app.inject({ method: 'POST', url: '/api/auth/invitations/complete', payload: { completionToken: grant.completionToken, nickname: 'Final', password: 'valid password' } })
+  const accepted = Array.from({ length: 18 }, (_, index) => index % 2 === 0 ? login() : complete())
+  await vi.waitFor(() => { expect(hash).toHaveBeenCalledTimes(9); expect(verify).toHaveBeenCalledTimes(9) })
+  expect(new Set([...hash.mock.contexts, ...verify.mock.contexts]).size).toBe(1)
+  expect(work.started).toBe(2)
+  expect(work.active).toBe(2)
+
+  const excess = await Promise.all([login(), complete()])
+  for (const response of excess) {
+    expect(response.statusCode).toBe(503)
+    expect(response.headers['retry-after']).toBe('1')
+    expect(response.json().error.code).toBe('AUTH_BUSY')
+  }
+  expect(work.started).toBe(2)
+  expect(fixture.sqlite.prepare('SELECT count(*) AS n FROM auth_users').get()).toEqual({ n: 1 })
+  expect(fixture.sqlite.prepare('SELECT count(*) AS n FROM auth_sessions').get()).toEqual({ n: 0 })
+
+  // Release each underlying operation; all sixteen waiters must continue through the real gate.
+  for (let finished = 0; finished < 18; finished += 1) {
+    await vi.waitFor(() => expect(work.callbacks.length).toBeGreaterThan(0))
+    work.callbacks.shift()!()
+  }
+  const responses = await Promise.all(accepted)
+  expect(responses.map(response => response.statusCode)).toEqual(Array(18).fill(200))
+  expect(work.started).toBe(18)
+  expect(work.peak).toBe(2)
+  expect(work.active).toBe(0)
+  expect(fixture.sqlite.prepare('SELECT count(*) AS n FROM auth_sessions').get()).toEqual({ n: 9 })
+  expect(fixture.sqlite.prepare('SELECT email,nickname,qq FROM auth_users WHERE email = ?').all(approved.email))
+    .toEqual([{ email: approved.email, nickname: 'Final', qq: '001234' }])
+  const retry = await complete()
+  expect(retry.statusCode).toBe(200)
+  expect(work.started).toBe(18)
 })
 
 it('reserves a released slot for its waiter while a new request arrives before that waiter resumes', async () => {

@@ -17,7 +17,7 @@ vi.mock('../settings/SettingsExperience', () => ({
   SettingsModal: ({ initialCategory }: { initialCategory: string }) =>
     <div data-testid="settings-modal">{initialCategory}</div>,
 }))
-vi.mock('react-router', () => ({ Outlet: () => null }))
+vi.mock('react-router', () => ({ Outlet: () => null, useNavigate: () => vi.fn() }))
 vi.mock('../auth/AuthFlow', () => ({ AuthFlow: () => null }))
 
 import { RootLayout } from './RootLayout'

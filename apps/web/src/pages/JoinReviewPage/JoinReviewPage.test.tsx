@@ -1,0 +1,116 @@
+// @vitest-environment jsdom
+import { afterEach, expect, it, vi } from 'vitest'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { JoinReviewPage } from './index'
+import { ExMessage } from '@workspace/components'
+const { get, post } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
+vi.mock('../../api/client', () => ({ api: { GET: get, POST: post } }))
+const application = { id: 'a', email: 'member@example.com', nickname: '成员', qq: '001234', status: 'pending', createdAt: 1000, reviewedAt: null, reviewedByUserId: null, invitationStatus: null, deliveryStatus: null }
+afterEach(() => { cleanup(); get.mockReset(); post.mockReset(); vi.restoreAllMocks(); vi.useRealTimers() })
+const listOf = (items = [application], offset = 0, total = items.length) => ({ items, offset, total, limit: 20, serverTime: 1000 })
+const detailOf = (item = application) => ({ application: item, invitation: null, serverTime: 1000 })
+function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done }); return { promise, resolve } }
+it('opens fresh detail in two tabs and restores focus without changing the list filter', async () => {
+  const user = userEvent.setup()
+  get.mockImplementation((path: string) => Promise.resolve({ data: path.endsWith('{applicationId}') ? { application, invitation: null, serverTime: 1000 } : { items: [application], total: 1, offset: 0, limit: 20, serverTime: 1000 } }))
+  render(<JoinReviewPage />)
+  const trigger = await screen.findByRole('button', { name: '查看 成员' })
+  await user.click(trigger)
+  expect(await screen.findByRole('dialog', { name: '申请详情' })).toBeTruthy()
+  expect(screen.getByRole('tab', { name: '申请资料' }).getAttribute('aria-selected')).toBe('true')
+  await user.click(screen.getByRole('tab', { name: '审核与邀请' }))
+  expect(screen.getByText('审核人').nextElementSibling?.textContent).toBe('未记录')
+  await user.click(screen.getByRole('button', { name: '关闭详情' }))
+  expect(document.activeElement).toBe(trigger)
+  await user.click(trigger)
+  expect(get.mock.calls.filter(([path]) => path.endsWith('{applicationId}'))).toHaveLength(2)
+})
+
+it('resets pagination when filtering and rejects a late page response', async () => {
+  const user = userEvent.setup(), late = deferred<{ data: ReturnType<typeof listOf> }>()
+  get.mockResolvedValueOnce({ data: listOf([application], 0, 21) }).mockReturnValueOnce(late.promise).mockResolvedValueOnce({ data: listOf([{ ...application, id: 'b', nickname: '新成员' }], 0, 1) })
+  render(<JoinReviewPage />)
+  await screen.findByRole('button', { name: '查看 成员' })
+  await user.click(screen.getByRole('button', { name: '下一页' }))
+  expect(get).toHaveBeenLastCalledWith('/admin/join/applications', { params: { query: { view: 'pending', offset: '20', limit: '20' } } })
+  await user.click(screen.getByRole('tab', { name: '全部申请' }))
+  expect(await screen.findByRole('button', { name: '查看 新成员' })).toBeTruthy()
+  expect(get).toHaveBeenLastCalledWith('/admin/join/applications', { params: { query: { view: 'all', offset: '0', limit: '20' } } })
+  await act(async () => { late.resolve({ data: listOf([{ ...application, nickname: '过时成员' }], 20, 21) }) })
+  expect(screen.queryByRole('button', { name: '查看 过时成员' })).toBeNull()
+  expect(screen.getByText('第 1 页，共 1 条')).toBeTruthy()
+})
+
+it('ignores a closed detail response and opens fresh detail for another selection', async () => {
+  const user = userEvent.setup(), late = deferred<{ data: ReturnType<typeof detailOf> }>()
+  get.mockResolvedValueOnce({ data: listOf([application, { ...application, id: 'b', nickname: '另一成员' }]) }).mockReturnValueOnce(late.promise).mockResolvedValueOnce({ data: detailOf({ ...application, id: 'b', nickname: '另一成员' }) })
+  render(<JoinReviewPage />)
+  await user.click(await screen.findByRole('button', { name: '查看 成员' }))
+  await user.click(screen.getByRole('button', { name: '关闭详情' }))
+  await user.click(screen.getByRole('button', { name: '查看 另一成员' }))
+  await waitFor(() => expect(screen.getByText('用户名').nextElementSibling?.textContent).toBe('另一成员'))
+  await act(async () => { late.resolve({ data: detailOf(application) }) })
+  expect(screen.getByText('用户名').nextElementSibling?.textContent).toBe('另一成员')
+})
+
+it('keeps a submitted approval running after close and refreshes the list without a late toast', async () => {
+  const user = userEvent.setup(), next = deferred<{ data: ReturnType<typeof detailOf> }>(), notify = vi.spyOn(ExMessage, 'info').mockReturnValue('info')
+  get.mockImplementation((path: string) => Promise.resolve({ data: path.endsWith('{applicationId}') ? detailOf() : listOf() }))
+  post.mockReturnValue(next.promise)
+  render(<JoinReviewPage />)
+  await user.click(await screen.findByRole('button', { name: '查看 成员' }))
+  await user.click(await screen.findByRole('button', { name: '同意并发送邀请' }))
+  expect((screen.getByRole('button', { name: '拒绝申请' }) as HTMLButtonElement).disabled).toBe(true)
+  await user.click(screen.getByRole('button', { name: '关闭详情' }))
+  await act(async () => { next.resolve({ data: detailOf({ ...application, status: 'approved' }) }) })
+  expect(post).toHaveBeenCalledExactlyOnceWith('/admin/join/applications/{applicationId}/approve', { params: { path: { applicationId: 'a' } }, body: {} })
+  expect(get.mock.calls.filter(([path]) => path === '/admin/join/applications')).toHaveLength(2)
+  expect(notify).not.toHaveBeenCalled()
+  expect(screen.queryByRole('dialog')).toBeNull()
+})
+
+it('restores focus to refresh when approval removes the original pending row', async () => {
+  const user = userEvent.setup()
+  vi.spyOn(ExMessage, 'info').mockReturnValue('info')
+  get.mockResolvedValueOnce({ data: listOf() }).mockResolvedValueOnce({ data: detailOf() }).mockResolvedValueOnce({ data: listOf([]) })
+  post.mockResolvedValue({ data: detailOf({ ...application, status: 'approved' }) })
+  render(<JoinReviewPage />)
+  await user.click(await screen.findByRole('button', { name: '查看 成员' }))
+  await user.click(await screen.findByRole('button', { name: '同意并发送邀请' }))
+  await waitFor(() => expect(screen.queryByRole('button', { name: '查看 成员', hidden: true })).toBeNull())
+  await user.click(screen.getByRole('button', { name: '关闭详情' }))
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: '刷新列表' }))
+})
+
+it('refreshes conflicted detail and presents delivery failure without changing approval facts', async () => {
+  const user = userEvent.setup()
+  const approved = { ...application, status: 'approved', deliveryStatus: 'failed' }
+  get.mockImplementation((path: string) => Promise.resolve({ data: path.endsWith('{applicationId}') ? detailOf() : listOf() }))
+  post.mockResolvedValue({ ...{ error: { error: { code: 'JOIN_STATE_CONFLICT', message: 'safe' } } }, response: new Response(null, { status: 409 }) })
+  render(<JoinReviewPage />)
+  await user.click(await screen.findByRole('button', { name: '查看 成员' }))
+  await screen.findByRole('button', { name: '同意并发送邀请' })
+  get.mockImplementation((path: string) => Promise.resolve({ data: path.endsWith('{applicationId}') ? { application: approved, serverTime: 1000, invitation: { status: 'active', resendAvailableAt: 1000, expiresAt: 100000, latestDelivery: { status: 'failed' } } } : listOf([]) }))
+  await user.click(screen.getByRole('button', { name: '拒绝申请' }))
+  await user.click(screen.getByRole('tab', { name: '审核与邀请' }))
+  expect(await screen.findByText('邀请投递失败，审批已保留。冷却结束后可重新发送。')).toBeTruthy()
+  expect(screen.getByText('审核状态').nextElementSibling?.textContent).toBe('已同意')
+  expect(screen.getByRole('button', { name: '重新发送邀请' })).toBeTruthy()
+  expect(get.mock.calls.filter(([path]) => path.endsWith('{applicationId}'))).toHaveLength(2)
+})
+
+it('retains pending approval on inherited cooldown 429 and enables retry after the header interval', async () => {
+  vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] })
+  const user = userEvent.setup()
+  get.mockImplementation((path: string) => Promise.resolve({ data: path.endsWith('{applicationId}') ? detailOf() : listOf() }))
+  post.mockResolvedValue({ error: { error: { code: 'CODE_RESEND_TOO_SOON', message: 'safe' } }, response: new Response(null, { status: 429, headers: { 'Retry-After': '2' } }) })
+  render(<JoinReviewPage />)
+  await user.click(await screen.findByRole('button', { name: '查看 成员' }))
+  await user.click(await screen.findByRole('button', { name: '同意并发送邀请' }))
+  expect((screen.getByRole('button', { name: '2 秒后同意' }) as HTMLButtonElement).disabled).toBe(true)
+  expect((screen.getByRole('button', { name: '拒绝申请' }) as HTMLButtonElement).disabled).toBe(false)
+  await act(async () => { vi.advanceTimersByTime(3000) })
+  expect((screen.getByRole('button', { name: '同意并发送邀请' }) as HTMLButtonElement).disabled).toBe(false)
+  expect(post).toHaveBeenCalledTimes(1)
+})
