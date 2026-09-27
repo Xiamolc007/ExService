@@ -85,8 +85,8 @@ importers:
   apps/web:
     dependencies:
       '@exre/exui':
-        specifier: ^0.5.0
-        version: 0.5.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        specifier: ^0.6.0
+        version: 0.6.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@paper-design/shaders-react':
         specifier: ^0.0.81
         version: 0.0.81(@types/react@19.3.0)(react@19.3.0)
@@ -150,8 +150,8 @@ importers:
   packages/components:
     dependencies:
       '@exre/exui':
-        specifier: ^0.5.0
-        version: 0.5.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        specifier: ^0.6.0
+        version: 0.6.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@hookform/resolvers':
         specifier: ^5.9.1
         version: 5.9.1(ajv@8.20.0)(react-hook-form@7.88.0(react@19.3.0))(zod@4.6.5)
@@ -716,8 +716,8 @@ packages:
       '@noble/hashes':
         optional: true
 
-  '@exre/exui@0.5.0':
-    resolution: {integrity: sha512-bDEpAJuGWbUGL1Kn4fXdfiiK0ZQk2J+yX/knFWSg6vfkfZ+5d7lUj9DSUhwSBZZZep+JbH0fiaX5ooZU3FkySg==}
+  '@exre/exui@0.6.0':
+    resolution: {integrity: sha512-kAV7F6vRaDXO97URXH2llIy8FKUJ7MobA0/K+uHSsvrpsihyB8uOgSVeQIvNtpHNlOlgRGGHTjm0uzV7UoLFUw==}
     peerDependencies:
       react: '>=19.0.0 <20'
       react-dom: '>=19.0.0 <20'
@@ -2607,7 +2607,7 @@ snapshots:
 
   '@exodus/bytes@1.15.2': {}
 
-  '@exre/exui@0.5.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
+  '@exre/exui@0.6.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
       '@fontsource-variable/outfit': 5.3.0
     optionalDependencies:

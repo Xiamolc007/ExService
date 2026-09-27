@@ -13,7 +13,7 @@ _最后更新：2026-09-18_
 
 ## 决策
 
-- 引入 `@exre/exui`（当前 `0.5.0`）作为组件库、设计 token 与主题的来源；图标另装 `lucide-react`（ExUI 不 re-export 它）。
+- 引入 `@exre/exui`（当前 `0.6.0`）作为组件库、设计 token 与主题的来源；图标另装 `lucide-react`（ExUI 不 re-export 它）。
 - `@exre/exui` 在 `apps/web` 与 `packages/components` **各自声明**为依赖。
 - `@exre/exui/style.css` 只在 `apps/web/src/main.tsx` 导入一次。
 - `ThemeProvider` 挂在 `main.tsx`，包住 `<BrowserRouter>`；主题切换用 `useTheme` 的三态（`light` / `dark` / `system`）。
