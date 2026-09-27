@@ -1,8 +1,8 @@
 # `contract-tests` 模块：测试层次
 
-本文件说明 `tests/contract/health.test.ts` 的组织方式，以及每一层断言各自覆盖什么。单条断言背后的失败模式见 [knowledge/mock-server](../../knowledge/mock-server/serialization-masks-handler-regressions.md) 与 [knowledge/contract-tests](../../knowledge/contract-tests/contract-parsing-constraints.md)。
+本文件说明 `tests/contract/health.test.ts` 的组织方式，以及每一层断言各自覆盖什么。单条断言背后的失败模式见 `.ai/knowledge/mock-server/serialization-masks-handler-regressions.md` 与 `.ai/knowledge/contract-tests/contract-parsing-constraints.md`。
 
-_最后更新：2026-09-17_
+_最后更新：2026-09-27_
 
 ## 为什么分层
 
@@ -10,9 +10,13 @@ Contract Test 的断言不能只停留在 HTTP 响应上，因为响应在到达
 
 ## 测试夹具
 
-- 每个用例通过 `createTestApp()` 调用 `createApp({ logger: false })` 创建真实 Fastify 应用，并在 `afterEach` 中统一 `close()`。
+- 夹具从 `tests/helpers/auth.ts` 构造内存 SQLite 与所需服务，应用经 `createApp()` 创建真实 Fastify 实例并在用例结束时关闭。
 - 请求使用 `app.inject()`，不绑定端口，也不读写开发数据库。
-- 当前只有一个测试文件服务于 `health.test.ts` 对应的 operation；新增 operation 时在同一目录增加对应文件。
+- 健康、认证、本人资料及加入流程在 `tests/contract/` 各自覆盖；新增 operation 时同步增加 HTTP 与注册 handler 原始值断言。
+
+加入流程夹具应用完整 migration journal，业务测试经过申请、审核、验证与完善。登录/资料回归可直接用仅测试模块的用户夹具初始化账号，避免把旧注册方法保留为测试后门；历史迁移测试明确选择旧 journal 阶段，不据此重新提供退役 API。
+
+HTTP 日志安全由 `tests/contract/join-logging.test.ts` 捕获真实日志流验证，不能由响应不泄漏的断言替代。`tests/auth/shared-password-budget.test.ts` 使用生产组装与真实密码队列，只替换底层计算以控制完成时机，覆盖跨服务饱和、恢复和唤醒时新请求交错。`tests/auth/cli-bootstrap.test.ts` 隔离固定数据库打开边界，验证 SSO CLI 在仅有认证结构且没有验证码密钥时仍可用；这些测试都不打开开发库。
 
 ## 层次划分
 

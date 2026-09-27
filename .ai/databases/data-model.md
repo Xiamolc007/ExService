@@ -1,45 +1,60 @@
-# 账号资料数据模型
+﻿# 账号与加入申请数据模型
 
-本文件记录认证数据的业务职责、关系和跨实现必须保留的数据规则。它是修改模型前的设计入口，不代替可执行结构：当前 Mock SQLite 以 [`schema.ts`](../../apps/mock-server/src/db/schema.ts) 和 [`drizzle/`](../../apps/mock-server/drizzle/) 为准；HTTP 字段与行为以 [`api/openapi.yaml`](../../api/openapi.yaml) 为准。
+本文件记录表的业务职责、关系和跨实现必须保留的数据规则。它是修改模型前的设计入口，不代替可执行结构：当前 Mock SQLite 以 `apps/mock-server/src/db/schema.ts` 和 `apps/mock-server/drizzle/` 为准；HTTP 字段与行为以 `api/openapi.yaml` 为准。
 
-_最后更新：2026-09-24_
+_最后更新：2026-09-27_
 
 ## 适用范围
 
-下图使用当前 SQLite 表名标识角色。表的职责、关系和数据规则是未来 PHP + MySQL 实现的目标业务模型；未来实现可以采用不同的物理表名、字段类型和索引。目前只有 Mock SQLite 的物理结构经过仓库代码验证，不能据此声称 MySQL 已有相同表结构。
+本次邀请注册模型依据 `.notes/join-registration/rfcs/join-registration-rfc.md`，在实现与增量迁移完成后生效；旧直接注册尝试不转成申请或获批邀请。职责和业务规则也是未来 PHP + MySQL 的目标模型，未来实现可以采用自己的物理结构；当前不存在经过验证的 MySQL 实现。
 
 ```mermaid
 erDiagram
     auth_users ||--o{ auth_sessions : "持有会话"
-    auth_users |o--o{ auth_registrations : "完成注册后关联"
     auth_users |o--o{ auth_sso_requests : "确认后关联"
+    join_applications ||--o{ join_invitations : "同意后签发"
+    auth_users |o--o{ join_applications : "审核人可选关联"
+    auth_users |o--o{ join_invitations : "完成注册后关联"
+    join_invitations ||--o{ join_delivery_attempts : "记录投递"
     auth_users ||--o{ community_group_memberships : "加入社区身份组"
     community_groups ||--o{ community_group_memberships : "包含成员"
-    auth_email_delivery
+    join_email_controls
 ```
 
-`auth_email_delivery` 与其余表没有外键；它按邮箱保存发送冷却状态。`auth_registrations` 中的邮箱也不是指向 `auth_users` 的外键：验证完成前，账号可能尚不存在。
+`join_email_controls` 按规范化邮箱保存冷却和错误窗口，不与账号、申请建立外键。申请邮箱也不是账号外键：申请、同意和验证码验证均不创建正式账号。
 
 ## 表的职责与关键规则
 
 | 当前 SQLite 表 | 职责 | 关键标识与约束 |
 | --- | --- | --- |
-| `auth_users` | 保存验证完成的本站账号和基础资料。 | `id` 标识账号；邮箱唯一，`nickname`、QQ 与 FiveM ID 可重复；QQ、FiveM ID 和头像引用可为空；保存密码哈希而非明文。FiveM ID 是未经验证的用户声明，不用于认证或授权。头像引用是服务端生成的内部标识，每个已引用的对象只属于一个用户，图片字节不进入数据库。 |
-| `auth_registrations` | 保存注册尝试、验证码校验状态及短期幂等结果。 | 注册标识和验证码均只存摘要；完成前不要求存在用户，完成后可选地关联 `auth_users`。状态限于 `pending`、`completed`、`cancelled`、`expired`，错误次数限于 0–5。 |
-| `auth_email_delivery` | 按邮箱维护验证码发送冷却。 | 邮箱是主键；与注册尝试和用户均无外键。 |
-| `auth_sessions` | 保存普通登录产生的本站会话。 | token 只存摘要；每条会话必须关联一个用户，记录到期与撤销状态。 |
-| `auth_sso_requests` | 保存由本地 CLI 创建、等待浏览器确认的短期 SSO 请求。 | 请求标识以摘要作为主键；状态限于 `pending`、`completed`；确认前可无用户，确认后关联用户；完成 SSO 不创建本站会话。 |
-| `community_groups` | 保存本站需要显式授予的社区身份组的稳定标识和展示名称。 | `code` 唯一且稳定；系统保留组 `admin` 表示管理员身份，展示名称不参与成员关联。普通身份不建组记录。 |
-| `community_group_memberships` | 保存正式用户与显式授予的社区身份组的多对多关系。 | 用户与组的组合唯一，且双方必须存在；没有成员关系的正式用户按普通身份处理；待验证注册尝试没有成员关系。 |
+| `auth_users` | 保存正式本站账号和基础资料。 | 账号 ID 稳定，邮箱唯一；名字、QQ 和 FiveM ID 可重复，QQ、FiveM ID 和头像引用可为空。只保存密码哈希。FiveM ID 是未经验证的声明，不参与认证或授权。头像引用由服务端生成，已引用对象只属于一个用户，图片字节不进入数据库。 |
+| `join_applications` | 保存邮箱、申请名字、QQ 和审核事实，不保存密码。 | 状态为 pending、approved、rejected；同邮箱最多一条未拒绝申请，拒绝后可重新申请；重复提交不能覆盖原资料。同意、拒绝只从 pending 转换，相同决定幂等，相反决定冲突。本期审核人固定为空，预留账号关系不代表已实现授权。 |
+| `join_invitations` | 保存获批申请的验证资格、当前验证码、短期完善凭证和完成账号。 | 每条邀请关联一个申请，同申请最多一条 active 邀请。资格有效 7 天，码最长 10 分钟，凭证最长 30 分钟，均不能超过邀请截止时间。码只存绑定邀请及版本的 HMAC，凭证只存摘要。有效性按服务端时间复核，不只看持久化状态。 |
+| `join_email_controls` | 按邮箱维护 60 秒发送冷却和 10 分钟错误窗口。 | 邮箱是主键；累计 5 次错误锁定至窗口结束，重发和邀请更新均不重置。未知邮箱也维护短期错误窗口。投递失败不撤销冷却。 |
+| `join_delivery_attempts` | 保存每次验证码投递结果，区分审批事实和邮件交付。 | 邀请与码版本组合唯一；状态为 pending、sent、failed。不保存明文码、链接、邮件正文或原始异常。每次尝试只更新自身结果，超时后的迟到结果不能改回成功。 |
+| `auth_sessions` | 保存普通登录产生的本站会话。 | token 只存摘要；必须关联正式账号，记录到期与撤销状态；不因使用续期。 |
+| `auth_sso_requests` | 保存本地 CLI 创建、等待浏览器确认的短期 SSO 请求。 | 请求标识只存摘要；状态为 pending、completed，确认前可无用户，确认后关联用户；完成 SSO 不创建本站会话。 |
+| `community_groups` | 保存需显式授予的社区身份组标识和展示名称。 | code 唯一且稳定；保留组 admin 表示管理员身份，展示名称不参与关联；普通身份不建组记录。 |
+| `community_group_memberships` | 保存正式用户与显式授予身份组的多对多关系。 | 用户与组组合唯一且双方必须存在；正式账号无成员关系时为普通身份；申请和未完成邀请没有成员关系。 |
 
-注册尝试在完成、取消或到期后清除不再需要的敏感材料；会话不会因使用而续期。这些状态转换与清理行为见 [认证生命周期](../architectures/mock-server/authentication-lifecycle.md)。数据库文件、迁移和重置的操作边界见 [数据库生命周期陷阱](knowledge/database-lifecycle-traps.md) 与 [显式迁移决策](decisions/03-database-changes-only-by-explicit-command.md)。
+## 注册与投递边界
 
-本地 Mock 的头像字节保存在固定的 `apps/mock-server/data/avatars/`，数据库只保存引用；未来 PHP + MySQL 实现改用 COS 对象和公开 HTTPS 链接。两种实现都必须保证本人资料读取不泄露给匿名调用方，公开图片读取不包含邮箱，且清除或替换头像后旧引用不可继续公开读取。文件写入与数据库事务不能共同原子提交，因此先写完新文件、再提交引用，最后清理旧文件；失败时可能留下待显式核对的孤立文件，但不能留下指向未写完文件的引用。
+申请、邀请和投递事实保留供审核核对；敏感摘要在码消费或到期、凭证替换或到期、邀请到期时清除。验证码验证消耗码并签发完善凭证，不创建用户。新验证替换旧凭证，单独重发码不撤销已签发凭证。
 
-社区身份组是本站账号关系，不映射游戏角色或 FiveM 权限。普通身份由正式账号的存在隐含，不写入 `community_group_memberships`；未登录者不能据此取得普通用户身份。显式 `admin` 成员关系只可由受信任的管理流程授予，注册不会自动授予；没有管理员成员关系的现有正式用户在迁移后仍是普通用户。数据库外键和组合唯一约束防止孤立及重复关系。当前尚无管理员初始化、组管理、权限判断或 HTTP 组信息入口；`admin` 记录是后续授权规则的依据，不代表当前已存在可使用的管理员功能。未来 MySQL 实现也须保持这些业务规则，物理结构另行决定。
+完善事务创建账号并完成邀请：QQ 沿用申请、名字采用完善输入，头像和 FiveM ID 初始为空；不创建会话或身份组成员关系。完成后在原凭证期限内保留摘要及结果，只允许同一凭证重试得到原结果，不能覆盖账号名字或密码。密码哈希只在正式账号保存，异步哈希后必须在写入事务中复查凭证、资格和邮箱唯一性。
 
-选择隐含普通身份与显式管理员关系的理由和代价见 [数据库决策](decisions/06-implicit-ordinary-explicit-admin-membership.md)。
+资格检查只读一致快照，不发码、不更新冷却或失败窗口、不清理到期状态、不返回申请资料或凭证。码过期、消费或投递失败不撤销尚未到期的邀请资格，用户仍可进入重发步骤；验证和完善必须独立复查资格。
+
+审批事务先提交同意结果、邀请和投递记录，再在事务外调用适配器；投递失败不回滚审批。本期公开临时审核、审核人为空的边界只适用于本地 Mock，不是未来 PHP/MySQL 的生产权限方案。
+
+新增 migration 先将旧 `auth_email_delivery` 的冷却迁入 `join_email_controls`，再移除 `auth_registrations` 和 `auth_email_delivery` 及其中的敏感材料；既有账号、资料、会话、SSO 与身份组关系保留。迁移前停止写入并以 SQLite backup API 备份，迁移后核对保留记录与外键。没有可重建旧敏感材料的自动逆迁移。操作边界见 `.ai/databases/knowledge/database-lifecycle-traps.md` 和 `.ai/databases/decisions/03-database-changes-only-by-explicit-command.md`。
+
+## 头像与社区身份
+
+本地头像字节在固定的 `apps/mock-server/data/avatars/`，数据库只保存引用；未来 PHP + MySQL 改用 COS 对象和公开 HTTPS 链接。两种实现均须保证本人资料不泄露给匿名调用方，公开图片不包含邮箱，清除或替换后旧引用不可继续公开读取。先写完新文件、再提交引用、最后清理旧文件；失败可留下待显式核对的孤立文件，不能留下指向未写完文件的引用。
+
+社区身份组不映射游戏角色或 FiveM 权限。普通身份由正式账号存在隐含，不写成员关系；未登录者不因此取得普通身份。admin 只由受信任流程显式授予，注册不授予；现有正式账号迁移后身份关系保持原状。外键及组合唯一约束防止孤立与重复关系。当前没有管理员初始化、组管理或权限判断；admin 记录是后续授权规则依据。理由见 `.ai/databases/decisions/06-implicit-ordinary-explicit-admin-membership.md`。
 
 ## 修改模型时
 
-当表的职责、关系或数据规则变化时，先更新本文件并评审其对 SQLite 与未来 MySQL 目标模型的影响，然后修改实现侧的 schema 和 migration。纯索引调整、迁移实现改动及测试数据变动不需要改写本模型。实际字段、约束和迁移仍需以实现侧文件核对，避免把本文当作第二份物理 schema。
+职责、关系或数据规则变化前先更新本文件并评审 SQLite 与未来 MySQL 的影响，再修改 schema 和 migration。纯索引、迁移实现或测试数据调整不要求更新模型；实际字段和约束以实现文件核对。
