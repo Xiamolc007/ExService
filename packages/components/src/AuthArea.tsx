@@ -30,10 +30,12 @@ export interface AuthAreaProps {
   onProfile: () => void
   onSettings: () => void
   menuButtonRef?: Ref<HTMLSpanElement>
+  registerButtonRef?: Ref<HTMLButtonElement>
+  loginButtonRef?: Ref<HTMLButtonElement>
 }
 
 export function AuthArea({ state, onLogin, onRegister, onRetry, onLogout, onProfile, onSettings,
-  menuButtonRef }: AuthAreaProps) {
+  menuButtonRef, registerButtonRef, loginButtonRef }: AuthAreaProps) {
   if (state.status === 'loading') {
     return <Spinner aria-label="正在恢复登录状态" />
   }
@@ -52,8 +54,8 @@ export function AuthArea({ state, onLogin, onRegister, onRetry, onLogout, onProf
   if (state.status === 'anonymous') {
     return (
       <>
-        <ActionButton className={styles.authButton} onClick={onLogin}>登录</ActionButton>
-        <ActionButton className={styles.authButton} variant="outline" onClick={onRegister}>注册</ActionButton>
+        <ActionButton ref={loginButtonRef} className={styles.authButton} onClick={onLogin}>登录</ActionButton>
+        <ActionButton ref={registerButtonRef} className={styles.authButton} variant="outline" onClick={onRegister}>注册</ActionButton>
       </>
     )
   }

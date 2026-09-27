@@ -1,13 +1,17 @@
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify'
+import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyServerOptions } from 'fastify'
 import openapiGlue from 'fastify-openapi-glue'
+import multipart from '@fastify/multipart'
+import { registerJoinTransport } from './join/transport.js'
 import { AuthError } from './auth/errors.js'
+import type { JoinService } from './join/service.js'
+import type { InvitationService } from './invitations/service.js'
+import * as joinHandlers from './handlers/join.js'
 import type { AuthService } from './auth/service.js'
 import type { ProfileService } from './profile/service.js'
 import { registerErrorHandlers } from './errors.js'
 import {
-  cancelRegistration,
   createCaptchaChallenge,
   confirmSsoWithSession,
   getCurrentUser,
@@ -15,9 +19,6 @@ import {
   login,
   loginForSso,
   logout,
-  resendRegistrationCode,
-  startRegistration,
-  verifyRegistration,
 } from './handlers/auth.js'
 import { getHealth } from './handlers/health.js'
 import { getAvatarImage, updateCurrentUser, uploadCurrentUserAvatar } from './handlers/profile.js'
@@ -36,12 +37,14 @@ export const API_PREFIX = '/api'
 export const OPENAPI_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../../../api/openapi.yaml')
 
 export interface CreateAppOptions {
+  joinServices: JoinService
+  invitationServices: InvitationService
   authServices: AuthService
   profileServices: ProfileService
   /**
    * 测试中保持静默；`server.ts` 开启日志，以便用 requestId 关联日志与响应。
    */
-  logger?: boolean
+  logger?: FastifyServerOptions['logger']
 }
 
 /**
@@ -53,12 +56,9 @@ export interface CreateAppOptions {
  * 因此只断言 HTTP 响应体无法发现 handler 回归，必须同时校验这里注册的 handler。
  */
 export const serviceHandlers = {
+  ...joinHandlers,
   getHealth,
   createCaptchaChallenge,
-  startRegistration,
-  resendRegistrationCode,
-  cancelRegistration,
-  verifyRegistration,
   login,
   getCurrentUser,
   updateCurrentUser,
@@ -76,7 +76,7 @@ export const serviceHandlers = {
  * 路由、method、输入校验与响应 schema 全部来自 `api/openapi.yaml`：
  * 这里不手写任何 `app.get(...)`，也不从 Fastify schema 反向生成 OpenAPI。
  */
-export function createApp({ authServices, profileServices, logger = false }: CreateAppOptions): FastifyInstance {
+export function createApp({ authServices, profileServices, joinServices, invitationServices, logger = false }: CreateAppOptions): FastifyInstance {
   const app = Fastify({
     logger,
     bodyLimit: 4 * 1024 * 1024,
@@ -88,10 +88,14 @@ export function createApp({ authServices, profileServices, logger = false }: Cre
     },
   })
 
+  app.decorate('joinServices', joinServices)
+  app.decorate('invitationServices', invitationServices)
   app.decorate('authServices', authServices)
   app.decorate('profileServices', profileServices)
   app.decorateRequest('authSession', undefined)
   registerErrorHandlers(app)
+  app.register(multipart)
+  registerJoinTransport(app)
 
   app.addHook('preValidation', (request, _reply, done) => {
     if (typeof request.body === 'object' && request.body !== null && !Array.isArray(request.body)) {

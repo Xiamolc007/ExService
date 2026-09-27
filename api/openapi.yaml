@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Backend Sandbox API
-  version: 0.3.0
+  version: 0.5.0
   description: |
     Frontend 与 Backend 之间的唯一 HTTP API Contract。
 
@@ -50,134 +50,461 @@ paths:
                 $ref: '#/components/schemas/CaptchaChallenge'
         default:
           $ref: '#/components/responses/ErrorResponse'
-  /auth/registrations:
+  /join/applications:
     post:
-      operationId: startRegistration
-      summary: Start an email-verified registration
+      operationId: submitJoinApplication
+      summary: Submit one complete join application
+      description: Exactly one application JSON part; new players cannot attach proofs. Each proof carries its raw file bytes in a separate multipart part with the same proofs field name, without percent encoding. Proof parts retain their supplied media type; the server validates extension and byte signatures independently of that media type. One normalized email may apply only once across all histories and categories. Existing history returns 409 JOIN_APPLICATION_EXISTS before account-only EMAIL_IN_USE. Validation and atomic persistence complete before success. All responses use no-store.
       security: []
-      tags: [authentication]
+      tags:
+        - authentication
+      x-fastify-config:
+        joinUpload:
+          wireBytes: 67108864
+          jsonBytes: 65536
+          fileBytes: 10485760
+          totalFileBytes: 52428800
+          proofs: 5
+          parts: 6
+          fieldNameBytes: 64
+          headerPairs: 32
+          headerBytes: 16384
+          slots: 2
+          deadlineMs: 120000
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/JoinApplicationRequest"
+            encoding:
+              application:
+                contentType: application/json
+              proofs:
+                contentType: '*/*'
+      responses:
+        "202":
+          description: Successful operation; not cacheable.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JoinApplicationReceived"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "408":
+          $ref: "#/components/responses/ErrorResponse"
+        "409":
+          $ref: "#/components/responses/ErrorResponse"
+        "413":
+          $ref: "#/components/responses/ErrorResponse"
+        "415":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RetryableErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/RetryableErrorResponse"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+  /join/applications/query:
+    post:
+      operationId: queryJoinApplicationResult
+      summary: Read the minimal join application result
+      description: Read-only snapshot; six closed status/nextAction pairs, no email or personal information. Missing applications return 200 not_found, including account-only legacy users. A completed invitation with an existing user wins over newer history; otherwise use createdAt DESC, id DESC and latest invitation issuedAt DESC, id DESC. Expiry calculation never writes business state. All responses use no-store.
+      security: []
+      tags:
+        - authentication
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RegisterRequest'
+              $ref: "#/components/schemas/JoinApplicationQueryRequest"
       responses:
-        '201':
-          description: Verification code issued
+        "200":
+          description: Successful operation; not cacheable.
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CacheControl'
+              $ref: "#/components/headers/CacheControl"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RegistrationChallenge'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '409':
-          $ref: '#/components/responses/ErrorResponse'
-        '429':
-          $ref: '#/components/responses/RetryableErrorResponse'
-        '503':
-          $ref: '#/components/responses/RetryableErrorResponse'
-        default:
-          $ref: '#/components/responses/ErrorResponse'
-  /auth/registrations/resend:
-    post:
-      operationId: resendRegistrationCode
-      summary: Issue a replacement verification code
+                $ref: "#/components/schemas/JoinApplicationResult"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RetryableErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
+  /admin/join/applications:
+    get:
+      operationId: listJoinApplications
+      summary: listJoinApplications
       security: []
-      tags: [authentication]
+      tags:
+        - authentication
+      responses:
+        "200":
+          description: Successful operation
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JoinApplicationList"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+      parameters:
+        - name: view
+          in: query
+          schema:
+            type: string
+            enum:
+              - pending
+              - all
+            default: pending
+        - name: limit
+          in: query
+          schema:
+            type: string
+            pattern: ^([1-9]|[1-4][0-9]|50)$
+            default: "20"
+        - name: offset
+          in: query
+          schema:
+            type: string
+            pattern: ^(0|[1-9][0-9]{0,8})$
+            default: "0"
+  /admin/join/applications/{applicationId}:
+    get:
+      operationId: getJoinApplication
+      summary: getJoinApplication
+      security: []
+      tags:
+        - authentication
+      responses:
+        "200":
+          description: Successful operation
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JoinApplicationDetail"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+      parameters:
+        - name: applicationId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+  /admin/join/applications/{applicationId}/approve:
+    post:
+      operationId: approveJoinApplication
+      summary: approveJoinApplication
+      security: []
+      tags:
+        - authentication
+      responses:
+        "200":
+          description: Successful operation
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JoinApplicationDetail"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "409":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RetryableErrorResponse"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RegistrationRef'
+              $ref: "#/components/schemas/JoinReviewRequest"
+      parameters:
+        - name: applicationId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+  /admin/join/applications/{applicationId}/reject:
+    post:
+      operationId: rejectJoinApplication
+      summary: rejectJoinApplication
+      security: []
+      tags:
+        - authentication
       responses:
-        '200':
-          description: Replacement verification code issued
+        "200":
+          description: Successful operation
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CacheControl'
+              $ref: "#/components/headers/CacheControl"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RegistrationChallenge'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '404':
-          $ref: '#/components/responses/ErrorResponse'
-        '409':
-          $ref: '#/components/responses/ErrorResponse'
-        '410':
-          $ref: '#/components/responses/ErrorResponse'
-        '429':
-          $ref: '#/components/responses/RetryableErrorResponse'
+                $ref: "#/components/schemas/JoinApplicationDetail"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "409":
+          $ref: "#/components/responses/ErrorResponse"
         default:
-          $ref: '#/components/responses/ErrorResponse'
-  /auth/registrations/cancel:
-    post:
-      operationId: cancelRegistration
-      summary: Cancel a pending registration
-      security: []
-      tags: [authentication]
+          $ref: "#/components/responses/ErrorResponse"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RegistrationRef'
+              $ref: "#/components/schemas/JoinReviewRequest"
+      parameters:
+        - name: applicationId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+  /admin/join/applications/{applicationId}/invitations:
+    post:
+      operationId: resendJoinInvitation
+      summary: resendJoinInvitation
+      security: []
+      tags:
+        - authentication
       responses:
-        '200':
-          description: Registration cancelled
+        "200":
+          description: Successful operation
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CacheControl'
+              $ref: "#/components/headers/CacheControl"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RegistrationCancelled'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '404':
-          $ref: '#/components/responses/ErrorResponse'
-        '409':
-          $ref: '#/components/responses/ErrorResponse'
+                $ref: "#/components/schemas/JoinApplicationDetail"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "409":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RetryableErrorResponse"
         default:
-          $ref: '#/components/responses/ErrorResponse'
-  /auth/registrations/verify:
-    post:
-      operationId: verifyRegistration
-      summary: Verify a code and create the account
-      security: []
-      tags: [authentication]
+          $ref: "#/components/responses/ErrorResponse"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/VerifyRegistrationRequest'
+              $ref: "#/components/schemas/JoinReviewRequest"
+      parameters:
+        - name: applicationId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+  /admin/join/applications/{applicationId}/attachments/{attachmentId}:
+    get:
+      operationId: downloadJoinApplicationAttachment
+      summary: Download an application proof attachment
+      description: "Local public Mock review access only. Missing or mismatched application/attachment pairs return 404 JOIN_ATTACHMENT_NOT_FOUND. Always download; never preview. Two response slots are acquired before BLOB reads; capacity failure is 503 and Retry-After: 5. A 60 second response deadline terminates started connections without a second JSON response. All responses use no-store."
+      security: []
+      tags:
+        - authentication
+      x-fastify-config:
+        joinDownload:
+          slots: 2
+          deadlineMs: 60000
+      parameters:
+        - name: applicationId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: attachmentId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
       responses:
-        '200':
-          description: Account created
+        "200":
+          description: Original attachment bytes.
           headers:
             Cache-Control:
-              $ref: '#/components/headers/CacheControl'
+              $ref: "#/components/headers/CacheControl"
+            Content-Disposition:
+              description: attachment; safe ASCII filename fallback and UTF-8 filename*.
+              required: true
+              schema:
+                type: string
+                pattern: ^attachment;
+            X-Content-Type-Options:
+              required: true
+              schema:
+                type: string
+                const: nosniff
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/RetryableErrorResponse"
+  /auth/invitations/check:
+    post:
+      operationId: checkInvitationEligibility
+      summary: checkInvitationEligibility
+      security: []
+      tags:
+        - authentication
+      responses:
+        "200":
+          description: Successful operation
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RegistrationVerified'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '404':
-          $ref: '#/components/responses/ErrorResponse'
-        '409':
-          $ref: '#/components/responses/ErrorResponse'
-        '410':
-          $ref: '#/components/responses/ErrorResponse'
+                $ref: "#/components/schemas/InvitationEligibility"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "409":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RetryableErrorResponse"
         default:
-          $ref: '#/components/responses/ErrorResponse'
+          $ref: "#/components/responses/ErrorResponse"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationEligibilityRequest"
+  /auth/invitations/code:
+    post:
+      operationId: requestInvitationCode
+      summary: requestInvitationCode
+      security: []
+      tags:
+        - authentication
+      responses:
+        "202":
+          description: Successful operation
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationCodeAccepted"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RetryableErrorResponse"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationCodeRequest"
+  /auth/invitations/verify:
+    post:
+      operationId: verifyInvitationCode
+      summary: verifyInvitationCode
+      security: []
+      tags:
+        - authentication
+      responses:
+        "200":
+          description: Successful operation
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationVerified"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RetryableErrorResponse"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationVerifyRequest"
+  /auth/invitations/complete:
+    post:
+      operationId: completeInvitationRegistration
+      summary: completeInvitationRegistration
+      security: []
+      tags:
+        - authentication
+      responses:
+        "200":
+          description: Successful operation
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationRegistrationCompleted"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "409":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RetryableErrorResponse"
+        "503":
+          $ref: "#/components/responses/RetryableErrorResponse"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationCompleteRequest"
   /auth/login:
     post:
       operationId: login
@@ -521,51 +848,970 @@ components:
           type: string
           description: Base64-encoded PNG bytes, without a data URL prefix.
         expiresAt: {$ref: '#/components/schemas/SafeTimestamp'}
-    RegisterRequest:
+    Uuid:
+      type: string
+      pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+    NullableUuid:
+      type:
+        - string
+        - "null"
+      pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+    JoinReviewRequest:
       type: object
       additionalProperties: false
-      required: [email, nickname, password]
-      properties:
-        email: {$ref: '#/components/schemas/Email'}
-        nickname: {$ref: '#/components/schemas/Nickname'}
-        password: {$ref: '#/components/schemas/Password'}
-        captcha: {$ref: '#/components/schemas/CaptchaSubmission'}
-    RegistrationRef:
+    JoinApplicationRequest:
+      description: "Only multipart: exactly one application/json part (application.json, at most 64 KiB), optional proofs. Unknown parts, duplicate application, truncation and forged markers are rejected; application and all bytes commit atomically."
+      oneOf:
+        - $ref: "#/components/schemas/JoinNewApplicationRequest"
+        - $ref: "#/components/schemas/JoinExperiencedApplicationRequest"
+    JoinApplicationQq:
+      type: string
+      pattern: ^[0-9]{5,13}$
+      description: New application QQ; preserve leading zeroes. Account and legacy summary QQ retain 1?20 digits.
+    JoinNewAnswers:
       type: object
       additionalProperties: false
-      required: [registrationId]
+      required:
+        - fiveMExperience
+        - emergencyRoleplayKnowledge
+        - emergencyProceduresKnowledge
+        - rpUnderstanding
+        - frpUnderstanding
       properties:
-        registrationId: {$ref: '#/components/schemas/OpaqueIdentifier'}
-    VerifyRegistrationRequest:
+        fiveMExperience:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        emergencyRoleplayKnowledge:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        emergencyProceduresKnowledge:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        rpUnderstanding:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        frpUnderstanding:
+          type: string
+          minLength: 1
+          maxLength: 4000
+    JoinExperiencedAnswers:
       type: object
       additionalProperties: false
-      required: [registrationId, code]
+      required:
+        - previousServer
+        - leaveReason
+        - previousDepartment
+        - lawEnforcementExperience
+        - highestRank
+        - punishmentHistory
+        - deescalationEssay
+        - discretionEssay
+        - transferReason
       properties:
-        registrationId: {$ref: '#/components/schemas/OpaqueIdentifier'}
-        code: {$ref: '#/components/schemas/VerificationCode'}
-    RegistrationChallenge:
+        previousServer:
+          type: string
+          minLength: 1
+          maxLength: 256
+        leaveReason:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        previousDepartment:
+          type: string
+          minLength: 1
+          maxLength: 256
+        lawEnforcementExperience:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        highestRank:
+          type: string
+          minLength: 1
+          maxLength: 256
+        punishmentHistory:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        deescalationEssay:
+          type: string
+          minLength: 150
+          maxLength: 4000
+        discretionEssay:
+          type: string
+          minLength: 150
+          maxLength: 4000
+        transferReason:
+          type: string
+          minLength: 1
+          maxLength: 4000
+    JoinNewCommitments:
       type: object
       additionalProperties: false
-      required: [registrationId, email, serverTime, codeExpiresAt, resendAvailableAt]
+      required:
+        - informationAccurate
+        - obeyCommunityRules
+        - acceptAcademyAttendanceConsequences
       properties:
-        registrationId: {$ref: '#/components/schemas/OpaqueIdentifier'}
-        email: {$ref: '#/components/schemas/Email'}
-        serverTime: {$ref: '#/components/schemas/SafeTimestamp'}
-        codeExpiresAt: {$ref: '#/components/schemas/SafeTimestamp'}
-        resendAvailableAt: {$ref: '#/components/schemas/SafeTimestamp'}
-    RegistrationVerified:
+        informationAccurate:
+          type: boolean
+          const: true
+        obeyCommunityRules:
+          type: boolean
+          const: true
+        acceptAcademyAttendanceConsequences:
+          type: boolean
+          const: true
+    JoinExperiencedCommitments:
       type: object
       additionalProperties: false
-      required: [status, email]
+      required:
+        - informationAccurate
       properties:
-        status: {type: string, const: registered}
-        email: {$ref: '#/components/schemas/Email'}
-    RegistrationCancelled:
+        informationAccurate:
+          type: boolean
+          const: true
+    JoinNewForm:
       type: object
       additionalProperties: false
-      required: [status]
+      required:
+        - applicationType
+        - birthDate
+        - applicantCategory
+        - department
+        - freeTime
+        - discoveryChannels
+        - answers
+        - commitments
       properties:
-        status: {type: string, const: cancelled}
+        applicationType:
+          type: string
+          const: new
+        birthDate: &a1
+          type: string
+          pattern: ^[0-9]{4}-[0-9]{2}-[0-9]{2}$
+          description: Valid Gregorian YYYY-MM-DD date no later than server UTC today; never a timestamp.
+        applicantCategory: &a2
+          type: string
+          enum:
+            - "100"
+            - "101"
+            - 102a
+            - 102b
+        department: &a3
+          type: string
+          enum:
+            - leo
+            - ems
+        freeTime: &a4
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: Selected option or actual free text; trim before Unicode code point counting.
+        discoveryChannels: &a5
+          type: array
+          minItems: 1
+          maxItems: 4
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - bilibili
+              - douyin
+              - friends
+              - other
+        answers:
+          $ref: "#/components/schemas/JoinNewAnswers"
+        commitments:
+          $ref: "#/components/schemas/JoinNewCommitments"
+      description: Answer and freeTime strings are trimmed then counted as Unicode code points. The server independently checks calendar and text semantics.
+    JoinNewApplicationPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - nickname
+        - qq
+        - form
+      properties:
+        email:
+          $ref: "#/components/schemas/Email"
+        nickname:
+          $ref: "#/components/schemas/Nickname"
+        qq:
+          $ref: "#/components/schemas/JoinApplicationQq"
+        form:
+          $ref: "#/components/schemas/JoinNewForm"
+    JoinNewApplicationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - application
+      properties:
+        application:
+          $ref: "#/components/schemas/JoinNewApplicationPayload"
+        proofs:
+          type: array
+          maxItems: 0
+          items:
+            type: string
+            format: binary
+          description: Repeated same-name parts; private raw files must pair one-to-one with validated body markers.
+    JoinExperiencedForm:
+      type: object
+      additionalProperties: false
+      required:
+        - applicationType
+        - birthDate
+        - applicantCategory
+        - department
+        - freeTime
+        - discoveryChannels
+        - answers
+        - commitments
+      properties:
+        applicationType:
+          type: string
+          const: experienced
+        birthDate: *a1
+        applicantCategory: *a2
+        department: *a3
+        freeTime: *a4
+        discoveryChannels: *a5
+        answers:
+          $ref: "#/components/schemas/JoinExperiencedAnswers"
+        commitments:
+          $ref: "#/components/schemas/JoinExperiencedCommitments"
+      description: Answer and freeTime strings are trimmed then counted as Unicode code points. The server independently checks calendar and text semantics.
+    JoinExperiencedApplicationPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - nickname
+        - qq
+        - form
+      properties:
+        email:
+          $ref: "#/components/schemas/Email"
+        nickname:
+          $ref: "#/components/schemas/Nickname"
+        qq:
+          $ref: "#/components/schemas/JoinApplicationQq"
+        form:
+          $ref: "#/components/schemas/JoinExperiencedForm"
+    JoinExperiencedApplicationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - application
+      properties:
+        application:
+          $ref: "#/components/schemas/JoinExperiencedApplicationPayload"
+        proofs:
+          type: array
+          maxItems: 5
+          items:
+            type: string
+            format: binary
+          description: Repeated same-name parts; private raw files must pair one-to-one with validated body markers.
+    JoinApplicationPayload:
+      oneOf:
+        - $ref: "#/components/schemas/JoinNewApplicationPayload"
+        - $ref: "#/components/schemas/JoinExperiencedApplicationPayload"
+    JoinApplicationQueryRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+      properties:
+        email:
+          $ref: "#/components/schemas/Email"
+    JoinApplicationResult:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            - status
+            - nextAction
+          properties:
+            status:
+              type: string
+              const: not_found
+            nextAction:
+              type: string
+              const: apply
+        - type: object
+          additionalProperties: false
+          required:
+            - status
+            - nextAction
+          properties:
+            status:
+              type: string
+              const: pending
+            nextAction:
+              type: string
+              const: wait
+        - type: object
+          additionalProperties: false
+          required:
+            - status
+            - nextAction
+          properties:
+            status:
+              type: string
+              const: approved
+            nextAction:
+              type: string
+              const: register
+        - type: object
+          additionalProperties: false
+          required:
+            - status
+            - nextAction
+          properties:
+            status:
+              type: string
+              const: rejected
+            nextAction:
+              type: string
+              const: contact_community
+        - type: object
+          additionalProperties: false
+          required:
+            - status
+            - nextAction
+          properties:
+            status:
+              type: string
+              const: invitation_expired
+            nextAction:
+              type: string
+              const: contact_community
+        - type: object
+          additionalProperties: false
+          required:
+            - status
+            - nextAction
+          properties:
+            status:
+              type: string
+              const: registered
+            nextAction:
+              type: string
+              const: login
+    JoinApplicationAttachment:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - originalName
+        - extension
+        - byteLength
+        - sha256
+        - ordinal
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        originalName:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: ^[^\\/\u0000-\u001F\u007F-\u009F]+$
+          description: Safe basename; reject path separators, controls, dot directory names and header injection characters.
+        extension:
+          type: string
+          enum:
+            - png
+            - jpg
+            - jpeg
+            - gif
+            - bmp
+            - svg
+            - pdf
+            - doc
+            - docx
+            - xls
+            - xlsx
+            - ppt
+            - pptx
+            - txt
+            - zip
+            - rar
+            - 7z
+        byteLength:
+          type: integer
+          minimum: 1
+          maximum: 10485760
+        sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        ordinal:
+          type: integer
+          minimum: 0
+          maximum: 4
+    JoinNewApplicationSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - email
+        - nickname
+        - qq
+        - status
+        - createdAt
+        - reviewedAt
+        - reviewedByUserId
+        - invitationStatus
+        - deliveryStatus
+        - applicationType
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        email:
+          $ref: "#/components/schemas/Email"
+        nickname:
+          $ref: "#/components/schemas/Nickname"
+        qq:
+          type: string
+          pattern: ^[0-9]{1,20}$
+        status:
+          type: string
+          enum:
+            - pending
+            - approved
+            - rejected
+        createdAt:
+          $ref: "#/components/schemas/SafeTimestamp"
+        reviewedAt:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+          maximum: 9007199254740991
+        reviewedByUserId:
+          $ref: "#/components/schemas/NullableUuid"
+        invitationStatus:
+          type:
+            - string
+            - "null"
+          enum:
+            - active
+            - expired
+            - completed
+            - null
+        deliveryStatus:
+          type:
+            - string
+            - "null"
+          enum:
+            - pending
+            - sent
+            - failed
+            - null
+        applicationType:
+          type: string
+          const: new
+    JoinNewApplicationDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - application
+        - invitation
+        - serverTime
+        - formVersion
+        - form
+        - attachments
+      properties:
+        application:
+          $ref: "#/components/schemas/JoinNewApplicationSummary"
+        invitation:
+          anyOf:
+            - $ref: "#/components/schemas/InvitationSummary"
+            - type: "null"
+        serverTime:
+          $ref: "#/components/schemas/SafeTimestamp"
+        formVersion:
+          type: integer
+          const: 1
+        form:
+          $ref: "#/components/schemas/JoinNewForm"
+        attachments:
+          type: array
+          maxItems: 0
+          items:
+            $ref: "#/components/schemas/JoinApplicationAttachment"
+    JoinExperiencedApplicationSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - email
+        - nickname
+        - qq
+        - status
+        - createdAt
+        - reviewedAt
+        - reviewedByUserId
+        - invitationStatus
+        - deliveryStatus
+        - applicationType
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        email:
+          $ref: "#/components/schemas/Email"
+        nickname:
+          $ref: "#/components/schemas/Nickname"
+        qq:
+          type: string
+          pattern: ^[0-9]{1,20}$
+        status:
+          type: string
+          enum:
+            - pending
+            - approved
+            - rejected
+        createdAt:
+          $ref: "#/components/schemas/SafeTimestamp"
+        reviewedAt:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+          maximum: 9007199254740991
+        reviewedByUserId:
+          $ref: "#/components/schemas/NullableUuid"
+        invitationStatus:
+          type:
+            - string
+            - "null"
+          enum:
+            - active
+            - expired
+            - completed
+            - null
+        deliveryStatus:
+          type:
+            - string
+            - "null"
+          enum:
+            - pending
+            - sent
+            - failed
+            - null
+        applicationType:
+          type: string
+          const: experienced
+    JoinExperiencedApplicationDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - application
+        - invitation
+        - serverTime
+        - formVersion
+        - form
+        - attachments
+      properties:
+        application:
+          $ref: "#/components/schemas/JoinExperiencedApplicationSummary"
+        invitation:
+          anyOf:
+            - $ref: "#/components/schemas/InvitationSummary"
+            - type: "null"
+        serverTime:
+          $ref: "#/components/schemas/SafeTimestamp"
+        formVersion:
+          type: integer
+          const: 1
+        form:
+          $ref: "#/components/schemas/JoinExperiencedForm"
+        attachments:
+          type: array
+          maxItems: 5
+          items:
+            $ref: "#/components/schemas/JoinApplicationAttachment"
+    JoinLegacyApplicationSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - email
+        - nickname
+        - qq
+        - status
+        - createdAt
+        - reviewedAt
+        - reviewedByUserId
+        - invitationStatus
+        - deliveryStatus
+        - applicationType
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        email:
+          $ref: "#/components/schemas/Email"
+        nickname:
+          $ref: "#/components/schemas/Nickname"
+        qq:
+          type: string
+          pattern: ^[0-9]{1,20}$
+        status:
+          type: string
+          enum:
+            - pending
+            - approved
+            - rejected
+        createdAt:
+          $ref: "#/components/schemas/SafeTimestamp"
+        reviewedAt:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+          maximum: 9007199254740991
+        reviewedByUserId:
+          $ref: "#/components/schemas/NullableUuid"
+        invitationStatus:
+          type:
+            - string
+            - "null"
+          enum:
+            - active
+            - expired
+            - completed
+            - null
+        deliveryStatus:
+          type:
+            - string
+            - "null"
+          enum:
+            - pending
+            - sent
+            - failed
+            - null
+        applicationType:
+          type: string
+          const: legacy
+    JoinLegacyApplicationDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - application
+        - invitation
+        - serverTime
+        - formVersion
+        - form
+        - attachments
+      properties:
+        application:
+          $ref: "#/components/schemas/JoinLegacyApplicationSummary"
+        invitation:
+          anyOf:
+            - $ref: "#/components/schemas/InvitationSummary"
+            - type: "null"
+        serverTime:
+          $ref: "#/components/schemas/SafeTimestamp"
+        formVersion:
+          type: integer
+          const: 0
+        form:
+          type: "null"
+        attachments:
+          type: array
+          maxItems: 0
+          items:
+            $ref: "#/components/schemas/JoinApplicationAttachment"
+    JoinApplicationReceived:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          const: received
+    InvitationEligibilityRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+      properties:
+        email:
+          $ref: "#/components/schemas/Email"
+    InvitationCodeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+      properties:
+        email:
+          $ref: "#/components/schemas/Email"
+    InvitationEligibility:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - email
+        - serverTime
+        - resendAvailableAt
+      properties:
+        status:
+          type: string
+          const: eligible
+        email:
+          $ref: "#/components/schemas/Email"
+        serverTime:
+          $ref: "#/components/schemas/SafeTimestamp"
+        resendAvailableAt:
+          $ref: "#/components/schemas/SafeTimestamp"
+    InvitationCodeAccepted:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - serverTime
+        - resendAvailableAt
+      properties:
+        status:
+          type: string
+          const: accepted
+        serverTime:
+          $ref: "#/components/schemas/SafeTimestamp"
+        resendAvailableAt:
+          $ref: "#/components/schemas/SafeTimestamp"
+    InvitationVerifyRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - code
+      properties:
+        email:
+          $ref: "#/components/schemas/Email"
+        code:
+          $ref: "#/components/schemas/VerificationCode"
+    InvitationVerified:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - completionToken
+        - email
+        - nickname
+        - serverTime
+        - completionExpiresAt
+      properties:
+        status:
+          type: string
+          const: verified
+        completionToken:
+          $ref: "#/components/schemas/OpaqueIdentifier"
+        email:
+          $ref: "#/components/schemas/Email"
+        nickname:
+          $ref: "#/components/schemas/Nickname"
+        serverTime:
+          $ref: "#/components/schemas/SafeTimestamp"
+        completionExpiresAt:
+          $ref: "#/components/schemas/SafeTimestamp"
+    InvitationCompleteRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - completionToken
+        - nickname
+        - password
+      properties:
+        completionToken:
+          $ref: "#/components/schemas/OpaqueIdentifier"
+        nickname:
+          $ref: "#/components/schemas/Nickname"
+        password:
+          $ref: "#/components/schemas/Password"
+    InvitationRegistrationCompleted:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - email
+      properties:
+        status:
+          type: string
+          const: registered
+        email:
+          $ref: "#/components/schemas/Email"
+    JoinApplicationSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - email
+        - nickname
+        - qq
+        - status
+        - createdAt
+        - reviewedAt
+        - reviewedByUserId
+        - invitationStatus
+        - deliveryStatus
+        - applicationType
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        email:
+          $ref: "#/components/schemas/Email"
+        nickname:
+          $ref: "#/components/schemas/Nickname"
+        qq:
+          type: string
+          pattern: ^[0-9]{1,20}$
+        status:
+          type: string
+          enum:
+            - pending
+            - approved
+            - rejected
+        createdAt:
+          $ref: "#/components/schemas/SafeTimestamp"
+        reviewedAt:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+          maximum: 9007199254740991
+        reviewedByUserId:
+          $ref: "#/components/schemas/NullableUuid"
+        invitationStatus:
+          type:
+            - string
+            - "null"
+          enum:
+            - active
+            - expired
+            - completed
+            - null
+        deliveryStatus:
+          type:
+            - string
+            - "null"
+          enum:
+            - pending
+            - sent
+            - failed
+            - null
+        applicationType:
+          type: string
+          enum:
+            - new
+            - experienced
+            - legacy
+    InvitationDeliverySummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - status
+        - startedAt
+        - finishedAt
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        status:
+          type: string
+          enum:
+            - pending
+            - sent
+            - failed
+        startedAt:
+          $ref: "#/components/schemas/SafeTimestamp"
+        finishedAt:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+          maximum: 9007199254740991
+    InvitationSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - status
+        - issuedAt
+        - expiresAt
+        - codeExpiresAt
+        - completedAt
+        - completedUserId
+        - resendAvailableAt
+        - latestDelivery
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        status:
+          type: string
+          enum:
+            - active
+            - expired
+            - completed
+        issuedAt:
+          $ref: "#/components/schemas/SafeTimestamp"
+        expiresAt:
+          $ref: "#/components/schemas/SafeTimestamp"
+        codeExpiresAt:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+          maximum: 9007199254740991
+        completedAt:
+          type:
+            - integer
+            - "null"
+          minimum: 0
+          maximum: 9007199254740991
+        completedUserId:
+          $ref: "#/components/schemas/NullableUuid"
+        resendAvailableAt:
+          $ref: "#/components/schemas/SafeTimestamp"
+        latestDelivery:
+          anyOf:
+            - $ref: "#/components/schemas/InvitationDeliverySummary"
+            - type: "null"
+    JoinApplicationDetail:
+      description: Strict type/version/form/attachment pairing. Legacy is version 0, null form, no attachments. Corrupted version 1 records are never downgraded.
+      oneOf:
+        - $ref: "#/components/schemas/JoinNewApplicationDetail"
+        - $ref: "#/components/schemas/JoinExperiencedApplicationDetail"
+        - $ref: "#/components/schemas/JoinLegacyApplicationDetail"
+    JoinApplicationList:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - total
+        - offset
+        - limit
+        - serverTime
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/JoinApplicationSummary"
+        total:
+          $ref: "#/components/schemas/SafeTimestamp"
+        offset:
+          $ref: "#/components/schemas/SafeTimestamp"
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 50
+        serverTime:
+          $ref: "#/components/schemas/SafeTimestamp"
     LoginRequest:
       type: object
       additionalProperties: false

@@ -21,16 +21,11 @@ afterEach(cleanup)
 
 function renderForm(overrides: Partial<AuthFormProps> = {}, ref?: Ref<AuthFormHandle>) {
   const props: AuthFormProps = {
-    mode: 'register',
     step: 'credentials',
     busy: false,
     onContinueLogin: vi.fn(),
-    onContinueRegistration: vi.fn(),
     onCaptchaSubmit: vi.fn(),
-    onVerify: vi.fn(),
-    onResend: vi.fn(),
-    onSwitchMode: vi.fn(),
-    onContinueToLogin: vi.fn(),
+    onJoin: vi.fn(),
     ...overrides,
   }
   return { props, ...render(<AuthForm {...props} ref={ref} />) }
@@ -39,7 +34,7 @@ function renderForm(overrides: Partial<AuthFormProps> = {}, ref?: Ref<AuthFormHa
 describe('AuthForm', () => {
   it('shows the placeholder captcha step and allows an empty answer', async () => {
     const user = userEvent.setup()
-    const { props, container } = renderForm({ mode: 'login', step: 'captcha' })
+    const { props, container } = renderForm({ step: 'captcha' })
     expect(screen.getByRole('heading', { name: '输入验证码' })).toBeTruthy()
     expect(container.querySelector('.ex-glass')).toBeTruthy()
     const image = screen.getByRole('img', { name: '验证码图片占位区域' })
@@ -51,20 +46,20 @@ describe('AuthForm', () => {
     expect(screen.queryByRole('button', { name: '返回修改资料' })).toBeNull()
   })
 
-  it('reserves disabled provider buttons and preserves email when switching to registration', async () => {
+  it('reserves disabled provider buttons and routes the join action through its callback', async () => {
     const user = userEvent.setup()
-    const { props } = renderForm({ mode: 'login' })
+    const { props } = renderForm({})
     expect((screen.getByRole('button', { name: 'Google 登录' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: 'QQ 登录' }) as HTMLButtonElement).disabled).toBe(true)
     await user.type(screen.getByLabelText('邮箱'), 'member@example.com')
-    await user.click(screen.getByRole('button', { name: '注册' }))
-    expect(props.onSwitchMode).toHaveBeenCalledWith('register', 'member@example.com')
+    await user.click(screen.getByRole('button', { name: '加入我们' }))
+    expect(props.onJoin).toHaveBeenCalledOnce()
     expect(props.onContinueLogin).not.toHaveBeenCalled()
   })
 
   it('validates login credentials and submits through the existing callback', async () => {
     const user = userEvent.setup()
-    const { props } = renderForm({ mode: 'login' })
+    const { props } = renderForm({})
     await user.click(screen.getByRole('button', { name: '继续' }))
     expect(await screen.findByText('请输入有效的邮箱地址')).toBeTruthy()
     expect(props.onContinueLogin).not.toHaveBeenCalled()
@@ -74,19 +69,14 @@ describe('AuthForm', () => {
     expect(props.onContinueLogin).toHaveBeenCalledWith({ email: 'member@example.com', password: 'password-one' })
   })
 
-  it('focuses the first field and then the verification code input', () => {
-    const rendered = renderForm()
-    const email = screen.getByRole('textbox', { name: '邮箱' })
-    expect(screen.getAllByRole('textbox')[0]).toBe(email)
-    expect(document.activeElement).toBe(email)
-
-    rendered.rerender(<AuthForm {...rendered.props} step="verify" targetEmail="member@example.com" />)
-    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: '6 位验证码' }))
+  it('focuses the email input', () => {
+    renderForm()
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: '邮箱' }))
   })
 
   it('shows server login errors and disables submission while busy', () => {
     const formRef = createRef<AuthFormHandle>()
-    const rendered = renderForm({ mode: 'login' }, formRef)
+    const rendered = renderForm({}, formRef)
     act(() => formRef.current?.setServerErrors({ password: '密码错误', form: '登录失败' }))
     expect(screen.getByText('密码错误')).toBeTruthy()
     expect(screen.getByText('登录失败').closest('[role="alert"]')).toBeTruthy()
@@ -98,7 +88,7 @@ describe('AuthForm', () => {
   it('clears a server field error when the next login attempt begins', async () => {
     const user = userEvent.setup()
     const formRef = createRef<AuthFormHandle>()
-    const rendered = renderForm({ mode: 'login' }, formRef)
+    const rendered = renderForm({}, formRef)
     act(() => formRef.current?.setServerErrors({ email: '邮箱暂时不可用' }))
     expect(screen.getByText('邮箱暂时不可用')).toBeTruthy()
 
@@ -114,7 +104,7 @@ describe('AuthForm', () => {
   it('keeps a service error in React Hook Form after asynchronous login completes', async () => {
     const user = userEvent.setup()
     const formRef = createRef<AuthFormHandle>()
-    renderForm({ mode: 'login', onContinueLogin: () => {
+    renderForm({ onContinueLogin: () => {
       formRef.current?.setServerErrors({ form: '登录服务暂时不可用' })
     } }, formRef)
 
@@ -126,52 +116,4 @@ describe('AuthForm', () => {
     expect((screen.getByRole('button', { name: '继续' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('registers with a display username, email and one password', async () => {
-    const user = userEvent.setup()
-    const { props } = renderForm()
-
-    await user.type(screen.getByLabelText('邮箱'), 'member@example.com')
-    expect(screen.queryByLabelText('QQ 号')).toBeNull()
-    expect(screen.queryByLabelText('确认密码')).toBeNull()
-    await user.type(screen.getByLabelText('用户名'), '成员')
-    await user.type(screen.getByLabelText('密码'), 'password-one')
-    await user.click(screen.getByRole('button', { name: '继续' }))
-
-    expect(props.onContinueRegistration).toHaveBeenCalledWith({ email: 'member@example.com', nickname: '成员', password: 'password-one' })
-  })
-
-  it('submits a complete OTP once and requires an explicit retry for the same value', async () => {
-    const user = userEvent.setup()
-    const onVerify = vi.fn()
-    const formRef = createRef<AuthFormHandle>()
-    const rendered = renderForm({
-      mode: 'register',
-      step: 'verify',
-      targetEmail: 'member@example.com',
-      onVerify,
-    }, formRef)
-
-    await user.type(screen.getByRole('textbox', { name: '6 位验证码' }), '123456')
-    expect(onVerify).toHaveBeenCalledTimes(1)
-    expect(onVerify).toHaveBeenLastCalledWith('123456')
-
-    act(() => formRef.current?.setServerErrors({ code: '验证码错误，请重新输入' }))
-    rendered.rerender(<AuthForm {...rendered.props} ref={formRef} canRetryVerification />)
-    expect(onVerify).toHaveBeenCalledTimes(1)
-
-    await user.click(screen.getByRole('button', { name: '重试验证' }))
-    expect(onVerify).toHaveBeenCalledTimes(2)
-  })
-
-  it('rejects a blank display username and a short password without sending a request', async () => {
-    const user = userEvent.setup()
-    const { props } = renderForm()
-    await user.type(screen.getByLabelText('用户名'), '   ')
-    await user.type(screen.getByLabelText('邮箱'), 'member@example.com')
-    await user.type(screen.getByLabelText('密码'), 'short')
-    await user.click(screen.getByRole('button', { name: '继续' }))
-    expect(await screen.findByText('用户名必须为 1 至 32 个字符，且不能包含控制字符')).toBeTruthy()
-    expect(screen.getByText('密码必须为 8 至 64 个字符')).toBeTruthy()
-    expect(props.onContinueRegistration).not.toHaveBeenCalled()
-  })
 })

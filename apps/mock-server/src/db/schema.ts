@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { blob, check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 export const authUsers = sqliteTable(
   'auth_users',
@@ -15,35 +15,6 @@ export const authUsers = sqliteTable(
   },
   (table) => [uniqueIndex('auth_users_avatar_key_unique').on(table.avatarKey)],
 )
-
-export const authRegistrations = sqliteTable(
-  'auth_registrations',
-  {
-    idHash: text('id_hash').primaryKey(),
-    email: text('email').notNull(),
-    nickname: text('nickname'),
-    passwordHash: text('password_hash'),
-    codeDigest: text('code_digest'),
-    status: text('status').notNull(),
-    failedAttempts: integer('failed_attempts').notNull().default(0),
-    lastSentAt: integer('last_sent_at').notNull(),
-    codeExpiresAt: integer('code_expires_at').notNull(),
-    retainUntil: integer('retain_until').notNull(),
-    completedUserId: text('completed_user_id').references(() => authUsers.id),
-    completedAt: integer('completed_at'),
-  },
-  (table) => [
-    check('auth_registrations_status_check', sql`${table.status} in ('pending', 'completed', 'cancelled', 'expired')`),
-    check('auth_registrations_failed_attempts_check', sql`${table.failedAttempts} between 0 and 5`),
-    index('auth_registrations_email_idx').on(table.email),
-    index('auth_registrations_retain_until_idx').on(table.retainUntil),
-  ],
-)
-
-export const authEmailDelivery = sqliteTable('auth_email_delivery', {
-  email: text('email').primaryKey(),
-  nextSendAt: integer('next_send_at').notNull(),
-})
 
 export const authSessions = sqliteTable(
   'auth_sessions',
@@ -89,3 +60,62 @@ export const communityGroupMemberships = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.userId, table.groupCode] })],
 )
+
+export const joinApplications = sqliteTable('join_applications', {
+  id: text('id').primaryKey(), email: text('email').notNull(), nickname: text('nickname').notNull(), qq: text('qq').notNull(),
+  status: text('status').notNull(), createdAt: integer('created_at').notNull(), reviewedAt: integer('reviewed_at'),
+  reviewedByUserId: text('reviewed_by_user_id').references(() => authUsers.id),
+  formVersion: integer('form_version').notNull().default(0),
+}, table => [
+  check('join_applications_form_version_check', sql`${table.formVersion} in (0, 1)`),
+  check('join_applications_status_check', sql`${table.status} in ('pending', 'approved', 'rejected')`),
+  check('join_applications_review_check', sql`(${table.status} = 'pending' and ${table.reviewedAt} is null) or (${table.status} <> 'pending' and ${table.reviewedAt} is not null)`),
+  uniqueIndex('join_applications_open_email_unique').on(table.email).where(sql`${table.status} in ('pending', 'approved')`),
+  index('join_applications_list_idx').on(table.status, table.createdAt, table.id),
+  index('join_applications_email_history_idx').on(table.email, table.createdAt, table.id),
+])
+export const joinApplicationEmailRegistry = sqliteTable('join_application_email_registry', {
+  email: text('email').primaryKey().notNull(),
+  canonicalApplicationId: text('canonical_application_id').notNull().references(() => joinApplications.id, { onDelete: 'restrict', onUpdate: 'restrict' }),
+})
+export const joinApplicationForms = sqliteTable('join_application_forms', {
+  applicationId: text('application_id').primaryKey().notNull().references(() => joinApplications.id, { onDelete: 'restrict', onUpdate: 'restrict' }),
+  version: integer('version').notNull(), applicationType: text('application_type').notNull(), formJson: text('form_json').notNull(),
+}, table => [check('join_application_forms_version_check', sql`${table.version} = 1`),
+  check('join_application_forms_type_check', sql`${table.applicationType} in ('new', 'experienced')`)])
+export const joinApplicationAttachments = sqliteTable('join_application_attachments', {
+  id: text('id').primaryKey().notNull(),
+  applicationId: text('application_id').notNull().references(() => joinApplications.id, { onDelete: 'restrict', onUpdate: 'restrict' }),
+  ordinal: integer('ordinal').notNull(), originalName: text('original_name').notNull(), extension: text('extension').notNull(),
+  sha256: text('sha256').notNull(), byteLength: integer('byte_length').notNull(), bytes: blob('bytes', { mode: 'buffer' }).notNull(),
+}, table => [uniqueIndex('join_application_attachments_ordinal_unique').on(table.applicationId, table.ordinal),
+  check('join_application_attachments_ordinal_check', sql`${table.ordinal} between 0 and 4`),
+  check('join_application_attachments_length_check', sql`${table.byteLength} between 1 and 10485760 and ${table.byteLength} = length(${table.bytes})`),
+  check('join_application_attachments_sha256_check', sql`length(${table.sha256}) = 64 and ${table.sha256} not glob '*[^0-9a-f]*'`)])
+export const joinInvitations = sqliteTable('join_invitations', {
+  id: text('id').primaryKey(), applicationId: text('application_id').notNull().references(() => joinApplications.id),
+  status: text('status').notNull(), issuedAt: integer('issued_at').notNull(), expiresAt: integer('expires_at').notNull(),
+  codeVersion: integer('code_version').notNull(), codeDigest: text('code_digest'), codeExpiresAt: integer('code_expires_at'),
+  completionTokenHash: text('completion_token_hash'), completionExpiresAt: integer('completion_expires_at'),
+  completedUserId: text('completed_user_id').references(() => authUsers.id), completedAt: integer('completed_at'),
+}, table => [
+  check('join_invitations_status_check', sql`${table.status} in ('active', 'expired', 'completed')`),
+  check('join_invitations_version_check', sql`${table.codeVersion} >= 1`),
+  check('join_invitations_completion_check', sql`(${table.status} = 'completed' and ${table.completedUserId} is not null and ${table.completedAt} is not null) or (${table.status} <> 'completed' and ${table.completedUserId} is null and ${table.completedAt} is null)`),
+  uniqueIndex('join_invitations_active_application_unique').on(table.applicationId).where(sql`${table.status} = 'active'`),
+  uniqueIndex('join_invitations_completion_token_unique').on(table.completionTokenHash),
+  index('join_invitations_application_idx').on(table.applicationId, table.issuedAt, table.id),
+  index('join_invitations_expires_idx').on(table.expiresAt),
+])
+export const joinEmailControls = sqliteTable('join_email_controls', {
+  email: text('email').primaryKey(), nextSendAt: integer('next_send_at').notNull(),
+  failureWindowStartedAt: integer('failure_window_started_at'), failedAttempts: integer('failed_attempts').notNull().default(0),
+}, table => [check('join_email_controls_failures_check', sql`${table.failedAttempts} between 0 and 5`)])
+export const joinDeliveryAttempts = sqliteTable('join_delivery_attempts', {
+  id: text('id').primaryKey(), invitationId: text('invitation_id').notNull().references(() => joinInvitations.id),
+  codeVersion: integer('code_version').notNull(), startedAt: integer('started_at').notNull(), finishedAt: integer('finished_at'), status: text('status').notNull(),
+}, table => [
+  uniqueIndex('join_delivery_attempts_version_unique').on(table.invitationId, table.codeVersion),
+  check('join_delivery_attempts_status_check', sql`${table.status} in ('pending', 'sent', 'failed')`),
+  check('join_delivery_attempts_finished_check', sql`(${table.status} = 'pending' and ${table.finishedAt} is null) or (${table.status} <> 'pending' and ${table.finishedAt} is not null)`),
+])

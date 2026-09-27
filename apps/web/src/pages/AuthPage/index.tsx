@@ -1,12 +1,11 @@
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { Alert, AlertDescription, Button, Card } from '@exre/exui'
 import { ArrowLeftIcon } from 'lucide-react'
-import type { AuthMode } from '@workspace/components'
 import { AuthFlow } from '../../auth/AuthFlow'
 import { AuthBackdrop } from './AuthBackdrop'
 import styles from './AuthPage.module.scss'
 
-export function AuthPage({ mode }: { mode: AuthMode }) {
+export function AuthPage({ mode }: { mode: 'login' }) {
   const [searchParams] = useSearchParams()
   const location = useLocation()
   const values = searchParams.getAll('ssoRequestId')

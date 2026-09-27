@@ -1,0 +1,141 @@
+﻿// @vitest-environment jsdom
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router'
+import { JoinPage } from './index'
+import { ExMessage } from '@workspace/components'
+const post = vi.hoisted(() => vi.fn())
+vi.mock('../../api/client', () => ({ api: { POST: post } }))
+beforeEach(() => { vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }) })
+afterEach(() => { cleanup(); post.mockReset(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
+function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done }); return { promise, resolve } }
+function change(label: string | RegExp, value: string) { fireEvent.change(screen.getByLabelText(label), { target: { value } }) }
+async function fill(type: 'new' | 'experienced', file?: File, oversized = false) {
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('button', { name: type === 'new' ? '全新玩家申请' : '经验玩家申请' }))
+  change('邮箱', 'Member@example.com'); change(type === 'new' ? '你的名字' : 'IC 名字', '成员'); change('QQ 号码', '001234')
+  await user.click(screen.getByRole('button', { name: '下一步' }))
+  change('出生日期', '2000-01-01')
+  await user.selectOptions(screen.getByLabelText('申请人类型'), '100'); await user.selectOptions(screen.getByLabelText('申请部门'), 'leo')
+  await user.click(screen.getByRole('button', { name: '下一步' }))
+  for (const input of screen.getAllByRole('textbox')) fireEvent.change(input, { target: { value: oversized && input.tagName === 'TEXTAREA' ? '中'.repeat(4000) : '如实说明经历' } })
+  await user.click(screen.getByRole('button', { name: '下一步' }))
+  if (type === 'experienced') {
+    for (const input of screen.getAllByRole('textbox')) fireEvent.change(input, { target: { value: oversized ? '中'.repeat(4000) : '说明'.repeat(80) } })
+    if (file) await user.upload(screen.getByLabelText('证明文件（可选）'), file)
+    await user.click(screen.getByRole('button', { name: '下一步' }))
+  }
+  change('每周空闲时间', '每晚都有空'); await user.click(screen.getByRole('checkbox', { name: 'B站' }))
+  await user.click(screen.getByRole('button', { name: '下一步' }))
+  for (const checkbox of screen.getAllByRole('checkbox')) await user.click(checkbox)
+  return user
+}
+it('presents both types, query and instructions and clears closed drafts', async () => {
+  render(<MemoryRouter><JoinPage /></MemoryRouter>)
+  const user = userEvent.setup(), trigger = screen.getByRole('button', { name: '全新玩家申请' })
+  expect(screen.getByRole('link', { name: '查询申请结果' }).getAttribute('href')).toBe('/join/result')
+  expect(screen.getByRole('heading', { name: '申请须知' })).toBeTruthy()
+  await user.click(trigger); change('邮箱', 'draft@example.com')
+  await user.click(screen.getByRole('button', { name: '关闭申请' }))
+  expect(document.activeElement).toBe(trigger)
+  await user.click(screen.getByRole('button', { name: '经验玩家申请' }))
+  expect((screen.getByLabelText('邮箱') as HTMLInputElement).value).toBe('')
+  expect(post).not.toHaveBeenCalled()
+})
+it('submits a complete new payload only on confirmation and waits for server acknowledgement', async () => {
+  const next = deferred<{ data: { status: string } }>()
+  vi.spyOn(ExMessage, 'info').mockReturnValue('info'); post.mockReturnValue(next.promise)
+  render(<MemoryRouter><JoinPage /></MemoryRouter>)
+  const user = await fill('new')
+  expect(post).not.toHaveBeenCalled()
+  await user.click(screen.getByRole('button', { name: '提交申请' }))
+  expect(screen.queryByRole('heading', { name: '申请已收到' })).toBeNull()
+  expect((screen.getByRole('button', { name: '关闭申请' }) as HTMLButtonElement).disabled).toBe(true)
+  await user.keyboard('{Escape}')
+  expect(screen.getByRole('dialog')).toBeTruthy()
+  const [path, options] = post.mock.calls[0]!
+  expect(path).toBe('/join/applications')
+  expect(options.body.application.email).toBe('member@example.com')
+  expect(options.body.application.form).toMatchObject({ applicationType: 'new', birthDate: '2000-01-01', department: 'leo', commitments: { informationAccurate: true, obeyCommunityRules: true, acceptAcademyAttendanceConsequences: true } })
+  expect(options.body.proofs).toEqual([])
+  const parts = options.bodySerializer()
+  expect(Array.from(parts.keys())).toEqual(['application'])
+  expect(parts.get('application').name).toBe('application.json')
+  expect(parts.get('application').type).toBe('application/json')
+  expect(options.headers).toBeUndefined()
+  await act(async () => { next.resolve({ data: { status: 'received' } }) })
+  expect(await screen.findByRole('heading', { name: '申请已收到' })).toBeTruthy()
+  expect(within(screen.getByRole('dialog')).getByRole('link', { name: '查询申请结果' }).getAttribute('href')).toBe('/join/result')
+})
+it('retains experienced values and the same File on a failed submit and successful retry', async () => {
+  vi.spyOn(ExMessage, 'info').mockReturnValue('info')
+  post.mockRejectedValueOnce(new Error('SQL secret')).mockResolvedValueOnce({ data: { status: 'received' } })
+  render(<MemoryRouter><JoinPage /></MemoryRouter>)
+  const file = new File(['proof'], 'proof.txt', { type: 'text/plain' }), user = await fill('experienced', file)
+  await user.click(screen.getByRole('button', { name: '提交申请' }))
+  expect(await screen.findByText('提交失败，请检查网络并重试')).toBeTruthy()
+  expect(screen.queryByRole('heading', { name: '申请已收到' })).toBeNull()
+  expect(screen.queryByText('SQL secret')).toBeNull()
+  await user.click(screen.getByRole('button', { name: '提交申请' }))
+  expect(await screen.findByRole('heading', { name: '申请已收到' })).toBeTruthy()
+  const first = post.mock.calls[0]![1], second = post.mock.calls[1]![1]
+  expect(second.body).toEqual(first.body)
+  expect(second.body.proofs).toEqual(['binary'])
+  const retained = second.bodySerializer().get('proofs') as File
+  expect(retained.name).toBe(file.name)
+  expect(retained.size).toBe(file.size)
+  const contents = await new Promise<string>(resolve => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.readAsText(retained) })
+  expect(contents).toBe('proof')
+  expect(Array.from(second.bodySerializer().keys())).toEqual(['application', 'proofs'])
+})
+it.each([['JOIN_APPLICATION_EXISTS', '该邮箱已有申请，不能重复提交', '查询已有申请结果', '/join/result'], ['EMAIL_IN_USE', '该邮箱已有正式账号，请前往登录', '前往登录', '/login']])('handles %s as a conflict without claiming receipt', async (code, message, link, href) => {
+  post.mockResolvedValue({ error: { error: { code, message: 'safe' } }, response: new Response(null, { status: 409 }) })
+  render(<MemoryRouter><JoinPage /></MemoryRouter>)
+  const user = await fill('new')
+  await user.click(screen.getByRole('button', { name: '提交申请' }))
+  expect(await screen.findByText(message)).toBeTruthy()
+  expect(screen.getByRole('link', { name: link }).getAttribute('href')).toBe(href)
+  expect((screen.getByLabelText('邮箱') as HTMLInputElement).value).toBe('Member@example.com')
+  expect(screen.queryByRole('heading', { name: '申请已收到' })).toBeNull()
+})
+it.each([false, true])('keeps oversized text and files editable before any request (proof=%s)', async withProof => {
+  vi.spyOn(ExMessage, 'info').mockReturnValue('info')
+  post.mockResolvedValue({ data: { status: 'received' } })
+  render(<MemoryRouter><JoinPage /></MemoryRouter>)
+  const file = withProof ? new File(['retained proof'], 'retained.txt', { type: 'text/plain' }) : undefined
+  const user = await fill('experienced', file, true)
+  await user.click(screen.getByRole('button', { name: '提交申请' }))
+  expect(await screen.findByText('申请文字资料总量超出限制，请缩短较长的回答后重试')).toBeTruthy()
+  expect(post).not.toHaveBeenCalled()
+  expect(screen.queryByRole('heading', { name: '申请已收到' })).toBeNull()
+  await user.click(screen.getByRole('button', { name: '返回修改' }))
+  await user.click(screen.getByRole('button', { name: '上一步' }))
+  expect((screen.getByLabelText('是否需要遵循“武力降级”原则？如果是，为什么？') as HTMLTextAreaElement).value).toBe('中'.repeat(4000))
+  if (withProof) expect(screen.getByRole('button', { name: '移除 retained.txt' })).toBeTruthy()
+  for (const input of screen.getAllByRole('textbox')) fireEvent.change(input, { target: { value: '说明'.repeat(80) } })
+  await user.click(screen.getByRole('button', { name: '上一步' }))
+  for (const input of screen.getAllByRole('textbox')) fireEvent.change(input, { target: { value: '如实说明经历' } })
+  await user.click(screen.getByRole('button', { name: '下一步' }))
+  await user.click(screen.getByRole('button', { name: '下一步' }))
+  await user.click(screen.getByRole('button', { name: '下一步' }))
+  await user.click(screen.getByRole('button', { name: '提交申请' }))
+  expect(await screen.findByRole('heading', { name: '申请已收到' })).toBeTruthy()
+  expect(post).toHaveBeenCalledTimes(1)
+  if (withProof) {
+    const retained = post.mock.calls[0]![1].bodySerializer().get('proofs') as File
+    expect(retained.name).toBe('retained.txt')
+    const contents = await new Promise<string>(resolve => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.readAsText(retained) })
+    expect(contents).toBe('retained proof')
+  }
+})
+it('explains that a server 413 can involve text or attachments without discarding the draft', async () => {
+  post.mockResolvedValue({ response: new Response(null, { status: 413 }), error: { error: { code: 'JOIN_UPLOAD_TOO_LARGE', message: 'private detail' } } })
+  render(<MemoryRouter><JoinPage /></MemoryRouter>)
+  const user = await fill('new')
+  await user.click(screen.getByRole('button', { name: '提交申请' }))
+  expect(await screen.findByText('申请文字资料或证明文件超出大小限制，请缩短回答或检查附件数量与大小后重试')).toBeTruthy()
+  expect(screen.queryByText('private detail')).toBeNull()
+  expect(screen.getByRole('button', { name: '返回修改' })).toBeTruthy()
+  expect(screen.queryByRole('heading', { name: '申请已收到' })).toBeNull()
+})

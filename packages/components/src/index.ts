@@ -32,7 +32,14 @@ export type {
   AuthMode,
   AuthStep,
   LoginDraft,
-  RegistrationDraft,
 } from './auth/AuthForm'
 export { AuthModal } from './auth/AuthModal'
 export type { AuthModalProps } from './auth/AuthModal'
+export { InvitationEmailForm, InvitationCodeForm, InvitationProfileForm, invitationEmailSchema } from './auth/InvitationForms'
+export type { InvitationProfileValues } from './auth/InvitationForms'
+export { JoinReviewDialog } from './join/JoinReviewDialog'
+export { CompleteJoinApplicationModal } from './join/CompleteJoinApplicationModal'
+export type { CompleteJoinApplicationModalHandle, CompleteJoinApplicationModalProps } from './join/CompleteJoinApplicationModal'
+export type { JoinApplicationDraft, JoinApplicationType, NewJoinApplicationDraft, ExperiencedJoinApplicationDraft } from './join/applicationSchemas'
+export { newJoinApplicationSchema, experiencedJoinApplicationSchema } from './join/applicationSchemas'
+export { joinApplicationFields, joinApplicationCommitments, joinApplicationSteps, applicantCategoryOptions, departmentOptions, discoveryChannelOptions } from './join/applicationFields'

@@ -41,7 +41,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/auth/registrations": {
+    "/join/applications": {
         parameters: {
             query?: never;
             header?: never;
@@ -50,15 +50,18 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start an email-verified registration */
-        post: operations["startRegistration"];
+        /**
+         * Submit one complete join application
+         * @description Exactly one application JSON part; new players cannot attach proofs. Each proof carries its raw file bytes in a separate multipart part with the same proofs field name, without percent encoding. Proof parts retain their supplied media type; the server validates extension and byte signatures independently of that media type. One normalized email may apply only once across all histories and categories. Existing history returns 409 JOIN_APPLICATION_EXISTS before account-only EMAIL_IN_USE. Validation and atomic persistence complete before success. All responses use no-store.
+         */
+        post: operations["submitJoinApplication"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/auth/registrations/resend": {
+    "/join/applications/query": {
         parameters: {
             query?: never;
             header?: never;
@@ -67,32 +70,52 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Issue a replacement verification code */
-        post: operations["resendRegistrationCode"];
+        /**
+         * Read the minimal join application result
+         * @description Read-only snapshot; six closed status/nextAction pairs, no email or personal information. Missing applications return 200 not_found, including account-only legacy users. A completed invitation with an existing user wins over newer history; otherwise use createdAt DESC, id DESC and latest invitation issuedAt DESC, id DESC. Expiry calculation never writes business state. All responses use no-store.
+         */
+        post: operations["queryJoinApplicationResult"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/auth/registrations/cancel": {
+    "/admin/join/applications": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** listJoinApplications */
+        get: operations["listJoinApplications"];
         put?: never;
-        /** Cancel a pending registration */
-        post: operations["cancelRegistration"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/auth/registrations/verify": {
+    "/admin/join/applications/{applicationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** getJoinApplication */
+        get: operations["getJoinApplication"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/join/applications/{applicationId}/approve": {
         parameters: {
             query?: never;
             header?: never;
@@ -101,8 +124,130 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Verify a code and create the account */
-        post: operations["verifyRegistration"];
+        /** approveJoinApplication */
+        post: operations["approveJoinApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/join/applications/{applicationId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** rejectJoinApplication */
+        post: operations["rejectJoinApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/join/applications/{applicationId}/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** resendJoinInvitation */
+        post: operations["resendJoinInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/join/applications/{applicationId}/attachments/{attachmentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download an application proof attachment
+         * @description Local public Mock review access only. Missing or mismatched application/attachment pairs return 404 JOIN_ATTACHMENT_NOT_FOUND. Always download; never preview. Two response slots are acquired before BLOB reads; capacity failure is 503 and Retry-After: 5. A 60 second response deadline terminates started connections without a second JSON response. All responses use no-store.
+         */
+        get: operations["downloadJoinApplicationAttachment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/invitations/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** checkInvitationEligibility */
+        post: operations["checkInvitationEligibility"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/invitations/code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** requestInvitationCode */
+        post: operations["requestInvitationCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/invitations/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** verifyInvitationCode */
+        post: operations["verifyInvitationCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/invitations/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** completeInvitationRegistration */
+        post: operations["completeInvitationRegistration"];
         delete?: never;
         options?: never;
         head?: never;
@@ -269,34 +414,310 @@ export interface components {
             imageBase64: string;
             expiresAt: components["schemas"]["SafeTimestamp"];
         };
-        RegisterRequest: {
+        Uuid: string;
+        NullableUuid: string | null;
+        JoinReviewRequest: Record<string, never>;
+        /** @description Only multipart: exactly one application/json part (application.json, at most 64 KiB), optional proofs. Unknown parts, duplicate application, truncation and forged markers are rejected; application and all bytes commit atomically. */
+        JoinApplicationRequest: components["schemas"]["JoinNewApplicationRequest"] | components["schemas"]["JoinExperiencedApplicationRequest"];
+        /** @description New application QQ; preserve leading zeroes. Account and legacy summary QQ retain 1?20 digits. */
+        JoinApplicationQq: string;
+        JoinNewAnswers: {
+            fiveMExperience: string;
+            emergencyRoleplayKnowledge: string;
+            emergencyProceduresKnowledge: string;
+            rpUnderstanding: string;
+            frpUnderstanding: string;
+        };
+        JoinExperiencedAnswers: {
+            previousServer: string;
+            leaveReason: string;
+            previousDepartment: string;
+            lawEnforcementExperience: string;
+            highestRank: string;
+            punishmentHistory: string;
+            deescalationEssay: string;
+            discretionEssay: string;
+            transferReason: string;
+        };
+        JoinNewCommitments: {
+            /** @constant */
+            informationAccurate: true;
+            /** @constant */
+            obeyCommunityRules: true;
+            /** @constant */
+            acceptAcademyAttendanceConsequences: true;
+        };
+        JoinExperiencedCommitments: {
+            /** @constant */
+            informationAccurate: true;
+        };
+        /** @description Answer and freeTime strings are trimmed then counted as Unicode code points. The server independently checks calendar and text semantics. */
+        JoinNewForm: {
+            /** @constant */
+            applicationType: "new";
+            /** @description Valid Gregorian YYYY-MM-DD date no later than server UTC today; never a timestamp. */
+            birthDate: string;
+            /** @enum {string} */
+            applicantCategory: "100" | "101" | "102a" | "102b";
+            /** @enum {string} */
+            department: "leo" | "ems";
+            /** @description Selected option or actual free text; trim before Unicode code point counting. */
+            freeTime: string;
+            discoveryChannels: ("bilibili" | "douyin" | "friends" | "other")[];
+            answers: components["schemas"]["JoinNewAnswers"];
+            commitments: components["schemas"]["JoinNewCommitments"];
+        };
+        JoinNewApplicationPayload: {
             email: components["schemas"]["Email"];
             nickname: components["schemas"]["Nickname"];
-            password: components["schemas"]["Password"];
-            captcha?: components["schemas"]["CaptchaSubmission"];
+            qq: components["schemas"]["JoinApplicationQq"];
+            form: components["schemas"]["JoinNewForm"];
         };
-        RegistrationRef: {
-            registrationId: components["schemas"]["OpaqueIdentifier"];
+        JoinNewApplicationRequest: {
+            application: components["schemas"]["JoinNewApplicationPayload"];
+            /** @description Repeated same-name parts; private raw files must pair one-to-one with validated body markers. */
+            proofs?: string[];
         };
-        VerifyRegistrationRequest: {
-            registrationId: components["schemas"]["OpaqueIdentifier"];
-            code: components["schemas"]["VerificationCode"];
+        /** @description Answer and freeTime strings are trimmed then counted as Unicode code points. The server independently checks calendar and text semantics. */
+        JoinExperiencedForm: {
+            /** @constant */
+            applicationType: "experienced";
+            /** @description Valid Gregorian YYYY-MM-DD date no later than server UTC today; never a timestamp. */
+            birthDate: string;
+            /** @enum {string} */
+            applicantCategory: "100" | "101" | "102a" | "102b";
+            /** @enum {string} */
+            department: "leo" | "ems";
+            /** @description Selected option or actual free text; trim before Unicode code point counting. */
+            freeTime: string;
+            discoveryChannels: ("bilibili" | "douyin" | "friends" | "other")[];
+            answers: components["schemas"]["JoinExperiencedAnswers"];
+            commitments: components["schemas"]["JoinExperiencedCommitments"];
         };
-        RegistrationChallenge: {
-            registrationId: components["schemas"]["OpaqueIdentifier"];
+        JoinExperiencedApplicationPayload: {
+            email: components["schemas"]["Email"];
+            nickname: components["schemas"]["Nickname"];
+            qq: components["schemas"]["JoinApplicationQq"];
+            form: components["schemas"]["JoinExperiencedForm"];
+        };
+        JoinExperiencedApplicationRequest: {
+            application: components["schemas"]["JoinExperiencedApplicationPayload"];
+            /** @description Repeated same-name parts; private raw files must pair one-to-one with validated body markers. */
+            proofs?: string[];
+        };
+        JoinApplicationPayload: components["schemas"]["JoinNewApplicationPayload"] | components["schemas"]["JoinExperiencedApplicationPayload"];
+        JoinApplicationQueryRequest: {
+            email: components["schemas"]["Email"];
+        };
+        JoinApplicationResult: {
+            /** @constant */
+            status: "not_found";
+            /** @constant */
+            nextAction: "apply";
+        } | {
+            /** @constant */
+            status: "pending";
+            /** @constant */
+            nextAction: "wait";
+        } | {
+            /** @constant */
+            status: "approved";
+            /** @constant */
+            nextAction: "register";
+        } | {
+            /** @constant */
+            status: "rejected";
+            /** @constant */
+            nextAction: "contact_community";
+        } | {
+            /** @constant */
+            status: "invitation_expired";
+            /** @constant */
+            nextAction: "contact_community";
+        } | {
+            /** @constant */
+            status: "registered";
+            /** @constant */
+            nextAction: "login";
+        };
+        JoinApplicationAttachment: {
+            id: components["schemas"]["Uuid"];
+            /** @description Safe basename; reject path separators, controls, dot directory names and header injection characters. */
+            originalName: string;
+            /** @enum {string} */
+            extension: "png" | "jpg" | "jpeg" | "gif" | "bmp" | "svg" | "pdf" | "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx" | "txt" | "zip" | "rar" | "7z";
+            byteLength: number;
+            sha256: string;
+            ordinal: number;
+        };
+        JoinNewApplicationSummary: {
+            id: components["schemas"]["Uuid"];
+            email: components["schemas"]["Email"];
+            nickname: components["schemas"]["Nickname"];
+            qq: string;
+            /** @enum {string} */
+            status: "pending" | "approved" | "rejected";
+            createdAt: components["schemas"]["SafeTimestamp"];
+            reviewedAt: number | null;
+            reviewedByUserId: components["schemas"]["NullableUuid"];
+            /** @enum {string|null} */
+            invitationStatus: "active" | "expired" | "completed" | null;
+            /** @enum {string|null} */
+            deliveryStatus: "pending" | "sent" | "failed" | null;
+            /** @constant */
+            applicationType: "new";
+        };
+        JoinNewApplicationDetail: {
+            application: components["schemas"]["JoinNewApplicationSummary"];
+            invitation: components["schemas"]["InvitationSummary"] | null;
+            serverTime: components["schemas"]["SafeTimestamp"];
+            /** @constant */
+            formVersion: 1;
+            form: components["schemas"]["JoinNewForm"];
+            attachments: components["schemas"]["JoinApplicationAttachment"][];
+        };
+        JoinExperiencedApplicationSummary: {
+            id: components["schemas"]["Uuid"];
+            email: components["schemas"]["Email"];
+            nickname: components["schemas"]["Nickname"];
+            qq: string;
+            /** @enum {string} */
+            status: "pending" | "approved" | "rejected";
+            createdAt: components["schemas"]["SafeTimestamp"];
+            reviewedAt: number | null;
+            reviewedByUserId: components["schemas"]["NullableUuid"];
+            /** @enum {string|null} */
+            invitationStatus: "active" | "expired" | "completed" | null;
+            /** @enum {string|null} */
+            deliveryStatus: "pending" | "sent" | "failed" | null;
+            /** @constant */
+            applicationType: "experienced";
+        };
+        JoinExperiencedApplicationDetail: {
+            application: components["schemas"]["JoinExperiencedApplicationSummary"];
+            invitation: components["schemas"]["InvitationSummary"] | null;
+            serverTime: components["schemas"]["SafeTimestamp"];
+            /** @constant */
+            formVersion: 1;
+            form: components["schemas"]["JoinExperiencedForm"];
+            attachments: components["schemas"]["JoinApplicationAttachment"][];
+        };
+        JoinLegacyApplicationSummary: {
+            id: components["schemas"]["Uuid"];
+            email: components["schemas"]["Email"];
+            nickname: components["schemas"]["Nickname"];
+            qq: string;
+            /** @enum {string} */
+            status: "pending" | "approved" | "rejected";
+            createdAt: components["schemas"]["SafeTimestamp"];
+            reviewedAt: number | null;
+            reviewedByUserId: components["schemas"]["NullableUuid"];
+            /** @enum {string|null} */
+            invitationStatus: "active" | "expired" | "completed" | null;
+            /** @enum {string|null} */
+            deliveryStatus: "pending" | "sent" | "failed" | null;
+            /** @constant */
+            applicationType: "legacy";
+        };
+        JoinLegacyApplicationDetail: {
+            application: components["schemas"]["JoinLegacyApplicationSummary"];
+            invitation: components["schemas"]["InvitationSummary"] | null;
+            serverTime: components["schemas"]["SafeTimestamp"];
+            /** @constant */
+            formVersion: 0;
+            form: null;
+            attachments: components["schemas"]["JoinApplicationAttachment"][];
+        };
+        JoinApplicationReceived: {
+            /** @constant */
+            status: "received";
+        };
+        InvitationEligibilityRequest: {
+            email: components["schemas"]["Email"];
+        };
+        InvitationCodeRequest: {
+            email: components["schemas"]["Email"];
+        };
+        InvitationEligibility: {
+            /** @constant */
+            status: "eligible";
             email: components["schemas"]["Email"];
             serverTime: components["schemas"]["SafeTimestamp"];
-            codeExpiresAt: components["schemas"]["SafeTimestamp"];
             resendAvailableAt: components["schemas"]["SafeTimestamp"];
         };
-        RegistrationVerified: {
+        InvitationCodeAccepted: {
+            /** @constant */
+            status: "accepted";
+            serverTime: components["schemas"]["SafeTimestamp"];
+            resendAvailableAt: components["schemas"]["SafeTimestamp"];
+        };
+        InvitationVerifyRequest: {
+            email: components["schemas"]["Email"];
+            code: components["schemas"]["VerificationCode"];
+        };
+        InvitationVerified: {
+            /** @constant */
+            status: "verified";
+            completionToken: components["schemas"]["OpaqueIdentifier"];
+            email: components["schemas"]["Email"];
+            nickname: components["schemas"]["Nickname"];
+            serverTime: components["schemas"]["SafeTimestamp"];
+            completionExpiresAt: components["schemas"]["SafeTimestamp"];
+        };
+        InvitationCompleteRequest: {
+            completionToken: components["schemas"]["OpaqueIdentifier"];
+            nickname: components["schemas"]["Nickname"];
+            password: components["schemas"]["Password"];
+        };
+        InvitationRegistrationCompleted: {
             /** @constant */
             status: "registered";
             email: components["schemas"]["Email"];
         };
-        RegistrationCancelled: {
-            /** @constant */
-            status: "cancelled";
+        JoinApplicationSummary: {
+            id: components["schemas"]["Uuid"];
+            email: components["schemas"]["Email"];
+            nickname: components["schemas"]["Nickname"];
+            qq: string;
+            /** @enum {string} */
+            status: "pending" | "approved" | "rejected";
+            createdAt: components["schemas"]["SafeTimestamp"];
+            reviewedAt: number | null;
+            reviewedByUserId: components["schemas"]["NullableUuid"];
+            /** @enum {string|null} */
+            invitationStatus: "active" | "expired" | "completed" | null;
+            /** @enum {string|null} */
+            deliveryStatus: "pending" | "sent" | "failed" | null;
+            /** @enum {string} */
+            applicationType: "new" | "experienced" | "legacy";
+        };
+        InvitationDeliverySummary: {
+            id: components["schemas"]["Uuid"];
+            /** @enum {string} */
+            status: "pending" | "sent" | "failed";
+            startedAt: components["schemas"]["SafeTimestamp"];
+            finishedAt: number | null;
+        };
+        InvitationSummary: {
+            id: components["schemas"]["Uuid"];
+            /** @enum {string} */
+            status: "active" | "expired" | "completed";
+            issuedAt: components["schemas"]["SafeTimestamp"];
+            expiresAt: components["schemas"]["SafeTimestamp"];
+            codeExpiresAt: number | null;
+            completedAt: number | null;
+            completedUserId: components["schemas"]["NullableUuid"];
+            resendAvailableAt: components["schemas"]["SafeTimestamp"];
+            latestDelivery: components["schemas"]["InvitationDeliverySummary"] | null;
+        };
+        /** @description Strict type/version/form/attachment pairing. Legacy is version 0, null form, no attachments. Corrupted version 1 records are never downgraded. */
+        JoinApplicationDetail: components["schemas"]["JoinNewApplicationDetail"] | components["schemas"]["JoinExperiencedApplicationDetail"] | components["schemas"]["JoinLegacyApplicationDetail"];
+        JoinApplicationList: {
+            items: components["schemas"]["JoinApplicationSummary"][];
+            total: components["schemas"]["SafeTimestamp"];
+            offset: components["schemas"]["SafeTimestamp"];
+            limit: number;
+            serverTime: components["schemas"]["SafeTimestamp"];
         };
         LoginRequest: {
             email: components["schemas"]["Email"];
@@ -444,7 +865,7 @@ export interface operations {
             default: components["responses"]["ErrorResponse"];
         };
     };
-    startRegistration: {
+    submitJoinApplication: {
         parameters: {
             query?: never;
             header?: never;
@@ -453,28 +874,32 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RegisterRequest"];
+                "multipart/form-data": components["schemas"]["JoinApplicationRequest"];
             };
         };
         responses: {
-            /** @description Verification code issued */
-            201: {
+            /** @description Successful operation; not cacheable. */
+            202: {
                 headers: {
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RegistrationChallenge"];
+                    "application/json": components["schemas"]["JoinApplicationReceived"];
                 };
             };
             400: components["responses"]["ErrorResponse"];
+            408: components["responses"]["ErrorResponse"];
             409: components["responses"]["ErrorResponse"];
+            413: components["responses"]["ErrorResponse"];
+            415: components["responses"]["ErrorResponse"];
             429: components["responses"]["RetryableErrorResponse"];
+            500: components["responses"]["ErrorResponse"];
             503: components["responses"]["RetryableErrorResponse"];
             default: components["responses"]["ErrorResponse"];
         };
     };
-    resendRegistrationCode: {
+    queryJoinApplicationResult: {
         parameters: {
             query?: never;
             header?: never;
@@ -483,49 +908,133 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RegistrationRef"];
+                "application/json": components["schemas"]["JoinApplicationQueryRequest"];
             };
         };
         responses: {
-            /** @description Replacement verification code issued */
+            /** @description Successful operation; not cacheable. */
             200: {
                 headers: {
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RegistrationChallenge"];
+                    "application/json": components["schemas"]["JoinApplicationResult"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RetryableErrorResponse"];
+            500: components["responses"]["ErrorResponse"];
+        };
+    };
+    listJoinApplications: {
+        parameters: {
+            query?: {
+                view?: "pending" | "all";
+                limit?: string;
+                offset?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful operation */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JoinApplicationList"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    getJoinApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful operation */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JoinApplicationDetail"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    approveJoinApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JoinReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful operation */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JoinApplicationDetail"];
                 };
             };
             400: components["responses"]["ErrorResponse"];
             404: components["responses"]["ErrorResponse"];
             409: components["responses"]["ErrorResponse"];
-            410: components["responses"]["ErrorResponse"];
             429: components["responses"]["RetryableErrorResponse"];
             default: components["responses"]["ErrorResponse"];
         };
     };
-    cancelRegistration: {
+    rejectJoinApplication: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                applicationId: components["schemas"]["Uuid"];
+            };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RegistrationRef"];
+                "application/json": components["schemas"]["JoinReviewRequest"];
             };
         };
         responses: {
-            /** @description Registration cancelled */
+            /** @description Successful operation */
             200: {
                 headers: {
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RegistrationCancelled"];
+                    "application/json": components["schemas"]["JoinApplicationDetail"];
                 };
             };
             400: components["responses"]["ErrorResponse"];
@@ -534,7 +1043,70 @@ export interface operations {
             default: components["responses"]["ErrorResponse"];
         };
     };
-    verifyRegistration: {
+    resendJoinInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JoinReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful operation */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JoinApplicationDetail"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    downloadJoinApplicationAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: components["schemas"]["Uuid"];
+                attachmentId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Original attachment bytes. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    /** @description attachment; safe ASCII filename fallback and UTF-8 filename*. */
+                    "Content-Disposition": string;
+                    "X-Content-Type-Options": "nosniff";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            500: components["responses"]["ErrorResponse"];
+            503: components["responses"]["RetryableErrorResponse"];
+        };
+    };
+    checkInvitationEligibility: {
         parameters: {
             query?: never;
             header?: never;
@@ -543,24 +1115,111 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["VerifyRegistrationRequest"];
+                "application/json": components["schemas"]["InvitationEligibilityRequest"];
             };
         };
         responses: {
-            /** @description Account created */
+            /** @description Successful operation */
             200: {
                 headers: {
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RegistrationVerified"];
+                    "application/json": components["schemas"]["InvitationEligibility"];
                 };
             };
             400: components["responses"]["ErrorResponse"];
             404: components["responses"]["ErrorResponse"];
             409: components["responses"]["ErrorResponse"];
-            410: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    requestInvitationCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful operation */
+            202: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationCodeAccepted"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    verifyInvitationCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful operation */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationVerified"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    completeInvitationRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful operation */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationRegistrationCompleted"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RetryableErrorResponse"];
+            503: components["responses"]["RetryableErrorResponse"];
             default: components["responses"]["ErrorResponse"];
         };
     };

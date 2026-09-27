@@ -19,16 +19,15 @@ afterEach(async () => {
 function setup(createUserId?: () => string) {
   const fixture = createTestAuth(createUserId ? { createUserId } : {})
   fixtures.push(fixture)
-  const app = createApp({ authServices: fixture.authServices, profileServices: fixture.profileServices })
+  const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices, authServices: fixture.authServices, profileServices: fixture.profileServices })
   apps.push(app)
   return { fixture, app }
 }
 
 async function session(fixture: ReturnType<typeof createTestAuth>) {
-  const started = await fixture.authServices.startRegistration({
+  await fixture.seedUser({
     email: 'profile@example.com', nickname: 'First', password: 'valid password',
   })
-  fixture.authServices.verifyRegistration(started.registrationId, '123456')
   const { token } = await fixture.authServices.login({ email: 'profile@example.com', password: 'valid password' })
   return `Bearer ${token}`
 }
@@ -112,10 +111,9 @@ describe('profile contract operations', () => {
     let nextId = 1
     const { fixture, app } = setup(() => `10000000-0000-4000-8000-${String(nextId++).padStart(12, '0')}`)
     const firstAuthorization = await session(fixture)
-    const second = await fixture.authServices.startRegistration({
+    await fixture.seedUser({
       email: 'second@example.com', nickname: 'Second', password: 'valid password',
     })
-    fixture.authServices.verifyRegistration(second.registrationId, '123456')
     const { token: secondToken } = await fixture.authServices.login({
       email: 'second@example.com', password: 'valid password',
     })
@@ -237,7 +235,7 @@ describe('profile contract operations', () => {
     const blockedPath = `${fixture.avatarDirectory}/blocked`
     writeFileSync(blockedPath, 'not a directory')
     const profileServices = new ProfileService(fixture.sqlite, blockedPath)
-    const app = createApp({ authServices: fixture.authServices, profileServices })
+    const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices, authServices: fixture.authServices, profileServices })
     apps.push(app)
     const response = await app.inject({ method: 'POST', url: '/api/auth/me/avatar',
       headers: { authorization }, payload: { mediaType: 'image/png', imageBase64: PNG } })

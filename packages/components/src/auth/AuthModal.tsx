@@ -14,12 +14,13 @@ export interface AuthModalProps {
   mode: AuthMode
   onOpenChange: (open: boolean) => void
   children: ReactNode
+  onCloseAutoFocus?: (event: Event) => void
 }
 
-export function AuthModal({ open, mode, onOpenChange, children }: AuthModalProps) {
+export function AuthModal({ open, mode, onOpenChange, children, onCloseAutoFocus }: AuthModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={styles.content}>
+      <DialogContent className={styles.content} onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader className={styles.hiddenHeader}>
           <DialogTitle>{mode === 'login' ? '登录' : '注册'}</DialogTitle>
           <DialogDescription>完成 Exre 账号认证。</DialogDescription>

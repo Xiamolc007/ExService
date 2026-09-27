@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import Database from 'better-sqlite3'
 import { afterEach, describe, expect, it } from 'vitest'
 import { assertCommunitySchemaAvailable } from '../../apps/mock-server/src/community/schema-check'
-import { createTestAuth } from '../helpers/auth'
+import { createTestAuth, approvedInvitation } from '../helpers/auth'
 
 function migration(name: string) {
   return readFileSync(fileURLToPath(new URL(`../../apps/mock-server/drizzle/${name}`, import.meta.url)), 'utf8')
@@ -72,19 +72,15 @@ describe('explicit community membership', () => {
   it('leaves a new verified user ordinary until an admin grant is explicitly inserted', async () => {
     const fixture = createTestAuth()
     fixtures.push(fixture)
-    const challenge = await fixture.authServices.startRegistration({
-      email: 'new@example.com', nickname: 'New', password: 'valid password',
-    })
+    const challenge = await approvedInvitation(fixture, 'new@example.com')
     expect(fixture.sqlite.prepare('SELECT COUNT(*) AS count FROM community_group_memberships').get())
       .toEqual({ count: 0 })
-    expect(() => fixture.authServices.verifyRegistration(challenge.registrationId, '000000')).toThrow()
+    expect(() => fixture.invitationServices.verifyCode(challenge.email, '000000')).toThrow()
     expect(fixture.sqlite.prepare('SELECT COUNT(*) AS count FROM auth_users').get()).toEqual({ count: 0 })
-    expect(fixture.authServices.verifyRegistration(challenge.registrationId, '123456')).toEqual({
-      status: 'registered', email: 'new@example.com',
-    })
-    expect(fixture.authServices.verifyRegistration(challenge.registrationId, '123456')).toEqual({
-      status: 'registered', email: 'new@example.com',
-    })
+    const grant = fixture.invitationServices.verifyCode(challenge.email, challenge.code)
+    const input = { completionToken: grant.completionToken, nickname: 'New', password: 'valid password' }
+    expect(await fixture.invitationServices.complete(input)).toEqual({ status: 'registered', email: 'new@example.com' })
+    expect(await fixture.invitationServices.complete(input)).toEqual({ status: 'registered', email: 'new@example.com' })
     expect(fixture.sqlite.prepare('SELECT group_code FROM community_group_memberships').all()).toEqual([])
     const user = fixture.sqlite.prepare('SELECT id FROM auth_users').get() as { id: string }
     fixture.sqlite.prepare('INSERT INTO community_group_memberships (user_id, group_code) VALUES (?, ?)')
@@ -100,17 +96,15 @@ describe('explicit community membership', () => {
   it('does not insert memberships during registration', async () => {
     const fixture = createTestAuth()
     fixtures.push(fixture)
-    const challenge = await fixture.authServices.startRegistration({
-      email: 'new@example.com', nickname: 'New', password: 'valid password',
-    })
+    const challenge = await approvedInvitation(fixture, 'new@example.com')
     fixture.sqlite.exec(`CREATE TRIGGER fail_membership BEFORE INSERT ON community_group_memberships
       BEGIN SELECT RAISE(ABORT, 'membership failure'); END`)
-    expect(fixture.authServices.verifyRegistration(challenge.registrationId, '123456')).toEqual({
-      status: 'registered', email: 'new@example.com',
-    })
+    const grant = fixture.invitationServices.verifyCode(challenge.email, challenge.code)
+    const completed = await fixture.invitationServices.complete({ completionToken: grant.completionToken, nickname: 'New', password: 'valid password' })
+    expect(completed).toEqual({ status: 'registered', email: 'new@example.com' })
     expect(fixture.sqlite.prepare('SELECT COUNT(*) AS count FROM auth_users').get()).toEqual({ count: 1 })
     expect(fixture.sqlite.prepare('SELECT COUNT(*) AS count FROM community_group_memberships').get())
       .toEqual({ count: 0 })
-    expect(fixture.sqlite.prepare('SELECT status FROM auth_registrations').get()).toEqual({ status: 'completed' })
+    expect(fixture.sqlite.prepare('SELECT status FROM join_invitations').get()).toEqual({ status: 'completed' })
   })
 })
