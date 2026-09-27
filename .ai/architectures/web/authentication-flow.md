@@ -8,7 +8,7 @@ _最后更新：2026-09-27_
 
 ```text
 packages/components
-  登录与邀请表单 / AuthModal / JoinApplicationForm / JoinReviewDialog
+  登录与邀请表单 / AuthModal / CompleteJoinApplicationModal / JoinReviewDialog
           ↑ props 与回调
 apps/web
   AuthFlow / InvitationRegistrationFlow / AuthProvider / 路由页面
@@ -27,7 +27,7 @@ apps/web
 - 顶栏登录与注册使用受控 Modal；关闭会卸载当前流程。
 - `/login` 使用 `AuthFlow`，`/register` 使用 `InvitationRegistrationPage`；两者位于 `RootLayout` 之外，不渲染站点顶栏或认证 Modal，复用认证背景与外围容器。
 - 顶栏桌面与移动注册入口挂载同一个 `InvitationRegistrationFlow`；完成后在原 Dialog 切到普通登录。关闭按当前桌面或移动触发器恢复焦点。
-- `/join` 与临时审核页 `/admin/join-applications` 位于 `RootLayout` 内。登录的加入回调先关闭 Dialog，再前往 `/join`。
+- `/join`、`/join/result` 与临时审核页 `/admin/join-applications` 位于 `RootLayout` 内。登录的加入回调先关闭 Dialog，再前往 `/join`。
 - `/sso/success` 与 `/sso/*` 的兜底页面也位于 `RootLayout` 之外，不渲染站点顶栏；认证页面代码集中在 `apps/web/src/pages/AuthPage/`。
 - 普通独立认证页通过左上角 Home 返回首页；带 `ssoRequestId` 的登录页面隐藏该入口。独立认证页与 SSO 成功页复用 `MeshGradient` 背景，共享组件不依赖着色器。
 - 登录入口只要 URL 中出现 `ssoRequestId`，就必须通过格式与单值检查；空值、重复值或非法值显示无效入口，不能回退成普通登录。
@@ -36,7 +36,11 @@ apps/web
 
 ## 申请与邀请注册
 
-`JoinApplicationForm` 保持一个 RHF 草稿，分为联系方式（邮箱）、基本信息（用户名与 QQ）和确认提交三步，确认页只读；前进校验当前字段，最终提交校验全部字段，后退保留值。草稿不持久化，申请成功不会建立账号。审核和账号创建的职责及字段归属见 `.ai/databases/data-model.md`。
+`/join` 是说明与申请入口展示页，两类入口各挂载独立 `CompleteJoinApplicationModal`。共享组件从 Zod 推导含 File 的 UI 草稿，以 RHF 管理完整字段、当前步骤校验、确认摘要及文件选择；前进只校验当前步，最终校验全部，后退保留值和文件。关闭、刷新或卸载清空草稿，类别切换不混用实例；提交在途保护关闭和重复提交，失败保留草稿。
+
+`apps/web/src/join/client.ts` 将草稿映射为生成 DTO，通过生成 Client 的 bodySerializer 一次组装 JSON Blob 与 proofs File 的 FormData。共享组件不复制 HTTP DTO、不调用 API；应用侧不持久化申请草稿。成功显示来自事务完成的确认，不建立账号。审核和账号创建的职责及字段归属见 `.ai/databases/data-model.md`。
+
+`/join/result` 只在用户提交邮箱时请求，不自动查询或轮询，不把邮箱/结果写入 URL 或浏览器持久存储。编辑邮箱立即清空显示并增加请求代次；新请求及卸载也使旧代次失效，迟到结果不能覆盖新邮箱。状态与下一步必须匹配 Contract；导航使用固定站内路由，不夹带验证码或凭证。
 
 `InvitationRegistrationFlow` 在应用层控制 email、code、profile、registered 四个状态。邮箱通过只读资格检查后才挂载空验证码表单；检查不请求发码。验证成功取得完善凭证才挂载用户名与密码表单，邮箱只读，QQ 来自申请。主动重发使用服务器时间差计算冷却，采用条件式发送反馈；验证的失败重试由用户输入或显式重试按钮触发，不由渲染循环驱动。
 

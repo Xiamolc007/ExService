@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { blob, check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 export const authUsers = sqliteTable(
   'auth_users',
@@ -65,12 +65,33 @@ export const joinApplications = sqliteTable('join_applications', {
   id: text('id').primaryKey(), email: text('email').notNull(), nickname: text('nickname').notNull(), qq: text('qq').notNull(),
   status: text('status').notNull(), createdAt: integer('created_at').notNull(), reviewedAt: integer('reviewed_at'),
   reviewedByUserId: text('reviewed_by_user_id').references(() => authUsers.id),
+  formVersion: integer('form_version').notNull().default(0),
 }, table => [
+  check('join_applications_form_version_check', sql`${table.formVersion} in (0, 1)`),
   check('join_applications_status_check', sql`${table.status} in ('pending', 'approved', 'rejected')`),
   check('join_applications_review_check', sql`(${table.status} = 'pending' and ${table.reviewedAt} is null) or (${table.status} <> 'pending' and ${table.reviewedAt} is not null)`),
   uniqueIndex('join_applications_open_email_unique').on(table.email).where(sql`${table.status} in ('pending', 'approved')`),
   index('join_applications_list_idx').on(table.status, table.createdAt, table.id),
+  index('join_applications_email_history_idx').on(table.email, table.createdAt, table.id),
 ])
+export const joinApplicationEmailRegistry = sqliteTable('join_application_email_registry', {
+  email: text('email').primaryKey().notNull(),
+  canonicalApplicationId: text('canonical_application_id').notNull().references(() => joinApplications.id, { onDelete: 'restrict', onUpdate: 'restrict' }),
+})
+export const joinApplicationForms = sqliteTable('join_application_forms', {
+  applicationId: text('application_id').primaryKey().notNull().references(() => joinApplications.id, { onDelete: 'restrict', onUpdate: 'restrict' }),
+  version: integer('version').notNull(), applicationType: text('application_type').notNull(), formJson: text('form_json').notNull(),
+}, table => [check('join_application_forms_version_check', sql`${table.version} = 1`),
+  check('join_application_forms_type_check', sql`${table.applicationType} in ('new', 'experienced')`)])
+export const joinApplicationAttachments = sqliteTable('join_application_attachments', {
+  id: text('id').primaryKey().notNull(),
+  applicationId: text('application_id').notNull().references(() => joinApplications.id, { onDelete: 'restrict', onUpdate: 'restrict' }),
+  ordinal: integer('ordinal').notNull(), originalName: text('original_name').notNull(), extension: text('extension').notNull(),
+  sha256: text('sha256').notNull(), byteLength: integer('byte_length').notNull(), bytes: blob('bytes', { mode: 'buffer' }).notNull(),
+}, table => [uniqueIndex('join_application_attachments_ordinal_unique').on(table.applicationId, table.ordinal),
+  check('join_application_attachments_ordinal_check', sql`${table.ordinal} between 0 and 4`),
+  check('join_application_attachments_length_check', sql`${table.byteLength} between 1 and 10485760 and ${table.byteLength} = length(${table.bytes})`),
+  check('join_application_attachments_sha256_check', sql`length(${table.sha256}) = 64 and ${table.sha256} not glob '*[^0-9a-f]*'`)])
 export const joinInvitations = sqliteTable('join_invitations', {
   id: text('id').primaryKey(), applicationId: text('application_id').notNull().references(() => joinApplications.id),
   status: text('status').notNull(), issuedAt: integer('issued_at').notNull(), expiresAt: integer('expires_at').notNull(),

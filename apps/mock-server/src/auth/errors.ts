@@ -8,6 +8,13 @@ export type AuthErrorCode =
   | 'SSO_REQUEST_EXPIRED'
   | 'SSO_ACCOUNT_CONFLICT'
   | 'JOIN_APPLICATION_NOT_FOUND'
+  | 'JOIN_APPLICATION_EXISTS'
+  | 'JOIN_ATTACHMENT_NOT_FOUND'
+  | 'JOIN_UPLOAD_TOO_LARGE'
+  | 'JOIN_UNSUPPORTED_MEDIA_TYPE'
+  | 'JOIN_UPLOAD_TIMEOUT'
+  | 'JOIN_UPLOAD_BUSY'
+  | 'JOIN_DOWNLOAD_BUSY'
   | 'INVITATION_APPLICATION_NOT_FOUND'
   | 'INVITATION_NOT_ELIGIBLE'
   | 'JOIN_STATE_CONFLICT'
@@ -19,6 +26,13 @@ export type AuthErrorCode =
 
 const AUTH_ERROR_DETAILS: Record<AuthErrorCode, { statusCode: number; message: string }> = {
   BAD_REQUEST: { statusCode: 400, message: 'The request could not be processed.' },
+  JOIN_APPLICATION_EXISTS: { statusCode: 409, message: '该邮箱已有申请，请查询申请结果。' },
+  JOIN_ATTACHMENT_NOT_FOUND: { statusCode: 404, message: '申请附件不存在。' },
+  JOIN_UPLOAD_TOO_LARGE: { statusCode: 413, message: '申请资料或附件超过允许的数量或大小。' },
+  JOIN_UNSUPPORTED_MEDIA_TYPE: { statusCode: 415, message: '不支持该请求或附件类型。' },
+  JOIN_UPLOAD_TIMEOUT: { statusCode: 408, message: '上传超时，请重试。' },
+  JOIN_UPLOAD_BUSY: { statusCode: 503, message: '上传服务繁忙，请稍后重试。' },
+  JOIN_DOWNLOAD_BUSY: { statusCode: 503, message: '下载服务繁忙，请稍后重试。' },
   EMAIL_IN_USE: { statusCode: 409, message: '该邮箱已注册' },
   INVALID_CREDENTIALS: { statusCode: 401, message: '邮箱或密码错误' },
   SESSION_INVALID: { statusCode: 401, message: '登录状态已失效，请重新登录' },

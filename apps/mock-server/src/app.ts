@@ -2,6 +2,8 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyServerOptions } from 'fastify'
 import openapiGlue from 'fastify-openapi-glue'
+import multipart from '@fastify/multipart'
+import { registerJoinTransport } from './join/transport.js'
 import { AuthError } from './auth/errors.js'
 import type { JoinService } from './join/service.js'
 import type { InvitationService } from './invitations/service.js'
@@ -92,6 +94,8 @@ export function createApp({ authServices, profileServices, joinServices, invitat
   app.decorate('profileServices', profileServices)
   app.decorateRequest('authSession', undefined)
   registerErrorHandlers(app)
+  app.register(multipart)
+  registerJoinTransport(app)
 
   app.addHook('preValidation', (request, _reply, done) => {
     if (typeof request.body === 'object' && request.body !== null && !Array.isArray(request.body)) {

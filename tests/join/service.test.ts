@@ -1,5 +1,5 @@
 ﻿import { afterEach, expect, it, vi } from 'vitest'
-import { approvedInvitation, createTestAuth, joinSnapshot, registerInvited } from '../helpers/auth'
+import { approvedInvitation, createTestAuth, joinSnapshot, registerInvited, newJoinApplication } from '../helpers/auth'
 import { JoinRateLimiter } from '../../apps/mock-server/src/join/rate-limiter'
 import { publicWebBaseUrl } from '../../apps/mock-server/src/invitations/mail'
 const fixtures:Array<ReturnType<typeof createTestAuth>>=[]
@@ -7,18 +7,18 @@ afterEach(()=>{vi.useRealTimers();fixtures.splice(0).forEach(f=>f.close())})
 function setup(overrides:Parameters<typeof createTestAuth>[0]={}){const f=createTestAuth(overrides);fixtures.push(f);return f}
 const error=(code:string)=>expect.objectContaining({code})
 const input=(completionToken:string,nickname='Final',password='valid password')=>({completionToken,nickname,password})
-it('deduplicates without overwriting original values, hides account existence and permits rejected reapplication',async()=>{
- const f=setup();f.joinServices.submit({email:'  MEMBER@EXAMPLE.COM  ',nickname:'  Original  ',qq:'000123'});f.joinServices.submit({email:'member@example.com',nickname:'Changed',qq:'999'});
+it('rejects duplicate lifetime applications without overwriting original values and distinguishes account conflicts',async()=>{
+ const f=setup();f.joinServices.submit(newJoinApplication('  MEMBER@EXAMPLE.COM  ','  Original  ','000123'));expect(()=>f.joinServices.submit(newJoinApplication('member@example.com','Changed','001234'))).toThrow(error('JOIN_APPLICATION_EXISTS'));
  const list=f.joinServices.list();expect(list.total).toBe(1);expect(list.items[0]).toMatchObject({nickname:'Original',qq:'000123',email:'member@example.com',reviewedByUserId:null});const id=list.items[0]!.id;
  const rejected=f.joinServices.reject(id);expect(rejected.application.status).toBe('rejected');expect(f.joinServices.reject(id)).toEqual(rejected);await expect(f.joinServices.approve(id)).rejects.toMatchObject({code:'JOIN_STATE_CONFLICT'});
- f.joinServices.submit({email:'member@example.com',nickname:'Second',qq:'2'});expect(f.joinServices.list({view:'all'}).total).toBe(2);expect(f.joinServices.list().total).toBe(1);
- await f.seedUser({email:'account@example.com',nickname:'Existing',password:'valid password'});expect(f.joinServices.submit({email:'account@example.com',nickname:'Hidden',qq:'1'})).toEqual({status:'received'});expect(f.joinServices.list({view:'all'}).total).toBe(2);
+ const before=joinSnapshot(f);expect(()=>f.joinServices.submit(newJoinApplication('member@example.com','Second','001234'))).toThrow(error('JOIN_APPLICATION_EXISTS'));expect(joinSnapshot(f)).toEqual(before);expect(f.joinServices.list({view:'all'}).total).toBe(1);expect(f.joinServices.list().total).toBe(0);
+ await f.seedUser({email:'account@example.com',nickname:'Existing',password:'valid password'});expect(()=>f.joinServices.submit(newJoinApplication('account@example.com','Hidden','001234'))).toThrow(error('EMAIL_IN_USE'));expect(f.joinServices.list({view:'all'}).total).toBe(1);
 })
 it('keeps cooldown approval rejection entirely read-only even with expired rows and stale pending deliveries',async()=>{
  const f=setup();const old=await approvedInvitation(f,'old@example.com');f.advance(7*86_400_000);
  // Simulate a restart with abandoned delivery and stale active invitation.
  f.sqlite.prepare("UPDATE join_delivery_attempts SET status='pending', finished_at=NULL").run();
- f.joinServices.submit({email:'new@example.com',nickname:'New',qq:'1'});
+ f.joinServices.submit(newJoinApplication('new@example.com','New','001234'));
  f.sqlite.prepare("UPDATE join_invitations SET status='active', code_digest='sensitive', code_expires_at=?, completion_token_hash='old-grant', completion_expires_at=? WHERE application_id=?").run(f.now()-1,f.now()-1,old.id);
  f.sqlite.prepare("UPDATE join_delivery_attempts SET status='pending', finished_at=NULL").run();
  f.sqlite.prepare('INSERT INTO join_email_controls (email,next_send_at,failed_attempts) VALUES (?, ?, 0)').run('new@example.com',f.now()+60_000);
@@ -29,14 +29,14 @@ it('keeps cooldown approval rejection entirely read-only even with expired rows 
  f.advance(60_000);const approved=await f.joinServices.approve(id);expect(approved.application.status).toBe('approved');const after=joinSnapshot(f);expect(await f.joinServices.approve(id)).toEqual(approved);expect(joinSnapshot(f)).toEqual(after);expect(f.deliveries.length).toBe(2);
 })
 it('makes same approval idempotent and allows only one concurrent opposite decision',async()=>{
- const f=setup();f.joinServices.submit({email:'member@example.com',nickname:'Member',qq:'1'});const id=f.joinServices.list().items[0]!.id;
+ const f=setup();f.joinServices.submit(newJoinApplication('member@example.com','Member','001234'));const id=f.joinServices.list().items[0]!.id;
  const approving=f.joinServices.approve(id);expect(()=>f.joinServices.reject(id)).toThrow(error('JOIN_STATE_CONFLICT'));await approving;await f.joinServices.approve(id);expect(f.deliveries.length).toBe(1);
- const reject=setup();reject.joinServices.submit({email:'member@example.com',nickname:'Member',qq:'1'});const rejectId=reject.joinServices.list().items[0]!.id;reject.joinServices.reject(rejectId);await expect(reject.joinServices.approve(rejectId)).rejects.toMatchObject({code:'JOIN_STATE_CONFLICT'});
+ const reject=setup();reject.joinServices.submit(newJoinApplication('member@example.com','Member','001234'));const rejectId=reject.joinServices.list().items[0]!.id;reject.joinServices.reject(rejectId);await expect(reject.joinServices.approve(rejectId)).rejects.toMatchObject({code:'JOIN_STATE_CONFLICT'});
 })
 it('checks all eligibility cases without touching any tables or dependencies',async()=>{
  const f=setup({deliverInvitation:()=>{throw new Error('private provider failure')}});
  expect(()=>f.invitationServices.checkEligibility('unknown@example.com')).toThrow(error('INVITATION_APPLICATION_NOT_FOUND'));
- f.joinServices.submit({email:'pending@example.com',nickname:'Pending',qq:'1'});expect(()=>f.invitationServices.checkEligibility('pending@example.com')).toThrow(error('INVITATION_NOT_ELIGIBLE'));const pending=f.joinServices.list().items[0]!.id;f.joinServices.reject(pending);expect(()=>f.invitationServices.checkEligibility('pending@example.com')).toThrow(error('INVITATION_NOT_ELIGIBLE'));
+ f.joinServices.submit(newJoinApplication('pending@example.com','Pending','001234'));expect(()=>f.invitationServices.checkEligibility('pending@example.com')).toThrow(error('INVITATION_NOT_ELIGIBLE'));const pending=f.joinServices.list().items[0]!.id;f.joinServices.reject(pending);expect(()=>f.invitationServices.checkEligibility('pending@example.com')).toThrow(error('INVITATION_NOT_ELIGIBLE'));
  const approved=await approvedInvitation(f);expect(f.joinServices.get(approved.id).application.deliveryStatus).toBe('failed');
  f.advance(600_000);let before=joinSnapshot(f);expect(f.invitationServices.checkEligibility('member@example.com').status).toBe('eligible');expect(joinSnapshot(f)).toEqual(before);expect(f.deliveries.length).toBe(1);
  await f.invitationServices.requestCode('member@example.com');const grant=f.invitationServices.verifyCode('member@example.com',f.deliveries.at(-1)!.code);before=joinSnapshot(f);expect(f.invitationServices.checkEligibility('member@example.com').status).toBe('eligible');expect(joinSnapshot(f)).toEqual(before);
@@ -95,11 +95,11 @@ it('keeps approval after delivery failure and never stores codes, URLs, tokens o
  const grant=f.invitationServices.verifyCode(a.email,code);expect(JSON.stringify(joinSnapshot(f))).not.toContain(grant.completionToken);await f.invitationServices.complete(input(grant.completionToken));
 })
 it('marks timeout failed, ignores late adapter success and preserves newer attempt result',async()=>{
- vi.useFakeTimers();let release!:()=>void;const f=setup({deliverInvitation:()=>new Promise<void>(r=>{release=r})});f.joinServices.submit({email:'member@example.com',nickname:'Member',qq:'1'});const id=f.joinServices.list().items[0]!.id,pending=f.joinServices.approve(id);await vi.advanceTimersByTimeAsync(10_000);expect((await pending).application.deliveryStatus).toBe('failed');release();await Promise.resolve();expect(f.joinServices.get(id).application.deliveryStatus).toBe('failed');
+ vi.useFakeTimers();let release!:()=>void;const f=setup({deliverInvitation:()=>new Promise<void>(r=>{release=r})});f.joinServices.submit(newJoinApplication('member@example.com','Member','001234'));const id=f.joinServices.list().items[0]!.id,pending=f.joinServices.approve(id);await vi.advanceTimersByTimeAsync(10_000);expect((await pending).application.deliveryStatus).toBe('failed');release();await Promise.resolve();expect(f.joinServices.get(id).application.deliveryStatus).toBe('failed');
  f.advance(60_000);const resend=f.joinServices.resend(id);await Promise.resolve();release();expect((await resend).application.deliveryStatus).toBe('sent');expect(f.sqlite.prepare('SELECT status FROM join_delivery_attempts ORDER BY code_version').all()).toEqual([{status:'failed'},{status:'sent'}]);
 })
 it('recovers abandoned pending deliveries only on later mutating-flow requests, not check or startup',async()=>{
- const f=setup(),a=await approvedInvitation(f);f.sqlite.prepare("UPDATE join_delivery_attempts SET status='pending',finished_at=NULL").run();f.advance(10_000);const before=joinSnapshot(f);expect(f.invitationServices.checkEligibility(a.email).status).toBe('eligible');expect(joinSnapshot(f)).toEqual(before);f.joinServices.submit({email:'other@example.com',nickname:'Other',qq:'2'});expect(f.sqlite.prepare('SELECT status FROM join_delivery_attempts').get()).toEqual({status:'failed'});
+ const f=setup(),a=await approvedInvitation(f);f.sqlite.prepare("UPDATE join_delivery_attempts SET status='pending',finished_at=NULL").run();f.advance(10_000);const before=joinSnapshot(f);expect(f.invitationServices.checkEligibility(a.email).status).toBe('eligible');expect(joinSnapshot(f)).toEqual(before);await f.invitationServices.requestCode('other@example.com');expect(f.sqlite.prepare('SELECT status FROM join_delivery_attempts').get()).toEqual({status:'failed'});
 })
 it('uses safe base URLs and a bounded expiring IP limiter',()=>{
  for(const url of ['https://user:secret@example.com','https://example.com/path','https://example.com?x=1','https://example.com/#x','javascript:alert(1)','invalid'])expect(()=>publicWebBaseUrl(url)).toThrow();expect(publicWebBaseUrl('https://example.com/')).toBe('https://example.com');
@@ -108,12 +108,12 @@ it('uses safe base URLs and a bounded expiring IP limiter',()=>{
 it('returns the same anonymous code acceptance for unknown, pending, cooldown and failed deliveries',async()=>{
  const f=setup({deliverInvitation:()=>Promise.reject(new Error('delivery failed'))});const at=f.now(),expected={status:'accepted',serverTime:at,resendAvailableAt:at+60_000};
  expect(await f.invitationServices.requestCode('unknown@example.com')).toEqual(expected);expect(f.sqlite.prepare('SELECT * FROM join_email_controls').all()).toEqual([]);
- f.joinServices.submit({email:'pending@example.com',nickname:'Pending',qq:'1'});expect(await f.invitationServices.requestCode('pending@example.com')).toEqual(expected);const a=await approvedInvitation(f);expect(await f.invitationServices.requestCode(a.email)).toEqual(expected);expect(f.deliveries.length).toBe(1);f.advance(60_000);expect(await f.invitationServices.requestCode(a.email)).toEqual({status:'accepted',serverTime:f.now(),resendAvailableAt:f.now()+60_000});expect(f.joinServices.get(a.id).application.deliveryStatus).toBe('failed');
+ f.joinServices.submit(newJoinApplication('pending@example.com','Pending','001234'));expect(await f.invitationServices.requestCode('pending@example.com')).toEqual(expected);const a=await approvedInvitation(f);expect(await f.invitationServices.requestCode(a.email)).toEqual(expected);expect(f.deliveries.length).toBe(1);f.advance(60_000);expect(await f.invitationServices.requestCode(a.email)).toEqual({status:'accepted',serverTime:f.now(),resendAvailableAt:f.now()+60_000});expect(f.joinServices.get(a.id).application.deliveryStatus).toBe('failed');
 })
 it('fails verification after previously successful eligibility becomes invalid',async()=>{
  const f=setup(),a=await approvedInvitation(f);expect(f.invitationServices.checkEligibility(a.email).status).toBe('eligible');f.advance(7*86_400_000);expect(()=>f.invitationServices.verifyCode(a.email,a.code)).toThrow(error('INVITATION_CODE_INVALID'));expect(f.sqlite.prepare('SELECT count(*) n FROM auth_users').get()).toEqual({n:0});
 })
 it('limits lazy cleanup to 25 expired records in each category',async()=>{
- const f=setup();for(let i=0;i<30;i++)await approvedInvitation(f,`member-${i}@example.com`);f.advance(7*86_400_000);f.joinServices.submit({email:'trigger@example.com',nickname:'Trigger',qq:'1'});expect(f.sqlite.prepare("SELECT count(*) n FROM join_invitations WHERE status='expired'").get()).toEqual({n:25});
+ const f=setup();for(let i=0;i<30;i++)await approvedInvitation(f,`member-${i}@example.com`);f.advance(7*86_400_000);await f.invitationServices.requestCode('trigger@example.com');expect(f.sqlite.prepare("SELECT count(*) n FROM join_invitations WHERE status='expired'").get()).toEqual({n:25});
  const last=f.sqlite.prepare("SELECT a.email FROM join_applications a JOIN join_invitations i ON a.id=i.application_id WHERE i.status='active' LIMIT 1").get() as {email:string};const before=joinSnapshot(f);expect(()=>f.invitationServices.checkEligibility(last.email)).toThrow(error('INVITATION_NOT_ELIGIBLE'));expect(joinSnapshot(f)).toEqual(before);
 })

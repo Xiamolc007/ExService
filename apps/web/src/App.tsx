@@ -8,6 +8,7 @@ import { ProfilePage } from './pages/ProfilePage'
 import { AuthProvider } from './auth/AuthContext'
 import { InvitationRegistrationPage } from './pages/AuthPage/InvitationRegistrationPage'
 import { JoinPage } from './pages/JoinPage'
+import { JoinResultPage } from './pages/JoinResultPage'
 import { JoinReviewPage } from './pages/JoinReviewPage'
 
 /**
@@ -25,6 +26,7 @@ export function App() {
         <Route element={<RootLayout />}>
           <Route path="/" element={<Home />} />
           <Route path="/join" element={<JoinPage />} />
+          <Route path="/join/result" element={<JoinResultPage />} />
           <Route path="/admin/join-applications" element={<JoinReviewPage />} />
           <Route path="/account/profile" element={<ProfilePage />} />
           <Route path="*" element={<NotFound />} />

@@ -14,6 +14,18 @@ export const testPasswordHasher: PasswordHasher = {
   async hash(password) { return `test-password:${password}` },
   async verify(password, encodedHash) { return encodedHash === `test-password:${password}` },
 }
+export function newJoinApplication(email = 'member@example.com', nickname = 'Applicant', qq = '001234') {
+  return { email, nickname, qq, form: { applicationType: 'new' as const, birthDate: '2000-02-29', applicantCategory: '100' as const,
+    department: 'leo' as const, freeTime: '每晚都有空', discoveryChannels: ['friends' as const],
+    answers: { fiveMExperience: '没有接触过', emergencyRoleplayKnowledge: '了解', emergencyProceduresKnowledge: '学习中', rpUnderstanding: '扮演真实角色', frpUnderstanding: '遵循角色与场景' },
+    commitments: { informationAccurate: true as const, obeyCommunityRules: true as const, acceptAcademyAttendanceConsequences: true as const } } }
+}
+export function experiencedJoinApplication(email = 'experienced@example.com') {
+  const common = newJoinApplication(email)
+  return { ...common, form: { ...common.form, applicationType: 'experienced' as const,
+    answers: { previousServer: 'Previous server', leaveReason: '寻找新社区', previousDepartment: '巡逻', lawEnforcementExperience: '有相关经历', highestRank: 'Officer', punishmentHistory: '无', deescalationEssay: '😀'.repeat(150), discretionEssay: '自'.repeat(150), transferReason: '继续学习' },
+    commitments: { informationAccurate: true as const } } }
+}
 export function createTestAuth(overrides: Partial<AuthServiceDependencies & InvitationServiceDependencies> = {}) {
   const sqlite = new Database(':memory:')
   sqlite.pragma('foreign_keys = ON')
@@ -53,7 +65,7 @@ export function createTestAuth(overrides: Partial<AuthServiceDependencies & Invi
   }
 }
 export async function approvedInvitation(fixture: ReturnType<typeof createTestAuth>, email = 'member@example.com') {
-  fixture.joinServices.submit({email,nickname:'Applicant',qq:'001234'})
+  fixture.joinServices.submit(newJoinApplication(email))
   const row = fixture.sqlite.prepare('SELECT id FROM join_applications WHERE email = ? AND status = ?').get(email,'pending') as { id: string }
   await fixture.joinServices.approve(row.id)
   return { id: row.id, email, code: fixture.deliveries.at(-1)!.code }
@@ -64,6 +76,6 @@ export async function registerInvited(fixture: ReturnType<typeof createTestAuth>
   return fixture.invitationServices.complete({completionToken:grant.completionToken,nickname:'Member',password:'valid password'})
 }
 export function joinSnapshot(fixture: ReturnType<typeof createTestAuth>) {
-  return Object.fromEntries(['join_applications','join_invitations','join_email_controls','join_delivery_attempts','auth_users','auth_sessions','auth_sso_requests','community_groups','community_group_memberships']
+  return Object.fromEntries(['join_applications','join_application_email_registry','join_application_forms','join_application_attachments','join_invitations','join_email_controls','join_delivery_attempts','auth_users','auth_sessions','auth_sso_requests','community_groups','community_group_memberships']
     .map(table => [table, fixture.sqlite.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()]))
 }

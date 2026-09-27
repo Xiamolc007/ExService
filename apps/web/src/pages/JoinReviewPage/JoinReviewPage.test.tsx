@@ -1,19 +1,20 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest'
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { JoinReviewPage } from './index'
 import { ExMessage } from '@workspace/components'
+import type { components } from '@workspace/api-client'
 const { get, post } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
 vi.mock('../../api/client', () => ({ api: { GET: get, POST: post } }))
-const application = { id: 'a', email: 'member@example.com', nickname: '成员', qq: '001234', status: 'pending', createdAt: 1000, reviewedAt: null, reviewedByUserId: null, invitationStatus: null, deliveryStatus: null }
-afterEach(() => { cleanup(); get.mockReset(); post.mockReset(); vi.restoreAllMocks(); vi.useRealTimers() })
+const application: components['schemas']['JoinApplicationSummary'] = { id: 'a', email: 'member@example.com', nickname: '成员', qq: '001234', status: 'pending', createdAt: 1000, reviewedAt: null, reviewedByUserId: null, invitationStatus: null, deliveryStatus: null, applicationType: 'legacy' }
+afterEach(() => { cleanup(); get.mockReset(); post.mockReset(); vi.restoreAllMocks(); vi.useRealTimers(); vi.unstubAllGlobals() })
 const listOf = (items = [application], offset = 0, total = items.length) => ({ items, offset, total, limit: 20, serverTime: 1000 })
-const detailOf = (item = application) => ({ application: item, invitation: null, serverTime: 1000 })
+const detailOf = (item = application) => ({ application: item, invitation: null, serverTime: 1000, formVersion: 0, form: null, attachments: [] })
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done }); return { promise, resolve } }
 it('opens fresh detail in two tabs and restores focus without changing the list filter', async () => {
   const user = userEvent.setup()
-  get.mockImplementation((path: string) => Promise.resolve({ data: path.endsWith('{applicationId}') ? { application, invitation: null, serverTime: 1000 } : { items: [application], total: 1, offset: 0, limit: 20, serverTime: 1000 } }))
+  get.mockImplementation((path: string) => Promise.resolve({ data: path.endsWith('{applicationId}') ? detailOf() : listOf() }))
   render(<JoinReviewPage />)
   const trigger = await screen.findByRole('button', { name: '查看 成员' })
   await user.click(trigger)
@@ -85,13 +86,13 @@ it('restores focus to refresh when approval removes the original pending row', a
 
 it('refreshes conflicted detail and presents delivery failure without changing approval facts', async () => {
   const user = userEvent.setup()
-  const approved = { ...application, status: 'approved', deliveryStatus: 'failed' }
+  const approved = { ...application, status: 'approved' as const, deliveryStatus: 'failed' as const }
   get.mockImplementation((path: string) => Promise.resolve({ data: path.endsWith('{applicationId}') ? detailOf() : listOf() }))
   post.mockResolvedValue({ ...{ error: { error: { code: 'JOIN_STATE_CONFLICT', message: 'safe' } } }, response: new Response(null, { status: 409 }) })
   render(<JoinReviewPage />)
   await user.click(await screen.findByRole('button', { name: '查看 成员' }))
   await screen.findByRole('button', { name: '同意并发送邀请' })
-  get.mockImplementation((path: string) => Promise.resolve({ data: path.endsWith('{applicationId}') ? { application: approved, serverTime: 1000, invitation: { status: 'active', resendAvailableAt: 1000, expiresAt: 100000, latestDelivery: { status: 'failed' } } } : listOf([]) }))
+  get.mockImplementation((path: string) => Promise.resolve({ data: path.endsWith('{applicationId}') ? { ...detailOf(approved), invitation: { status: 'active', resendAvailableAt: 1000, expiresAt: 100000, latestDelivery: { status: 'failed' } } } : listOf([]) }))
   await user.click(screen.getByRole('button', { name: '拒绝申请' }))
   await user.click(screen.getByRole('tab', { name: '审核与邀请' }))
   expect(await screen.findByText('邀请投递失败，审批已保留。冷却结束后可重新发送。')).toBeTruthy()
@@ -113,4 +114,101 @@ it('retains pending approval on inherited cooldown 429 and enables retry after t
   await act(async () => { vi.advanceTimersByTime(3000) })
   expect((screen.getByRole('button', { name: '同意并发送邀请' }) as HTMLButtonElement).disabled).toBe(false)
   expect(post).toHaveBeenCalledTimes(1)
+})
+
+const newForm: components['schemas']['JoinNewForm'] = {
+  applicationType: 'new', birthDate: '2000-01-01', applicantCategory: '102b', department: 'ems', freeTime: '周末晚上', discoveryChannels: ['bilibili', 'friends'],
+  answers: { fiveMExperience: '没有接触过', emergencyRoleplayKnowledge: '了解紧急职业', emergencyProceduresKnowledge: '流程说明\n第二行', rpUnderstanding: '角色扮演', frpUnderstanding: '失败角色扮演' },
+  commitments: { informationAccurate: true, obeyCommunityRules: true, acceptAcademyAttendanceConsequences: true },
+}
+const experiencedForm: components['schemas']['JoinExperiencedForm'] = {
+  ...newForm, applicationType: 'experienced',
+  answers: { previousServer: '以前服务器', leaveReason: '离开原因全文', previousDepartment: '以前巡逻部门', lawEnforcementExperience: '执法生涯全文', highestRank: '警长', punishmentHistory: '无处罚', deescalationEssay: '武力降级'.repeat(40), discretionEssay: '自由裁量'.repeat(40), transferReason: '调转原因全文' },
+  commitments: { informationAccurate: true },
+}
+const attachment = { id: 'proof-id', originalName: '证明资料.svg', extension: 'svg', byteLength: 20, sha256: 'a'.repeat(64), ordinal: 0 }
+it.each([newForm, experiencedForm])('shows every full $applicationType answer and only its commitments as text', async form => {
+  const user = userEvent.setup()
+  const detail = { ...detailOf(), application: { ...application, applicationType: form.applicationType }, formVersion: 1, form, attachments: Array.from({ length: 5 }, (_, index) => ({ ...attachment, id: `proof-${index}`, originalName: `附件${index}.txt`, ordinal: index })) }
+  get.mockImplementation((path: string) => Promise.resolve({ data: path.endsWith('{applicationId}') ? detail : listOf([detail.application]) }))
+  render(<JoinReviewPage />)
+  await user.click(await screen.findByRole('button', { name: '查看 成员' }))
+  expect(await screen.findByText('曾任其他服务器技术')).toBeTruthy()
+  expect(screen.getByText('医疗和消防部门')).toBeTruthy()
+  expect(screen.getByText('B站、朋友介绍')).toBeTruthy()
+  expect(screen.getByText('周末晚上')).toBeTruthy()
+  for (const answer of Object.values(form.answers)) expect(screen.getByText(answer, { exact: true, normalizer: value => value })).toBeTruthy()
+  expect(screen.getAllByText('已确认')).toHaveLength(form.applicationType === 'new' ? 3 : 1)
+  expect(screen.getAllByRole('button', { name: /^下载 附件/ })).toHaveLength(5)
+  expect(document.querySelector('iframe, img, object, embed')).toBeNull()
+})
+it('marks legacy details without inventing answers or commitments', async () => {
+  const user = userEvent.setup()
+  get.mockImplementation((path: string) => Promise.resolve({ data: path.endsWith('{applicationId}') ? detailOf() : listOf() }))
+  render(<JoinReviewPage />)
+  await user.click(await screen.findByRole('button', { name: '查看 成员' }))
+  expect(await screen.findByText('历史简版申请：仅保留当时提交的联系资料，没有完整回答、附件或承诺记录。')).toBeTruthy()
+  expect(screen.queryByText('已确认')).toBeNull()
+  expect(screen.queryByText('出生日期')).toBeNull()
+})
+it('downloads through the declared blob operation and releases the temporary URL without preview', async () => {
+  const user = userEvent.setup(), create = vi.fn(() => 'blob:temporary-proof'), revoke = vi.fn(), click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  vi.stubGlobal('URL', class extends URL { static override createObjectURL = create; static override revokeObjectURL = revoke })
+  const blob = new Blob(['<svg></svg>'], { type: 'application/octet-stream' })
+  const detail = { ...detailOf(), application: { ...application, applicationType: 'experienced' as const }, formVersion: 1, form: experiencedForm, attachments: [attachment] }
+  get.mockImplementation((path: string) => Promise.resolve({ data: path.endsWith('{attachmentId}') ? blob : path.endsWith('{applicationId}') ? detail : listOf([detail.application]) }))
+  render(<JoinReviewPage />)
+  await user.click(await screen.findByRole('button', { name: '查看 成员' }))
+  await user.click(await screen.findByRole('button', { name: '下载 证明资料.svg' }))
+  expect(get).toHaveBeenLastCalledWith('/admin/join/applications/{applicationId}/attachments/{attachmentId}', { params: { path: { applicationId: 'a', attachmentId: 'proof-id' } }, parseAs: 'blob' })
+  expect(create).toHaveBeenCalledExactlyOnceWith(blob)
+  expect(click).toHaveBeenCalledTimes(1)
+  await waitFor(() => expect(revoke).toHaveBeenCalledExactlyOnceWith('blob:temporary-proof'))
+  expect(document.querySelector('a[download], iframe, img, object, embed')).toBeNull()
+})
+it('keeps attachment failures retryable and ignores a response after closing detail', async () => {
+  const user = userEvent.setup(), late = deferred<{ data: Blob }>(), create = vi.fn(() => 'blob:late')
+  vi.stubGlobal('URL', class extends URL { static override createObjectURL = create; static override revokeObjectURL = vi.fn() })
+  const detail = { ...detailOf(), application: { ...application, applicationType: 'experienced' as const }, formVersion: 1, form: experiencedForm, attachments: [attachment] }
+  get.mockImplementation((path: string) => path.endsWith('{attachmentId}') ? Promise.resolve({ response: new Response(null, { status: 503 }) }) : Promise.resolve({ data: path.endsWith('{applicationId}') ? detail : listOf([detail.application]) }))
+  render(<JoinReviewPage />)
+  await user.click(await screen.findByRole('button', { name: '查看 成员' }))
+  await user.click(await screen.findByRole('button', { name: '下载 证明资料.svg' }))
+  expect(await screen.findByText('当前下载繁忙，请稍后重试')).toBeTruthy()
+  get.mockImplementation((path: string) => path.endsWith('{attachmentId}') ? late.promise : Promise.resolve({ data: path.endsWith('{applicationId}') ? detail : listOf([detail.application]) }))
+  await user.click(screen.getByRole('button', { name: '下载 证明资料.svg' }))
+  await user.click(screen.getByRole('button', { name: '关闭详情' }))
+  await act(async () => { late.resolve({ data: new Blob(['late']) }) })
+  expect(create).not.toHaveBeenCalled()
+  expect(screen.queryByRole('dialog')).toBeNull()
+})
+it('renders list and detail request errors and permits explicit reloads', async () => {
+  const user = userEvent.setup()
+  get.mockRejectedValueOnce(new Error('internal detail')).mockResolvedValueOnce({ data: listOf() }).mockRejectedValueOnce(new Error('internal path')).mockResolvedValueOnce({ data: detailOf() })
+  render(<JoinReviewPage />)
+  expect(await screen.findByText('无法加载申请列表，请重试')).toBeTruthy()
+  await user.click(screen.getByRole('button', { name: '重试加载' }))
+  await user.click(await screen.findByRole('button', { name: '查看 成员' }))
+  expect(await screen.findByText('无法加载申请详情，请重试')).toBeTruthy()
+  await user.click(screen.getByRole('button', { name: '刷新详情' }))
+  expect(await screen.findByText('历史简版申请：仅保留当时提交的联系资料，没有完整回答、附件或承诺记录。')).toBeTruthy()
+  expect(screen.queryByText('internal path')).toBeNull()
+})
+it('releases a scheduled download URL when the page unmounts before its cleanup timer', async () => {
+  const user = userEvent.setup({ delay: null }), create = vi.fn(() => 'blob:unmount-proof'), revoke = vi.fn()
+  vi.stubGlobal('URL', class extends URL { static override createObjectURL = create; static override revokeObjectURL = revoke })
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  const detail = { ...detailOf(), application: { ...application, applicationType: 'experienced' as const }, formVersion: 1, form: experiencedForm, attachments: [attachment] }
+  get.mockImplementation((path: string) => Promise.resolve({ data: path.endsWith('{attachmentId}') ? new Blob(['proof']) : path.endsWith('{applicationId}') ? detail : listOf([detail.application]) }))
+  render(<JoinReviewPage />)
+  await user.click(await screen.findByRole('button', { name: '查看 成员' }))
+  const button = await screen.findByRole('button', { name: '下载 证明资料.svg' })
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  await act(async () => { fireEvent.click(button); await Promise.resolve() })
+  expect(create).toHaveBeenCalledTimes(1)
+  expect(revoke).not.toHaveBeenCalled()
+  cleanup()
+  expect(revoke).toHaveBeenCalledExactlyOnceWith('blob:unmount-proof')
+  await act(async () => { vi.runAllTimers() })
+  expect(revoke).toHaveBeenCalledTimes(1)
 })

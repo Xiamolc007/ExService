@@ -11,7 +11,7 @@ Contract Test 的断言不能只停留在 HTTP 响应上，因为响应在到达
 ## 测试夹具
 
 - 夹具从 `tests/helpers/auth.ts` 构造内存 SQLite 与所需服务，应用经 `createApp()` 创建真实 Fastify 实例并在用例结束时关闭。
-- 请求使用 `app.inject()`，不绑定端口，也不读写开发数据库。
+- 常规 HTTP schema 测试使用 `app.inject()`；生成 Client/multipart 互通与连接生命周期测试另绑定本机随机端口。所有夹具均不读写开发数据库。
 - 健康、认证、本人资料及加入流程在 `tests/contract/` 各自覆盖；新增 operation 时同步增加 HTTP 与注册 handler 原始值断言。
 
 加入流程夹具应用完整 migration journal，业务测试经过申请、审核、验证与完善。登录/资料回归可直接用仅测试模块的用户夹具初始化账号，避免把旧注册方法保留为测试后门；历史迁移测试明确选择旧 journal 阶段，不据此重新提供退役 API。
@@ -19,6 +19,8 @@ Contract Test 的断言不能只停留在 HTTP 响应上，因为响应在到达
 HTTP 日志安全由 `tests/contract/join-logging.test.ts` 捕获真实日志流验证，不能由响应不泄漏的断言替代。`tests/auth/shared-password-budget.test.ts` 使用生产组装与真实密码队列，只替换底层计算以控制完成时机，覆盖跨服务饱和、恢复和唤醒时新请求交错。`tests/auth/cli-bootstrap.test.ts` 隔离固定数据库打开边界，验证 SSO CLI 在仅有认证结构且没有验证码密钥时仍可用；这些测试都不打开开发库。
 
 ## 层次划分
+
+完整申请另分传输、业务和历史迁移：`tests/contract/join-upload.test.ts` 验证实际生成 Client 发送 FormData 后的字节、MIME 与摘要；`tests/contract/join-upload-sockets.test.ts` 验证真实连接容量与回收；`tests/join/` 覆盖唯一竞争、原子回滚、历史读兼容与只读状态计算。传输陷阱见 `.ai/knowledge/mock-server/multipart-lifecycle-traps.md`。隔离迁移夹具不代表固定开发库已经升级。
 
 | describe | 覆盖内容 | 不可被其他层替代的原因 |
 | --- | --- | --- |

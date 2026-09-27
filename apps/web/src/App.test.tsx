@@ -14,9 +14,17 @@ vi.mock('./pages/NotFound', () => ({
   NotFound: () => <main>Page not found</main>,
 }))
 
+vi.mock('./pages/JoinResultPage', () => ({ JoinResultPage: () => <main>Application result query</main> }))
+
 import { App } from './App'
 
 describe('App', () => {
+  it('renders application result queries inside the site layout', () => {
+    const markup = renderToStaticMarkup(<MemoryRouter initialEntries={['/join/result']}><App /></MemoryRouter>)
+    expect(markup).toContain('Site header')
+    expect(markup).toContain('Application result query')
+    expect(markup).not.toContain('Page not found')
+  })
   it('keeps the site header around an unmatched route', () => {
     const markup = renderToStaticMarkup(
       <MemoryRouter initialEntries={['/not-found']}>
