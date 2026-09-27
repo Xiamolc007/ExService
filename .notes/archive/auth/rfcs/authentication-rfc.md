@@ -1,11 +1,11 @@
 # RFC：共享认证表单与本地认证闭环
 
-> 2026-09-23 后续调整：用户已确认删除注册 QQ 号和确认密码，将昵称文案改为“用户名”（仅显示名称，允许重复，仍用邮箱登录）。下文相关旧字段与校验条款已被 Contract 0.3.0 取代；实现与迁移边界见 [认证生命周期](../../../.ai/architectures/mock-server/authentication-lifecycle.md)。其余认证流程保持原设计。
+> 2026-09-23 后续调整：用户已确认删除注册 QQ 号和确认密码，将昵称文案改为“用户名”（仅显示名称，允许重复，仍用邮箱登录）。下文相关旧字段与校验条款已被 Contract 0.3.0 取代；实现与迁移边界见 认证生命周期 `.ai/architectures/mock-server/authentication-lifecycle.md`。其余认证流程保持原设计。
 
 - 日期：2026-09-23
 - 状态：技术方案待审阅；产品设计已由用户确认，尚未实施。
-- 来源：[已确认的设计](../specs/2026-09-23-auth-design.md)。原文件保留不变，其文内审阅状态早于本次用户确认。
-- 模块根目录：`.notes/auth/`；本 RFC 是该设计的单一实施入口。
+- 来源：已确认的设计 `.notes/archive/auth/specs/2026-09-23-auth-design.md`。原文件保留不变，其文内审阅状态早于本次用户确认。
+- 模块根目录：`.notes/archive/auth/`；本 RFC 是该设计的单一实施入口。
 
 ## 1. 决策摘要
 
@@ -19,15 +19,15 @@
 
 | 仓库证据 | 对设计的约束 |
 | --- | --- |
-| [OpenAPI](../../../api/openapi.yaml) 只有 `getHealth` | 下文所有认证路径均为提案，不是已有接口；保留健康检查语义 |
-| [app.ts](../../../apps/mock-server/src/app.ts) 导出静态 `serviceHandlers` | 保留显式映射与 handler 原始输出测试能力，不依赖 `this` 获得 Fastify 实例 |
-| [errors.ts](../../../apps/mock-server/src/errors.ts) 统一 envelope | 增加受信任业务错误类型，不能直接回显异常 message |
-| [server.ts](../../../apps/mock-server/src/server.ts) 只监听回环并检查数据库存在 | 保留回环监听；增加只读的认证表可用性与密钥检查，不自动 migration |
-| [数据库 schema](../../../apps/mock-server/src/db/schema.ts) 尚无业务表 | 用新的 migration 创建业务表，不修改 baseline |
-| [Client](../../../packages/api-client/src/client.ts) 是 openapi-fetch 工厂 | 不让 Client 读取 localStorage；应用逐请求传递 Authorization |
-| [AuthArea](../../../packages/components/src/AuthArea.tsx) 使用本地占位登录态 | 替换为受控 UI，不保留第二份会话状态 |
-| [.ai 架构](../../../.ai/architectures/overview.md) 的模块边界 | 共享 UI 不导入 Client、不定义路由；前端不直接 fetch、不复制 DTO |
-| [Contract 测试](../../../tests/contract/health.test.ts) 使用真实 app 和独立 Ajv | 保留 HTTP、原始输出、覆盖检查三层；新增测试不触碰开发数据库 |
+| OpenAPI `api/openapi.yaml` 只有 `getHealth` | 下文所有认证路径均为提案，不是已有接口；保留健康检查语义 |
+| app.ts `apps/mock-server/src/app.ts` 导出静态 `serviceHandlers` | 保留显式映射与 handler 原始输出测试能力，不依赖 `this` 获得 Fastify 实例 |
+| errors.ts `apps/mock-server/src/errors.ts` 统一 envelope | 增加受信任业务错误类型，不能直接回显异常 message |
+| server.ts `apps/mock-server/src/server.ts` 只监听回环并检查数据库存在 | 保留回环监听；增加只读的认证表可用性与密钥检查，不自动 migration |
+| 数据库 schema `apps/mock-server/src/db/schema.ts` 尚无业务表 | 用新的 migration 创建业务表，不修改 baseline |
+| Client `packages/api-client/src/client.ts` 是 openapi-fetch 工厂 | 不让 Client 读取 localStorage；应用逐请求传递 Authorization |
+| AuthArea `packages/components/src/AuthArea.tsx` 使用本地占位登录态 | 替换为受控 UI，不保留第二份会话状态 |
+| .ai 架构 `.ai/architectures/overview.md` 的模块边界 | 共享 UI 不导入 Client、不定义路由；前端不直接 fetch、不复制 DTO |
+| Contract 测试 `tests/contract/health.test.ts` 使用真实 app 和独立 Ajv | 保留 HTTP、原始输出、覆盖检查三层；新增测试不触碰开发数据库 |
 
 当前 Node 最低版本为 22.12，Mock Server 为 NodeNext 编译；运行时代码的相对 import 保留 `.js`。共享包继续通过消费方编译，不增加独立打包流程。
 

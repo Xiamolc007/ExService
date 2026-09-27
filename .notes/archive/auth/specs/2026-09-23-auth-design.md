@@ -1,11 +1,11 @@
 # 登录与注册组件设计
 
-> 2026-09-23 后续调整：注册资料已确认为用户名、邮箱、密码，不再收集 QQ 或确认密码。用户名沿用 `nickname` 作为可重复的显示名称，仍用邮箱登录。下文原注册字段条款仅保留为历史设计；当前以 Contract 0.3.0 和 [认证 UI 流程](../../../.ai/architectures/web/authentication-flow.md) 为准。
+> 2026-09-23 后续调整：注册资料已确认为用户名、邮箱、密码，不再收集 QQ 或确认密码。用户名沿用 `nickname` 作为可重复的显示名称，仍用邮箱登录。下文原注册字段条款仅保留为历史设计；当前以 Contract 0.3.0 和 认证 UI 流程 `.ai/architectures/web/authentication-flow.md` 为准。
 
 - 日期：2026-09-23
 - 状态：分节设计已确认，完整文档待用户审阅
-- 模块根目录：`.notes/auth/`
-- 后续 RFC 目录：`.notes/auth/rfcs/`
+- 模块根目录：`.notes/archive/auth/`
+- 后续 RFC 目录：`.notes/archive/auth/rfcs/`
 - 范围：共享认证表单、Modal 与独立页面、本地认证闭环、SSO 登录接收端预留。
 
 ## 1. 目标与已确认范围
@@ -221,4 +221,4 @@ localStorage 无法读取或写入时显示可恢复错误；普通登录不能�
 
 仓库当前没有 `TESTING.md`，实施时再次检查；若新增，以它为测试工作流唯一来源。执行顺序遵循 Contract-first：修改 Contract → `pnpm api:lint` → `pnpm api:generate` → handler/Client 调用 → `pnpm typecheck`、`pnpm test`、`pnpm build` → 浏览器验收。
 
-本阶段只产生设计文档，尚未修改 Contract、业务实现或数据库，未执行实现测试。完整文档获批后调用 `technical-design-doc-creator`，以本文件为事实来源，在 `.notes/auth/rfcs/` 生成一个实施就绪的 RFC；不直接进入实现，不自动提交，也不在未获许可时提炼到 `.ai/`。
+本阶段只产生设计文档，尚未修改 Contract、业务实现或数据库，未执行实现测试。完整文档获批后调用 `technical-design-doc-creator`，以本文件为事实来源，在 `.notes/archive/auth/rfcs/` 生成一个实施就绪的 RFC；不直接进入实现，不自动提交，也不在未获许可时提炼到 `.ai/`。
