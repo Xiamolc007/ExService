@@ -7,6 +7,7 @@
 ## 开发规范
 
 1. 开发或修改 `apps/web/`、`packages/components/` 中的 Form 前，必须先阅读并遵守 `.ai/rules/frontend-forms.md`。
+2. 开发或修改 `apps/web/`、`packages/components/` 中的全站临时通知时，统一使用 `ExMessage`，并先阅读、遵守 `.ai/rules/frontend-notifications.md`。
 
 ### 文档中的文件路径
 

@@ -4,7 +4,7 @@
 
 ## 统一入口
 
-1. 全站临时通知统一使用 `ExMessage`。应用代码从 `@workspace/components` 导入；共享组件包内部从 `packages/components/src/ExMessage.tsx` 导入，代码中的相对 import 按文件位置填写。
+1. 全站临时通知统一使用 `ExMessage`。应用代码从 `@workspace/components` 导入；共享组件包内部从 `@components/src/ExMessage` 导入。
 2. 业务代码不得直接调用 ExUI 的 `toast`，不得另建 Toaster、通知容器或通知状态系统，也不得另装 Sonner 等通知库。底层 `toast/Toaster` 仅由 ExMessage 实现及其测试使用。
 3. 全站宿主只在 `apps/web/src/main.tsx` 的 `ThemeProvider` 内挂载一次。页面、布局和弹窗只调用静态方法；全局配置统一在根宿主调整。
 4. 通知调用放在已挂载页面的事件处理或后续 passive effect 中；不要在模块初始化、React render 或首次 layout effect 中发送。宿主激活时机与底层行为见 `.ai/knowledge/components/ex-message-host-lifecycle.md`。
