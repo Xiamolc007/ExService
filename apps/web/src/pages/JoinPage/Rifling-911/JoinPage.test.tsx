@@ -1,19 +1,63 @@
-﻿// @vitest-environment jsdom
+// @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
-import { JoinPage } from './index'
+import { JoinPage } from '@web/src/pages/JoinPage/Rifling-911/index'
 import { ExMessage } from '@workspace/components'
 const post = vi.hoisted(() => vi.fn())
-vi.mock('../../api/client', () => ({ api: { POST: post } }))
+vi.mock('@web/src/api/client', () => ({ api: { POST: post } }))
+vi.mock('@web/src/join/hero-images', () => ({ getJoinHeroImages: () => ['/images/heros/join/rifling-911/465563.jpg', '/images/heros/join/rifling-911/X1.png'] }))
+vi.mock('@paper-design/shaders-react', () => ({ HalftoneDots: ({ image }: { image: string }) => <img alt="" src={image} /> }))
 beforeEach(() => { vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }) })
 afterEach(() => { cleanup(); post.mockReset(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done }); return { promise, resolve } }
 function change(label: string | RegExp, value: string) { fireEvent.change(screen.getByLabelText(label), { target: { value } }) }
+it('cycles through the local hero images when the hero is clicked', async () => {
+  render(<MemoryRouter><JoinPage /></MemoryRouter>)
+  const user = userEvent.setup()
+  const hero = screen.getByRole('button', { name: '切换背景图片，当前第 1 张，共 2 张' })
+  expect(hero.querySelector('img')?.getAttribute('src')).toBe('/images/heros/join/rifling-911/465563.jpg')
+  await user.click(hero)
+  expect(hero.querySelector('img')?.getAttribute('src')).toBe('/images/heros/join/rifling-911/X1.png')
+  await user.click(hero)
+  expect(hero.querySelector('img')?.getAttribute('src')).toBe('/images/heros/join/rifling-911/465563.jpg')
+})
+it('shows both community entrances before the requirements while links are unconfigured', () => {
+  render(<MemoryRouter><JoinPage /></MemoryRouter>)
+  const community = screen.getByRole('region', { name: '社区入口' })
+  const requirements = screen.getByRole('region', { name: '申请须知' })
+  expect(community.compareDocumentPosition(requirements) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect((within(community).getByRole('button', { name: 'QQ 社区' }) as HTMLButtonElement).disabled).toBe(true)
+  expect((within(community).getByRole('button', { name: 'KOOK 社区' }) as HTMLButtonElement).disabled).toBe(true)
+})
+it('allows readers to expand and collapse a question', async () => {
+  render(<MemoryRouter><JoinPage /></MemoryRouter>)
+  const user = userEvent.setup()
+  const question = screen.getByRole('button', { name: '可以更换类别或再次申请吗？' })
+  expect(question.getAttribute('aria-expanded')).toBe('false')
+  await user.click(question)
+  expect(question.getAttribute('aria-expanded')).toBe('true')
+  await user.click(question)
+  expect(question.getAttribute('aria-expanded')).toBe('false')
+})
+it('keeps application actions independent of keyboard background switching', async () => {
+  render(<MemoryRouter><JoinPage /></MemoryRouter>)
+  const user = userEvent.setup()
+  const hero = screen.getByRole('button', { name: '切换背景图片，当前第 1 张，共 2 张' })
+  hero.focus()
+  await user.keyboard('{Enter}')
+  expect(hero.getAttribute('aria-label')).toContain('第 2 张')
+  await user.keyboard(' ')
+  expect(hero.getAttribute('aria-label')).toContain('第 1 张')
+  await user.click(screen.getByRole('button', { name: '新玩家申请' }))
+  expect(screen.getByRole('dialog')).toBeTruthy()
+  await user.click(screen.getByRole('button', { name: '关闭申请' }))
+  expect(hero.getAttribute('aria-label')).toContain('第 1 张')
+})
 async function fill(type: 'new' | 'experienced', file?: File, oversized = false) {
   const user = userEvent.setup()
-  await user.click(screen.getByRole('button', { name: type === 'new' ? '全新玩家申请' : '经验玩家申请' }))
+  await user.click(screen.getByRole('button', { name: type === 'new' ? '新玩家申请' : '调转申请' }))
   change('邮箱', 'Member@example.com'); change(type === 'new' ? '你的名字' : 'IC 名字', '成员'); change('QQ 号码', '001234')
   await user.click(screen.getByRole('button', { name: '下一步' }))
   change('出生日期', '2000-01-01')
@@ -33,13 +77,13 @@ async function fill(type: 'new' | 'experienced', file?: File, oversized = false)
 }
 it('presents both types, query and instructions and clears closed drafts', async () => {
   render(<MemoryRouter><JoinPage /></MemoryRouter>)
-  const user = userEvent.setup(), trigger = screen.getByRole('button', { name: '全新玩家申请' })
+  const user = userEvent.setup(), trigger = screen.getByRole('button', { name: '新玩家申请' })
   expect(screen.getByRole('link', { name: '查询申请结果' }).getAttribute('href')).toBe('/join/result')
   expect(screen.getByRole('heading', { name: '申请须知' })).toBeTruthy()
   await user.click(trigger); change('邮箱', 'draft@example.com')
   await user.click(screen.getByRole('button', { name: '关闭申请' }))
   expect(document.activeElement).toBe(trigger)
-  await user.click(screen.getByRole('button', { name: '经验玩家申请' }))
+  await user.click(screen.getByRole('button', { name: '调转申请' }))
   expect((screen.getByLabelText('邮箱') as HTMLInputElement).value).toBe('')
   expect(post).not.toHaveBeenCalled()
 })

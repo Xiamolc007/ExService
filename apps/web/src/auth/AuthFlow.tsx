@@ -7,8 +7,8 @@ import {
   type AuthFormErrors,
   type LoginDraft,
 } from '@workspace/components'
-import { api } from '../api/client'
-import { readToken, removeMatchingToken, writeSsoSuccess, writeToken } from './storage'
+import { api } from '@web/src/api/client'
+import { readToken, removeMatchingToken, writeSsoSuccess, writeToken } from '@web/src/auth/storage'
 
 export interface AuthFlowProps {
   initialMode?: 'login'
@@ -170,7 +170,7 @@ export function AuthFlow({
     generation.current += 1
     pendingDraft.current = null
     if (onJoin) onJoin()
-    else navigate('/join')
+    else navigate('/join/rifling-911')
   }
 
   function finishSso(requestId: string) {

@@ -3,11 +3,11 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { AuthProvider } from '../auth/AuthContext'
-import { RootLayout } from './RootLayout'
+import { AuthProvider } from '@web/src/auth/AuthContext'
+import { RootLayout } from '@web/src/routes/RootLayout'
 import { ExMessage } from '@workspace/components'
 const { post, get } = vi.hoisted(() => ({ post: vi.fn(), get: vi.fn() }))
-vi.mock('../api/client', () => ({ api: { POST: post, GET: get } }))
+vi.mock('@web/src/api/client', () => ({ api: { POST: post, GET: get } }))
 let mobile = false
 class TestResizeObserver { observe() {} unobserve() {} disconnect() {} }
 vi.stubGlobal('ResizeObserver', TestResizeObserver)
@@ -19,7 +19,7 @@ beforeEach(() => {
   vi.spyOn(ExMessage, 'info').mockReturnValue('info')
 })
 afterEach(() => { cleanup(); post.mockReset(); get.mockReset(); vi.restoreAllMocks(); mobile = false })
-function renderLayout() { return render(<MemoryRouter><AuthProvider><Routes><Route element={<RootLayout />}><Route path="/" element={<p>首页</p>} /><Route path="/join" element={<h1>申请加入页面</h1>} /></Route></Routes></AuthProvider></MemoryRouter>) }
+function renderLayout() { return render(<MemoryRouter><AuthProvider><Routes><Route element={<RootLayout />}><Route path="/" element={<p>首页</p>} /><Route path="/join/rifling-911" element={<h1>申请加入页面</h1>} /></Route></Routes></AuthProvider></MemoryRouter>) }
 
 it.each([false, true])('preserves registration modal and restores its corresponding trigger for mobile=%s', async isMobile => {
   mobile = isMobile

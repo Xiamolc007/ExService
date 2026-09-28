@@ -1,6 +1,6 @@
 import { Link } from 'react-router'
-import { ExIcon } from './ExIcon'
-import styles from './Logo.module.scss'
+import { ExIcon } from '@components/src/ExIcon'
+import styles from '@components/src/Logo.module.scss'
 
 /**
  * 站点图标与字标，图标复用带 Glass 底板的 ExIcon。
@@ -12,7 +12,7 @@ export function Logo() {
   return (
     <Link to="/" className={styles.wordmark}>
       <ExIcon />
-      ExWebsite
+      Exre Service
     </Link>
   )
 }

@@ -2,7 +2,7 @@
 
 本文件说明共享认证 UI、应用流程和浏览器存储之间的边界。HTTP operation 与字段形状以 `api/openapi.yaml` 和生成 Client 类型为准。
 
-_最后更新：2026-09-27_
+_最后更新：2026-09-28_
 
 ## 责任分层
 
@@ -27,7 +27,7 @@ apps/web
 - 顶栏登录与注册使用受控 Modal；关闭会卸载当前流程。
 - `/login` 使用 `AuthFlow`，`/register` 使用 `InvitationRegistrationPage`；两者位于 `RootLayout` 之外，不渲染站点顶栏或认证 Modal，复用认证背景与外围容器。
 - 顶栏桌面与移动注册入口挂载同一个 `InvitationRegistrationFlow`；完成后在原 Dialog 切到普通登录。关闭按当前桌面或移动触发器恢复焦点。
-- `/join`、`/join/result` 与临时审核页 `/admin/join-applications` 位于 `RootLayout` 内。登录的加入回调先关闭 Dialog，再前往 `/join`。
+- `/join/rifling-911`、`/join/result` 与临时审核页 `/admin/join-applications` 位于 `RootLayout` 内。登录的加入回调先关闭 Dialog，再前往 `/join/rifling-911`。
 - `/sso/success` 与 `/sso/*` 的兜底页面也位于 `RootLayout` 之外，不渲染站点顶栏；认证页面代码集中在 `apps/web/src/pages/AuthPage/`。
 - 普通独立认证页通过左上角 Home 返回首页；带 `ssoRequestId` 的登录页面隐藏该入口。独立认证页与 SSO 成功页复用 `MeshGradient` 背景，共享组件不依赖着色器。
 - 登录入口只要 URL 中出现 `ssoRequestId`，就必须通过格式与单值检查；空值、重复值或非法值显示无效入口，不能回退成普通登录。
@@ -36,7 +36,9 @@ apps/web
 
 ## 申请与邀请注册
 
-`/join` 是说明与申请入口展示页，两类入口各挂载独立 `CompleteJoinApplicationModal`。共享组件从 Zod 推导含 File 的 UI 草稿，以 RHF 管理完整字段、当前步骤校验、确认摘要及文件选择；前进只校验当前步，最终校验全部，后退保留值和文件。关闭、刷新或卸载清空草稿，类别切换不混用实例；提交在途保护关闭和重复提交，失败保留草稿。
+`/join/rifling-911` 是说明与申请入口展示页，两类入口各挂载独立 `CompleteJoinApplicationModal`。共享组件从 Zod 推导含 File 的 UI 草稿，以 RHF 管理完整字段、当前步骤校验、确认摘要及文件选择；前进只校验当前步，最终校验全部，后退保留值和文件。关闭、刷新或卸载清空草稿，类别切换不混用实例；提交在途保护关闭和重复提交，失败保留草稿。
+
+Hero 图片来自 `apps/web/public/images/heros/join/rifling-911/`。构建时按文件名排序收集支持的图片格式；多张图片时点击背景循环切换，也支持聚焦背景后按 Enter 或空格，不显示独立切换按钮。画面上的申请按钮与结果查询链接独立响应，不触发切图；单张图片作为静态背景。图片切换尊重减少动态效果偏好。
 
 `apps/web/src/join/client.ts` 将草稿映射为生成 DTO，通过生成 Client 的 bodySerializer 一次组装 JSON Blob 与 proofs File 的 FormData。共享组件不复制 HTTP DTO、不调用 API；应用侧不持久化申请草稿。成功显示来自事务完成的确认，不建立账号。审核和账号创建的职责及字段归属见 `.ai/databases/data-model.md`。
 

@@ -3,14 +3,14 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
-import { JoinResultPage } from './index'
+import { JoinResultPage } from '@web/src/pages/JoinResultPage/index'
 const post = vi.hoisted(() => vi.fn())
-vi.mock('../../api/client', () => ({ api: { POST: post } }))
+vi.mock('@web/src/api/client', () => ({ api: { POST: post } }))
 afterEach(() => { cleanup(); post.mockReset(); vi.restoreAllMocks() })
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done }); return { promise, resolve } }
 function setup() { render(<MemoryRouter><JoinResultPage /></MemoryRouter>); return userEvent.setup() }
 const states = [
-  ['not_found', 'apply', '未查到申请', '/join'], ['pending', 'wait', '待审核', null], ['approved', 'register', '已通过', '/register'],
+  ['not_found', 'apply', '未查到申请', '/join/rifling-911'], ['pending', 'wait', '待审核', null], ['approved', 'register', '已通过', '/register'],
   ['rejected', 'contact_community', '已拒绝', null], ['invitation_expired', 'contact_community', '邀请到期', null], ['registered', 'login', '已完成注册', '/login'],
 ] as const
 it.each(states)('renders %s and only its fixed next action', async (status, nextAction, title, href) => {

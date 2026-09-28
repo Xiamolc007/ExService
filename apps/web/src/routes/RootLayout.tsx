@@ -2,17 +2,17 @@ import { useEffect, useRef, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router'
 import { AuthModal, SiteHeader } from '@workspace/components'
 import type { SettingsCategory } from '@workspace/components'
-import { AuthFlow } from '../auth/AuthFlow'
-import { useAuth } from '../auth/AuthContext'
-import { SettingsModal } from '../settings/SettingsExperience'
-import { InvitationRegistrationFlow } from '../invitations/InvitationRegistrationFlow'
+import { AuthFlow } from '@web/src/auth/AuthFlow'
+import { useAuth } from '@web/src/auth/AuthContext'
+import { SettingsModal } from '@web/src/settings/SettingsExperience'
+import { InvitationRegistrationFlow } from '@web/src/invitations/InvitationRegistrationFlow'
 
 /**
  * 站点布局层：提供站点顶栏与嵌套路由的挂载点。
  *
  * 登录与注册独立页不经过此布局；其余页面（含 `*`）共用导航。
  */
-export function RootLayout() {
+export function RootLayout({ glassAtTop = false }: { glassAtTop?: boolean }) {
   const auth = useAuth()
   const navigate = useNavigate()
   const [loginEmail, setLoginEmail] = useState('')
@@ -22,7 +22,7 @@ export function RootLayout() {
   const registerButton = useRef<HTMLButtonElement>(null)
   const loginButton = useRef<HTMLButtonElement>(null)
   const authTrigger = useRef<'login' | 'register'>('login')
-  const join = () => { auth.closeModal(); navigate('/join') }
+  const join = () => { auth.closeModal(); navigate('/join/rifling-911') }
   useEffect(() => {
     if (auth.state.status === 'anonymous') setSettingsCategory(null)
   }, [auth.state.status])
@@ -37,7 +37,7 @@ export function RootLayout() {
 
   return (
     <>
-      <SiteHeader mobileMenuButtonRef={mobileMenuButton} auth={{
+      <SiteHeader glassAtTop={glassAtTop} mobileMenuButtonRef={mobileMenuButton} auth={{
         state: auth.state,
         onLogin: () => { authTrigger.current = 'login'; setLoginEmail(''); auth.openModal('login') },
         onRegister: () => { authTrigger.current = 'register'; setLoginEmail(''); auth.openModal('register') },

@@ -1,9 +1,13 @@
 import react from '@vitejs/plugin-react'
+import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+const communityConfig = JSON.parse(
+  readFileSync(resolve(repositoryRoot, 'apps/web/public/config.json'), 'utf8'),
+) as { community?: { 'rifling911-qqUrl'?: unknown; 'rifling911-kookUrl'?: unknown } }
 
 /**
  * Mock Server 的本地地址。
@@ -14,6 +18,10 @@ const MOCK_SERVER_ORIGIN = 'http://127.0.0.1:8080'
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    'import.meta.env.VITE_COMMUNITY_QQ_URL': JSON.stringify(communityConfig.community?.['rifling911-qqUrl'] ?? ''),
+    'import.meta.env.VITE_COMMUNITY_KOOK_URL': JSON.stringify(communityConfig.community?.['rifling911-kookUrl'] ?? ''),
+  },
   resolve: {
     dedupe: ['react', 'react-dom'],
     alias: {

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router'
 import { Alert, AlertDescription, Button } from '@exre/exui'
 import { ExMessage, InvitationEmailForm, InvitationCodeForm, InvitationProfileForm, invitationEmailSchema, type AuthFormHandle, type InvitationProfileValues } from '@workspace/components'
 import type { components } from '@workspace/api-client'
-import { api } from '../api/client'
+import { api } from '@web/src/api/client'
 
 interface Props { presentation: 'page' | 'modal'; initialEmail?: string; onLogin?: (email: string) => void; onJoin?: () => void }
 type Verified = components['schemas']['InvitationVerified']
@@ -176,7 +176,7 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
   useEffect(() => {
     if (step === 'code' && error !== null) form.current?.setServerErrors({ code: error })
   }, [step, error])
-  const join = () => { invalidate(); if (onJoin) onJoin(); else navigate('/join') }
+  const join = () => { invalidate(); if (onJoin) onJoin(); else navigate('/join/rifling-911') }
   return <>
     {error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert>}
     {step === 'email' && <InvitationEmailForm ref={form} initialEmail={email} busy={busy} onSubmit={check} onEmailChange={invalidate} onLogin={login} onJoin={join} />}

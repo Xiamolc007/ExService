@@ -19,25 +19,22 @@ import {
   Spinner,
 } from '@exre/exui'
 import { Menu, UserRound } from 'lucide-react'
-import type { Ref } from 'react'
+import { useSyncExternalStore, type Ref } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
-import { AuthArea, type AuthAreaProps } from './AuthArea'
-import { Logo } from './Logo'
-import styles from './SiteHeader.module.scss'
+import { AuthArea, type AuthAreaProps } from '@components/src/AuthArea'
+import { Logo } from '@components/src/Logo'
+import styles from '@components/src/SiteHeader.module.scss'
 
-/**
- * 站点的 5 个导航项。
- *
- * 写死在这里而不是作为 props 传入：导航项是站点结构，不是可变配置，目前也没有
- * 第二个传入方。目标路由（`/dispatch` 等）**尚未建立**，点击会落到 `*` → `NotFound`，
- * 这是本次明确接受的代价；页面做好后只需在 `apps/web/src/App.tsx` 增加路由。
- */
+/** 站点导航项；尚未建立的页面路由由 `apps/web/src/App.tsx` 的兜底页处理。 */
 const NAV_ITEMS = [
-  { to: '/dispatch', label: 'Dispatch' },
   { to: '/document', label: 'Document' },
   { to: '/gallery', label: 'Gallery' },
   { to: '/about', label: 'About Us' },
-  { to: '/join', label: 'Join' },
+  { to: '/join/rifling-911', label: 'Join' },
+] as const
+const COMMUNITY_ITEMS = [
+  { to: '/communities/rifling-911', label: 'Rifling 911' },
+  { to: '/communities/caep', label: 'CAEP' },
 ] as const
 
 /**
@@ -52,16 +49,26 @@ const NAV_ITEMS = [
 export interface SiteHeaderProps {
   auth: AuthAreaProps
   mobileMenuButtonRef?: Ref<HTMLSpanElement>
+  glassAtTop?: boolean
 }
 
-export function SiteHeader({ auth, mobileMenuButtonRef }: SiteHeaderProps) {
+function subscribeToScroll(onChange: () => void) {
+  window.addEventListener('scroll', onChange, { passive: true })
+  return () => window.removeEventListener('scroll', onChange)
+}
+
+const isScrolled = () => window.scrollY > 0
+const serverIsScrolled = () => false
+
+export function SiteHeader({ auth, mobileMenuButtonRef, glassAtTop = false }: SiteHeaderProps) {
+  const scrolled = useSyncExternalStore(subscribeToScroll, isScrolled, serverIsScrolled)
   const location = useLocation()
   const navigate = useNavigate()
-  const selectedNavigation = NAV_ITEMS.some(({ to }) => to === location.pathname)
+  const selectedNavigation = [...NAV_ITEMS, ...COMMUNITY_ITEMS].some(({ to }) => to === location.pathname)
     ? location.pathname : ''
 
   return (
-    <header className={styles.header} data-site-header>
+    <header className={`${styles.header}${scrolled || glassAtTop ? ' ex-glass' : ''}`} data-site-header>
       <div className={styles.inner}>
         <div className={styles.start}>
           <Logo />
@@ -72,7 +79,14 @@ export function SiteHeader({ auth, mobileMenuButtonRef }: SiteHeaderProps) {
         <div className={styles.nav}>
           <NavigationMenu viewport={false} aria-label="主导航">
             <NavigationMenuList>
-              {NAV_ITEMS.filter(({ to }) => to !== '/join').map(({ to, label }) => (
+              <NavigationMenuItem>
+                <NavigationMenuTrigger>Communities</NavigationMenuTrigger>
+                <NavigationMenuContent className={styles.dropdownMenu}>
+                  {COMMUNITY_ITEMS.map(({ to, label }) =>
+                    <NavigationMenuLink asChild key={to}><Link to={to}>{label}</Link></NavigationMenuLink>)}
+                </NavigationMenuContent>
+              </NavigationMenuItem>
+              {NAV_ITEMS.filter(({ to }) => to !== '/join/rifling-911').map(({ to, label }) => (
                 <NavigationMenuItem key={to}>
                   <NavigationMenuLink asChild className={navigationMenuTriggerStyle()}>
                     <Link to={to}>{label}</Link>
@@ -81,9 +95,8 @@ export function SiteHeader({ auth, mobileMenuButtonRef }: SiteHeaderProps) {
               ))}
               <NavigationMenuItem>
                 <NavigationMenuTrigger>Join</NavigationMenuTrigger>
-                <NavigationMenuContent className={styles.joinMenu}>
-                  <NavigationMenuLink asChild><Link to="/join">CAEP</Link></NavigationMenuLink>
-                  <NavigationMenuLink asChild><Link to="/join">Rifling 911</Link></NavigationMenuLink>
+                <NavigationMenuContent className={styles.dropdownMenu}>
+                  <NavigationMenuLink asChild><Link to="/join/rifling-911">Rifling 911</Link></NavigationMenuLink>
                 </NavigationMenuContent>
               </NavigationMenuItem>
             </NavigationMenuList>
@@ -96,13 +109,18 @@ export function SiteHeader({ auth, mobileMenuButtonRef }: SiteHeaderProps) {
 
         <div className={styles.mobileNav}>
           <SelectField value={selectedNavigation} onValueChange={(value) => {
-            if (NAV_ITEMS.some(({ to }) => to === value)) navigate(value)
+            if ([...NAV_ITEMS, ...COMMUNITY_ITEMS].some(({ to }) => to === value)) navigate(value)
           }}>
             <SelectTrigger className={styles.mobileNavTrigger} aria-label="打开导航菜单">
               <Menu aria-hidden="true" />
               <SelectValue placeholder="导航菜单" />
             </SelectTrigger>
             <SelectContent position="popper" align="end">
+              <SelectGroup>
+                <SelectLabel>Communities</SelectLabel>
+                {COMMUNITY_ITEMS.map(({ to, label }) =>
+                  <SelectItem key={to} value={to}>{label}</SelectItem>)}
+              </SelectGroup>
               <SelectGroup>
                 <SelectLabel>导航</SelectLabel>
                 {NAV_ITEMS.map(({ to, label }) =>

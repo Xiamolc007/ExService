@@ -13,7 +13,9 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--exui-surface-background);
+  &:not(:global(.ex-glass)) {
+    background: transparent;
+  }
 
   // `min-height` 必须放在**外层**并配合 `box-sizing: border-box`。
   // 放在内层的话，外层高度会是「内层高度 + 底边框 1px」，比 `--site-header-height`
@@ -23,10 +25,6 @@
   display: flex;
   box-sizing: border-box;
   min-height: var(--site-header-height);
-}
-
-:global(:root:has(body [data-page='home'])) .header {
-  background: transparent;
 }
 
 .inner {
@@ -54,7 +52,7 @@
   justify-content: center;
 }
 
-.joinMenu {
+.dropdownMenu {
   white-space: nowrap;
 }
 
