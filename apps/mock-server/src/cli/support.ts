@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
-import { assertAuthSchemaAvailable, AuthService } from '../auth/service.js'
-import { DATABASE_PATH, openDatabase } from '../db/client.js'
+import { assertAuthSchemaAvailable, AuthService } from '@server/src/auth/service.js'
+import { DATABASE_PATH, openDatabase } from '@server/src/db/client.js'
 
 export function createAppAuthService() {
   if (!existsSync(DATABASE_PATH)) {

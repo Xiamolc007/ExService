@@ -2,13 +2,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { removeMatchingToken, writeToken } from '../auth/storage'
-import { bindSettingsToken } from '../settings/settingsConfig'
+import { removeMatchingToken, writeToken } from '@web/src/auth/storage'
+import { bindSettingsToken } from '@web/src/settings/settingsConfig'
 
 const get = vi.hoisted(() => vi.fn())
 const invalidateSession = vi.hoisted(() => vi.fn())
-vi.mock('../api/client', () => ({ api: { GET: get } }))
-vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({
+vi.mock('@web/src/api/client', () => ({ api: { GET: get } }))
+vi.mock('@web/src/auth/AuthContext', () => ({ useAuth: () => ({
   state: { status: 'authenticated' }, openModal: vi.fn(), invalidateSession,
   refreshProfile: vi.fn(), retrySession: vi.fn(), logout: vi.fn(),
 }) }))
@@ -24,7 +24,7 @@ vi.mock('@workspace/components', () => ({
     profileStatus === 'ready' ? <p>设置资料</p> : <p>正在读取个人资料</p>}</div>,
 }))
 
-import { ProfilePage } from './ProfilePage'
+import { ProfilePage } from '@web/src/pages/ProfilePage'
 
 beforeEach(() => invalidateSession.mockImplementation((token: string) => {
   removeMatchingToken(window.localStorage, token)

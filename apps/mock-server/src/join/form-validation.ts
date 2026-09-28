@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { Ajv, type ValidateFunction } from 'ajv'
 import { parse } from 'yaml'
-import type { components } from '../../../../packages/api-client/src/generated/schema.js'
-import { AuthError } from '../auth/errors.js'
+import type { components } from '@api-client/src/generated/schema.js'
+import { AuthError } from '@server/src/auth/errors.js'
 
 export type JoinApplicationInput = components['schemas']['JoinApplicationPayload']
 export type JoinForm = JoinApplicationInput['form']

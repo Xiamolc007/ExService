@@ -1,7 +1,7 @@
 ﻿import type Database from 'better-sqlite3'
 
-import { validateStoredJoinForm } from './form-validation.js'
-import type { JoinForm } from './form-validation.js'
+import { validateStoredJoinForm } from '@server/src/join/form-validation.js'
+import type { JoinForm } from '@server/src/join/form-validation.js'
 
 export interface ApplicationRow {
   id: string; email: string; nickname: string; qq: string

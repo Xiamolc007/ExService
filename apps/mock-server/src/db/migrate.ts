@@ -1,8 +1,8 @@
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
-import { DATABASE_PATH, assertCliEntry, ensureDatabaseDirectory, openDatabase } from './client.js'
-import { assertJoinApplicationMigrationReady } from '../join/schema-check.js'
+import { DATABASE_PATH, assertCliEntry, ensureDatabaseDirectory, openDatabase } from '@server/src/db/client.js'
+import { assertJoinApplicationMigrationReady } from '@server/src/join/schema-check.js'
 
 /** 与 `client.ts` 同理：`src/db/*` 与 `dist/db/*` 都解析到 `apps/mock-server/drizzle`。 */
 const MIGRATIONS_FOLDER = resolve(dirname(fileURLToPath(import.meta.url)), '../../drizzle')

@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { ActionButton, Card, useTheme } from "@exre/exui";
 import { GrainGradient } from "@paper-design/shaders-react";
-import styles from "./Home.module.scss";
+import styles from "@web/src/pages/Home.module.scss";
 
 function subscribeSystemTheme(onChange: () => void) {
   const media = window.matchMedia('(prefers-color-scheme: dark)');

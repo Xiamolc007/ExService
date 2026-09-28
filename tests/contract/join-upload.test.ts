@@ -10,9 +10,9 @@ import { parse } from 'yaml'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import { createApp, serviceHandlers } from '@workspace/mock-server'
-import { createApiClient } from '../../packages/api-client/src/client'
-import { createTestAuth, experiencedJoinApplication, newJoinApplication, joinSnapshot } from '../helpers/auth'
-import { applicationPart, joinMultipart, multipartBody } from '../helpers/multipart'
+import { createApiClient } from '@api-client/src/client'
+import { createTestAuth, experiencedJoinApplication, newJoinApplication, joinSnapshot } from '@tests/helpers/auth'
+import { applicationPart, joinMultipart, multipartBody } from '@tests/helpers/multipart'
 
 const contract = parse(readFileSync(fileURLToPath(new URL('../../api/openapi.yaml', import.meta.url)), 'utf8'))
 const definitions = JSON.parse(JSON.stringify(contract.components.schemas).replaceAll('#/components/schemas/', '#/definitions/'))

@@ -1,5 +1,5 @@
-import { createAppAuthService } from './support.js'
-import { assertCliEntry } from '../db/client.js'
+import { createAppAuthService } from '@server/src/cli/support.js'
+import { assertCliEntry } from '@server/src/db/client.js'
 
 assertCliEntry(import.meta.url)
 

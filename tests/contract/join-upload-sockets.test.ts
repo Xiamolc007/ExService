@@ -1,8 +1,8 @@
 import { request as httpRequest, type ClientRequest } from 'node:http'
 import { afterEach, expect, it } from 'vitest'
 import { createApp } from '@workspace/mock-server'
-import { createTestAuth, newJoinApplication, experiencedJoinApplication } from '../helpers/auth'
-import { joinMultipart } from '../helpers/multipart'
+import { createTestAuth, newJoinApplication, experiencedJoinApplication } from '@tests/helpers/auth'
+import { joinMultipart } from '@tests/helpers/multipart'
 
 const fixtures: ReturnType<typeof createTestAuth>[] = [], apps: ReturnType<typeof createApp>[] = []
 afterEach(async () => { await Promise.all(apps.splice(0).map(app => app.close())); fixtures.splice(0).forEach(f => f.close()) })

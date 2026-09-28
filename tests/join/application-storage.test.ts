@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto'
 import { afterEach, expect, it, vi } from 'vitest'
-import { approvedInvitation, createTestAuth, experiencedJoinApplication, joinSnapshot, newJoinApplication, registerInvited } from '../helpers/auth'
-import { normalizeJoinApplicationPayload } from '../../apps/mock-server/src/join/form-validation'
-import { MAX_PROOF_BYTES, validateJoinProofs } from '../../apps/mock-server/src/join/attachment-validation'
+import { approvedInvitation, createTestAuth, experiencedJoinApplication, joinSnapshot, newJoinApplication, registerInvited } from '@tests/helpers/auth'
+import { normalizeJoinApplicationPayload } from '@server/src/join/form-validation'
+import { MAX_PROOF_BYTES, validateJoinProofs } from '@server/src/join/attachment-validation'
 const fixtures: Array<ReturnType<typeof createTestAuth>> = []
 afterEach(() => { vi.restoreAllMocks(); fixtures.splice(0).forEach(f => f.close()) })
 function setup() { const f = createTestAuth(); fixtures.push(f); return f }

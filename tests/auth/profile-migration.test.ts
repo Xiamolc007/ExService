@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import Database from 'better-sqlite3'
 import { expect, it } from 'vitest'
-import { assertProfileSchemaAvailable } from '../../apps/mock-server/src/profile/schema-check'
+import { assertProfileSchemaAvailable } from '@server/src/profile/schema-check'
 
 function migration(name: string) {
   return readFileSync(fileURLToPath(new URL(`../../apps/mock-server/drizzle/${name}`, import.meta.url)), 'utf8')

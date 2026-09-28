@@ -3,13 +3,13 @@ import { useTheme } from '@exre/exui'
 import type { components } from '@workspace/api-client'
 import type { SettingsField, SettingsTheme } from '@workspace/components'
 import { useSnapshot } from 'valtio'
-import { api } from '../api/client'
-import { useAuth } from '../auth/AuthContext'
-import { AUTH_TOKEN_KEY, readToken } from '../auth/storage'
+import { api } from '@web/src/api/client'
+import { useAuth } from '@web/src/auth/AuthContext'
+import { AUTH_TOKEN_KEY, readToken } from '@web/src/auth/storage'
 import {
   attachSettingsConsumer, beginSettingsRequest, beginSettingsWrite, bindSettingsToken,
   endSettingsWrite, settingsConfig, settingsRequestCurrent, type CurrentUser,
-} from './settingsConfig'
+} from '@web/src/settings/settingsConfig'
 
 type AvatarMediaType = components['schemas']['UploadAvatarRequest']['mediaType']
 

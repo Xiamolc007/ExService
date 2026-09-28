@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { StrictMode } from 'react'
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { SettingsPanel, type SettingsPanelProps } from './SettingsPanel'
+import { SettingsPanel, type SettingsPanelProps } from '@components/src/SettingsPanel'
 
 const cropperCallbacks = vi.hoisted(() => ({ current: null as import('react-easy-crop').CropperProps | null }))
 vi.mock('react-easy-crop', () => ({

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import type Database from 'better-sqlite3'
-import { AuthError } from './errors.js'
-import { ScryptPasswordHasher, secureRandom, type PasswordHasher } from './crypto.js'
+import { AuthError } from '@server/src/auth/errors.js'
+import { ScryptPasswordHasher, secureRandom, type PasswordHasher } from '@server/src/auth/crypto.js'
 
 const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000
 const SSO_LIFETIME_MS = 10 * 60 * 1000

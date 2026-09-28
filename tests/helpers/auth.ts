@@ -3,12 +3,12 @@ import { tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import Database from 'better-sqlite3'
-import { AuthService, type AuthServiceDependencies } from '../../apps/mock-server/src/auth/service'
-import type { PasswordHasher } from '../../apps/mock-server/src/auth/crypto'
-import { ProfileService } from '../../apps/mock-server/src/profile/service'
-import { InvitationService, type InvitationServiceDependencies } from '../../apps/mock-server/src/invitations/service'
-import type { InvitationMail } from '../../apps/mock-server/src/invitations/mail'
-import { JoinService } from '../../apps/mock-server/src/join/service'
+import { AuthService, type AuthServiceDependencies } from '@server/src/auth/service'
+import type { PasswordHasher } from '@server/src/auth/crypto'
+import { ProfileService } from '@server/src/profile/service'
+import { InvitationService, type InvitationServiceDependencies } from '@server/src/invitations/service'
+import type { InvitationMail } from '@server/src/invitations/mail'
+import { JoinService } from '@server/src/join/service'
 const migrationPath = resolve(dirname(fileURLToPath(import.meta.url)), '../../apps/mock-server/drizzle')
 export const testPasswordHasher: PasswordHasher = {
   async hash(password) { return `test-password:${password}` },

@@ -1,9 +1,9 @@
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { Alert, AlertDescription, Button, Card } from '@exre/exui'
 import { ArrowLeftIcon } from 'lucide-react'
-import { AuthFlow } from '../../auth/AuthFlow'
-import { AuthBackdrop } from './AuthBackdrop'
-import styles from './AuthPage.module.scss'
+import { AuthFlow } from '@web/src/auth/AuthFlow'
+import { AuthBackdrop } from '@web/src/pages/AuthPage/AuthBackdrop'
+import styles from '@web/src/pages/AuthPage/AuthPage.module.scss'
 
 export function AuthPage({ mode }: { mode: 'login' }) {
   const [searchParams] = useSearchParams()

@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, waitFor } from '@testing-library/react'
-import { settingsConfig } from './settingsConfig'
+import { settingsConfig } from '@web/src/settings/settingsConfig'
 
 const theme = vi.hoisted(() => ({ current: 'light' }))
 vi.mock('@exre/exui', () => ({ useTheme: () => ({ theme: theme.current }) }))
 
-import { SettingsThemeProjection } from './SettingsThemeProjection'
+import { SettingsThemeProjection } from '@web/src/settings/SettingsThemeProjection'
 
 afterEach(() => { cleanup(); theme.current = 'light'; settingsConfig.general.theme = 'system' })
 

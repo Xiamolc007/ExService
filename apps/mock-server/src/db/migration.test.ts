@@ -3,7 +3,7 @@ import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { expect, it } from 'vitest'
-import { assertCommunitySchemaAvailable } from '../community/schema-check.js'
+import { assertCommunitySchemaAvailable } from '@server/src/community/schema-check.js'
 
 it('applies the full Drizzle journal and seeds admin on a fresh database', () => {
   const sqlite = new Database(':memory:')

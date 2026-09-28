@@ -2,14 +2,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { writeToken } from '../auth/storage'
-import { bindSettingsToken } from './settingsConfig'
+import { writeToken } from '@web/src/auth/storage'
+import { bindSettingsToken } from '@web/src/settings/settingsConfig'
 
 const get = vi.hoisted(() => vi.fn())
 const invalidateSession = vi.hoisted(() => vi.fn())
 const authState = vi.hoisted(() => ({ status: 'authenticated' as 'authenticated' | 'unavailable' }))
-vi.mock('../api/client', () => ({ api: { GET: get } }))
-vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({
+vi.mock('@web/src/api/client', () => ({ api: { GET: get } }))
+vi.mock('@web/src/auth/AuthContext', () => ({ useAuth: () => ({
   state: { status: authState.status }, invalidateSession, refreshProfile: vi.fn(),
   retrySession: vi.fn(), logout: vi.fn(),
 }) }))
@@ -24,7 +24,7 @@ vi.mock('@workspace/components', () => ({
     <button onClick={() => onCategoryChange('profile')}>个人资料分类</button></div>,
 }))
 
-import { SettingsExperience, SettingsModal } from './SettingsExperience'
+import { SettingsExperience, SettingsModal } from '@web/src/settings/SettingsExperience'
 
 const user = { id: 'user', email: 'person@example.com', nickname: 'Person',
   qq: null, fivemId: null, avatarUrl: null }

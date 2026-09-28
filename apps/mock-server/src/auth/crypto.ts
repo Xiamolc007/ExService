@@ -4,7 +4,7 @@ import {
   scrypt,
   timingSafeEqual,
 } from 'node:crypto'
-import { AuthError } from './errors.js'
+import { AuthError } from '@server/src/auth/errors.js'
 
 const SCRYPT_N = 32768
 const SCRYPT_R = 8

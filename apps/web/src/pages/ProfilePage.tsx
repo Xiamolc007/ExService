@@ -1,10 +1,10 @@
 import { useEffect } from 'react'
 import { Button, Spinner } from '@exre/exui'
 import { useSnapshot } from 'valtio'
-import { useAuth } from '../auth/AuthContext'
-import { SettingsExperience } from '../settings/SettingsExperience'
-import { settingsConfig } from '../settings/settingsConfig'
-import styles from './ProfilePage.module.scss'
+import { useAuth } from '@web/src/auth/AuthContext'
+import { SettingsExperience } from '@web/src/settings/SettingsExperience'
+import { settingsConfig } from '@web/src/settings/settingsConfig'
+import styles from '@web/src/pages/ProfilePage.module.scss'
 
 export function ProfilePage() {
   const auth = useAuth()

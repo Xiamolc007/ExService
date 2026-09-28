@@ -1,5 +1,5 @@
 import { existsSync, rmSync } from 'node:fs'
-import { DATABASE_PATH, DATABASE_SIDECAR_PATHS, assertCliEntry } from './client.js'
+import { DATABASE_PATH, DATABASE_SIDECAR_PATHS, assertCliEntry } from '@server/src/db/client.js'
 
 /**
  * 受控重置：只删除固定的本地 Mock SQLite 文件及其 WAL/SHM 伴随文件。

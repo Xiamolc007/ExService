@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { newJoinApplicationSchema, experiencedJoinApplicationSchema, proofFilesSchema } from './applicationSchemas'
+import { newJoinApplicationSchema, experiencedJoinApplicationSchema, proofFilesSchema } from '@components/src/join/applicationSchemas'
 
 export const validNewDraft = {
   email: ' Player@Example.com ', nickname: '玩家', qq: '0012345', proofs: [],

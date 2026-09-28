@@ -1,7 +1,7 @@
 import { Button, Card } from '@exre/exui'
 import { Link } from 'react-router'
-import { AuthBackdrop } from './AuthPage/AuthBackdrop'
-import styles from './NotFound.module.scss'
+import { AuthBackdrop } from '@web/src/pages/AuthPage/AuthBackdrop'
+import styles from '@web/src/pages/NotFound.module.scss'
 
 /**
  * 未匹配路径的兜底页面。

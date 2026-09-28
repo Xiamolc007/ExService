@@ -1,9 +1,9 @@
 ﻿import { afterEach, expect, it, vi } from 'vitest'
 import { experiencedJoinApplicationSchema, type ExperiencedJoinApplicationDraft } from '@workspace/components'
-import { submitApplication } from './client'
+import { submitApplication } from '@web/src/join/client'
 
 const post = vi.hoisted(() => vi.fn())
-vi.mock('../api/client', () => ({ api: { POST: post } }))
+vi.mock('@web/src/api/client', () => ({ api: { POST: post } }))
 afterEach(() => { post.mockReset() })
 
 const longFields = ['leaveReason', 'lawEnforcementExperience', 'punishmentHistory', 'deescalationEssay', 'discretionEssay', 'transferReason'] as const

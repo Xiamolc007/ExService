@@ -1,5 +1,5 @@
-import type { FieldDefinition, FieldOption } from '../forms/ConfiguredField'
-import type { JoinApplicationType } from './applicationSchemas'
+import type { FieldDefinition, FieldOption } from '@components/src/forms/ConfiguredField'
+import type { JoinApplicationType } from '@components/src/join/applicationSchemas'
 
 export const applicantCategoryOptions = [
   { value: '100', label: '普通成年申请人' }, { value: '101', label: '普通未成年申请人' },

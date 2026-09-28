@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Alert, AlertDescription, Button, Skeleton } from '@exre/exui'
-import styles from './ContentAreaState.module.scss'
+import styles from '@components/src/ContentAreaState.module.scss'
 
 export type ContentAreaStateProps =
   | { status: 'loading'; skeleton: ReactNode }

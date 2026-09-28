@@ -6,8 +6,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@exre/exui'
-import type { AuthMode } from './AuthForm'
-import styles from './AuthModal.module.scss'
+import type { AuthMode } from '@components/src/auth/AuthForm'
+import styles from '@components/src/auth/AuthModal.module.scss'
 
 export interface AuthModalProps {
   open: boolean

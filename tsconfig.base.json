@@ -13,6 +13,22 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
+    "paths": {
+      "react": ["./apps/web/node_modules/@types/react"],
+      "react/*": ["./apps/web/node_modules/@types/react/*"],
+      "react-dom": ["./apps/web/node_modules/@types/react-dom"],
+      "react-dom/*": ["./apps/web/node_modules/@types/react-dom/*"],
+      "@web": ["./apps/web"],
+      "@web/*": ["./apps/web/*"],
+      "@server": ["./apps/mock-server"],
+      "@server/*": ["./apps/mock-server/*"],
+      "@api-client": ["./packages/api-client"],
+      "@api-client/*": ["./packages/api-client/*"],
+      "@components": ["./packages/components"],
+      "@components/*": ["./packages/components/*"],
+      "@tests": ["./tests"],
+      "@tests/*": ["./tests/*"]
+    },
     "resolveJsonModule": true,
     "sourceMap": true,
     "declaration": true

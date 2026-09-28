@@ -1,5 +1,9 @@
 import react from '@vitejs/plugin-react'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
+
+const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
 /**
  * Mock Server 的本地地址。
@@ -10,6 +14,16 @@ const MOCK_SERVER_ORIGIN = 'http://127.0.0.1:8080'
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+    alias: {
+      '@web': resolve(repositoryRoot, 'apps/web'),
+      '@server': resolve(repositoryRoot, 'apps/mock-server'),
+      '@api-client': resolve(repositoryRoot, 'packages/api-client'),
+      '@components': resolve(repositoryRoot, 'packages/components'),
+      '@tests': resolve(repositoryRoot, 'tests'),
+    },
+  },
   server: {
     host: '127.0.0.1',
     port: 8081,

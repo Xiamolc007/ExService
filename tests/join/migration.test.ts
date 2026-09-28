@@ -3,11 +3,11 @@ import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 import Database from 'better-sqlite3'
 import { expect, it } from 'vitest'
-import { JoinService } from '../../apps/mock-server/src/join/service'
-import { InvitationService } from '../../apps/mock-server/src/invitations/service'
-import { assertAuthSchemaAvailable } from '../../apps/mock-server/src/auth/service'
-import { assertJoinSchemaAvailable, assertJoinApplicationMigrationReady } from '../../apps/mock-server/src/join/schema-check'
-import { newJoinApplication } from '../helpers/auth'
+import { JoinService } from '@server/src/join/service'
+import { InvitationService } from '@server/src/invitations/service'
+import { assertAuthSchemaAvailable } from '@server/src/auth/service'
+import { assertJoinSchemaAvailable, assertJoinApplicationMigrationReady } from '@server/src/join/schema-check'
+import { newJoinApplication } from '@tests/helpers/auth'
 const directory=new URL('../../apps/mock-server/drizzle/',import.meta.url)
 const journal=JSON.parse(readFileSync(new URL('meta/_journal.json',directory),'utf8')) as {entries:Array<{tag:string}>}
 const serverRequire=createRequire(new URL('../../apps/mock-server/package.json',import.meta.url))

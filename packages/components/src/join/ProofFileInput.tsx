@@ -1,8 +1,8 @@
 import { useId } from 'react'
 import { Controller, type FieldValues, type Path, type UseFormReturn } from 'react-hook-form'
 import { Button, Field, FieldContent, FieldDescription, FieldError, FieldLabel, Input } from '@exre/exui'
-import { proofExtensions, proofFilesSchema } from './applicationSchemas'
-import styles from './CompleteJoinApplication.module.scss'
+import { proofExtensions, proofFilesSchema } from '@components/src/join/applicationSchemas'
+import styles from '@components/src/join/CompleteJoinApplication.module.scss'
 
 export function ProofFileInput<T extends FieldValues, O extends FieldValues>({ form, disabled }: { form: UseFormReturn<T, unknown, O>; disabled: boolean }) {
   const id = useId()

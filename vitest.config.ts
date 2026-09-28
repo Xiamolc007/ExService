@@ -10,6 +10,11 @@ export default defineConfig({
     // 本地 @exre/exui link 可能带着自己的 React；测试与浏览器一样必须共享单一实例。
     dedupe: ['react', 'react-dom'],
     alias: [
+      { find: '@web', replacement: resolve(repositoryRoot, 'apps/web') },
+      { find: '@server', replacement: resolve(repositoryRoot, 'apps/mock-server') },
+      { find: '@api-client', replacement: resolve(repositoryRoot, 'packages/api-client') },
+      { find: '@components', replacement: resolve(repositoryRoot, 'packages/components') },
+      { find: '@tests', replacement: resolve(repositoryRoot, 'tests') },
       { find: /^react$/, replacement: resolve(webNodeModules, 'react/index.js') },
       { find: /^react\/jsx-runtime$/, replacement: resolve(webNodeModules, 'react/jsx-runtime.js') },
       { find: /^react\/jsx-dev-runtime$/, replacement: resolve(webNodeModules, 'react/jsx-dev-runtime.js') },

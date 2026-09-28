@@ -1,7 +1,7 @@
 import { Writable } from 'node:stream'
 import { afterEach, expect, it } from 'vitest'
 import { createApp } from '@workspace/mock-server'
-import { approvedInvitation, createTestAuth } from '../helpers/auth'
+import { approvedInvitation, createTestAuth } from '@tests/helpers/auth'
 
 const fixtures: Array<ReturnType<typeof createTestAuth>> = []
 const apps: Array<ReturnType<typeof createApp>> = []

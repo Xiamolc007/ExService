@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Alert, AlertDescription, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Tabs, TabsContent, TabsList, TabsTrigger } from '@exre/exui'
-import styles from './JoinReviewDialog.module.scss'
+import styles from '@components/src/join/JoinReviewDialog.module.scss'
 
 interface Props {
   open: boolean

@@ -1,5 +1,5 @@
 import createClient from 'openapi-fetch'
-import type { paths } from './generated/schema'
+import type { paths } from '@api-client/src/generated/schema'
 
 export interface CreateApiClientOptions {
   /**

@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, AlertDescription, Button, Card, Tabs, TabsList, TabsTrigger } from '@exre/exui'
 import { ExMessage, JoinReviewDialog, joinApplicationFields, joinApplicationCommitments, joinApplicationSteps } from '@workspace/components'
 import type { components } from '@workspace/api-client'
-import { api } from '../../api/client'
-import styles from './JoinReviewPage.module.scss'
+import { api } from '@web/src/api/client'
+import styles from '@web/src/pages/JoinReviewPage/JoinReviewPage.module.scss'
 
 type Detail = components['schemas']['JoinApplicationDetail']
 type List = components['schemas']['JoinApplicationList']

@@ -1,8 +1,8 @@
 import type Database from 'better-sqlite3'
-import { ScryptPasswordHasher } from './crypto.js'
-import { AuthService } from './service.js'
-import { InvitationService } from '../invitations/service.js'
-import { JoinService } from '../join/service.js'
+import { ScryptPasswordHasher } from '@server/src/auth/crypto.js'
+import { AuthService } from '@server/src/auth/service.js'
+import { InvitationService } from '@server/src/invitations/service.js'
+import { JoinService } from '@server/src/join/service.js'
 
 /** Pure production assembly: no database open, startup checks, migrations or writes. */
 export function createAuthServices(options: {

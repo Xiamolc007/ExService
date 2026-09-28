@@ -18,8 +18,8 @@ it('executes the real migration CLI logic against an isolated boundary and stops
   const actual=readFileSync(new URL('../../apps/mock-server/src/db/migrate.ts',import.meta.url),'utf8')
   // Only dependency paths and the fixed database opener are isolated; the CLI body is unchanged.
   const source=actual.replace("'drizzle-orm/better-sqlite3/migrator'",JSON.stringify(pathToFileURL(requireServer.resolve('drizzle-orm/better-sqlite3/migrator')).href))
-   .replace("'./client.js'",JSON.stringify(pathToFileURL(client).href))
-   .replace("'../join/schema-check.js'",JSON.stringify(new URL('../../apps/mock-server/src/join/schema-check.ts',import.meta.url).href))
+   .replace("'@server/src/db/client.js'",JSON.stringify(pathToFileURL(client).href))
+   .replace("'@server/src/join/schema-check.js'",JSON.stringify(new URL('../../apps/mock-server/src/join/schema-check.ts',import.meta.url).href))
   writeFileSync(entry,source)
   writeFileSync(client,`import Database from ${JSON.stringify(pathToFileURL(requireServer.resolve('better-sqlite3')).href)};
    import {drizzle} from ${JSON.stringify(pathToFileURL(requireServer.resolve('drizzle-orm/better-sqlite3')).href)};

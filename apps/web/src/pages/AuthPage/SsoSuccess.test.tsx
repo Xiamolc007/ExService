@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { SSO_SUCCESS_KEY } from '../../auth/storage'
+import { SSO_SUCCESS_KEY } from '@web/src/auth/storage'
 
 vi.mock('@exre/exui', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@exre/exui')>()),
@@ -12,7 +12,7 @@ vi.mock('@paper-design/shaders-react', () => ({
   MeshGradient: () => <div data-testid="auth-backdrop" />,
 }))
 
-import { SsoSuccess } from './SsoSuccess'
+import { SsoSuccess } from '@web/src/pages/AuthPage/SsoSuccess'
 
 vi.stubGlobal('matchMedia', () => ({
   matches: false,

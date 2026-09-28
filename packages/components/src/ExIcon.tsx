@@ -1,5 +1,5 @@
 import type { CSSProperties, HTMLAttributes } from 'react'
-import styles from './ExIcon.module.scss'
+import styles from '@components/src/ExIcon.module.scss'
 
 export interface ExIconProps extends Omit<HTMLAttributes<HTMLSpanElement>, 'children'> {
   /** 图标底板的宽高，默认 2rem。 */

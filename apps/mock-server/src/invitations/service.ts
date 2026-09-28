@@ -1,10 +1,10 @@
 ﻿import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
 import type Database from 'better-sqlite3'
-import { AuthError } from '../auth/errors.js'
-import { ScryptPasswordHasher, secureRandom, type PasswordHasher } from '../auth/crypto.js'
-import { JoinRateLimiter } from '../join/rate-limiter.js'
-import { application, control, type ApplicationRow, type InvitationRow } from '../join/records.js'
-import { publicWebBaseUrl, terminalInvitationMailer, type InvitationMail, type InvitationMailer } from './mail.js'
+import { AuthError } from '@server/src/auth/errors.js'
+import { ScryptPasswordHasher, secureRandom, type PasswordHasher } from '@server/src/auth/crypto.js'
+import { JoinRateLimiter } from '@server/src/join/rate-limiter.js'
+import { application, control, type ApplicationRow, type InvitationRow } from '@server/src/join/records.js'
+import { publicWebBaseUrl, terminalInvitationMailer, type InvitationMail, type InvitationMailer } from '@server/src/invitations/mail.js'
 const DAY = 86_400_000
 const CODE_MS = 600_000
 const GRANT_MS = 1_800_000

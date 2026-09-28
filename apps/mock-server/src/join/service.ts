@@ -1,12 +1,12 @@
 ﻿import { randomUUID } from 'node:crypto'
 import { createHash } from 'node:crypto'
-import { AuthError } from '../auth/errors.js'
-import { InvitationService } from '../invitations/service.js'
-import { application, detail, latestInvitation, summary, type ApplicationRow } from './records.js'
-import { validateJoinApplicationPayload, validateJoinQuery } from './form-validation.js'
-import { validateJoinProofs, type JoinProofInput } from './attachment-validation.js'
-export type { JoinApplicationInput } from './form-validation.js'
-export type { JoinProofInput } from './attachment-validation.js'
+import { AuthError } from '@server/src/auth/errors.js'
+import { InvitationService } from '@server/src/invitations/service.js'
+import { application, detail, latestInvitation, summary, type ApplicationRow } from '@server/src/join/records.js'
+import { validateJoinApplicationPayload, validateJoinQuery } from '@server/src/join/form-validation.js'
+import { validateJoinProofs, type JoinProofInput } from '@server/src/join/attachment-validation.js'
+export type { JoinApplicationInput } from '@server/src/join/form-validation.js'
+export type { JoinProofInput } from '@server/src/join/attachment-validation.js'
 export class JoinService {
   constructor(private readonly invitations: InvitationService, private readonly createId: () => string = randomUUID) {}
   private get sqlite() { return this.invitations.sqlite }

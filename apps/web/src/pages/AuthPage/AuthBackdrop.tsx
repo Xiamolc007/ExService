@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { MeshGradient } from '@paper-design/shaders-react'
 import { useTheme } from '@exre/exui'
-import styles from './AuthPage.module.scss'
+import styles from '@web/src/pages/AuthPage/AuthPage.module.scss'
 
 const backgroundColors = {
   dark: ['#ffffff', '#000000ff', '#ffffff'],

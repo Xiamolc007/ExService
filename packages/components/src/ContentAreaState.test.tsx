@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ContentAreaState, SettingsContentSkeleton } from './ContentAreaState'
+import { ContentAreaState, SettingsContentSkeleton } from '@components/src/ContentAreaState'
 
 afterEach(cleanup)
 

@@ -3,8 +3,8 @@ import { createRef, useRef, useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { CompleteJoinApplicationModal, type CompleteJoinApplicationModalHandle } from './CompleteJoinApplicationModal'
-import type { JoinApplicationDraft } from './applicationSchemas'
+import { CompleteJoinApplicationModal, type CompleteJoinApplicationModalHandle } from '@components/src/join/CompleteJoinApplicationModal'
+import type { JoinApplicationDraft } from '@components/src/join/applicationSchemas'
 
 afterEach(cleanup)
 class TestResizeObserver { observe() {} unobserve() {} disconnect() {} }

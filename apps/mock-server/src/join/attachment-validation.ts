@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { AuthError } from '../auth/errors.js'
+import { AuthError } from '@server/src/auth/errors.js'
 export interface JoinProofInput { originalName: string; bytes: Buffer }
 export const MAX_PROOF_BYTES = 10 * 1024 * 1024
 const extensions = new Set(['png','jpg','jpeg','gif','bmp','svg','pdf','doc','docx','xls','xlsx','ppt','pptx','txt','zip','rar','7z'])

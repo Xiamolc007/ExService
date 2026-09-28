@@ -6,7 +6,7 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import Database from 'better-sqlite3'
 import { expect, it } from 'vitest'
-import { experiencedJoinApplication, newJoinApplication } from '../helpers/auth'
+import { experiencedJoinApplication, newJoinApplication } from '@tests/helpers/auth'
 const requireServer = createRequire(new URL('../../apps/mock-server/package.json',import.meta.url))
 const tsx = pathToFileURL(requireServer.resolve('tsx')).href, databaseModule=pathToFileURL(requireServer.resolve('better-sqlite3')).href
 const joinModule=new URL('../../apps/mock-server/src/join/service.ts',import.meta.url).href

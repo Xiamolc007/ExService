@@ -1,9 +1,9 @@
 import type { IncomingMessage } from 'node:http'
 import { Transform, type Readable } from 'node:stream'
 import type { FastifyInstance, FastifyRequest, FastifyReply, RouteOptions } from 'fastify'
-import { AuthError } from '../auth/errors.js'
-import { normalizeJoinApplicationPayload } from './form-validation.js'
-import type { JoinProofInput } from './attachment-validation.js'
+import { AuthError } from '@server/src/auth/errors.js'
+import { normalizeJoinApplicationPayload } from '@server/src/join/form-validation.js'
+import type { JoinProofInput } from '@server/src/join/attachment-validation.js'
 
 interface UploadLimits {
   wireBytes: number; jsonBytes: number; fileBytes: number; totalFileBytes: number

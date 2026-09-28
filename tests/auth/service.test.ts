@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { createTestAuth } from '../helpers/auth'
+import { createTestAuth } from '@tests/helpers/auth'
 
 const fixtures: Array<ReturnType<typeof createTestAuth>> = []
 

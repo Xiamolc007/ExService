@@ -1,6 +1,6 @@
 import { forwardRef } from 'react'
-import { LoginForm } from './LoginForm'
-import { CaptchaForm } from './CaptchaForm'
+import { LoginForm } from '@components/src/auth/LoginForm'
+import { CaptchaForm } from '@components/src/auth/CaptchaForm'
 
 export type AuthMode = 'login' | 'register'
 export type AuthStep = 'credentials' | 'captcha'

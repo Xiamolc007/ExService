@@ -7,8 +7,8 @@ import {
   showMessage,
   unmountMessageHost,
   updateMessageHost,
-} from './exMessageController'
-import type { ExMessageProps, LoadingHandle, MessageOptions } from './exMessageController'
+} from '@components/src/exMessageController'
+import type { ExMessageProps, LoadingHandle, MessageOptions } from '@components/src/exMessageController'
 import type { ReactNode } from 'react'
 
 type ExMessageComponent = ((props: ExMessageProps) => React.JSX.Element) & {
@@ -47,4 +47,4 @@ export const ExMessage: ExMessageComponent = Object.assign(MessageHost, {
   loading: showLoading,
 })
 
-export type { ExMessagePlacement, ExMessageProps, LoadingHandle, MessageOptions } from './exMessageController'
+export type { ExMessagePlacement, ExMessageProps, LoadingHandle, MessageOptions } from '@components/src/exMessageController'

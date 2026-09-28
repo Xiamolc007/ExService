@@ -2,8 +2,8 @@
 import { act, render } from '@testing-library/react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { AuthArea } from '../../../../packages/components/src/AuthArea'
-import { Home } from './Home'
+import { AuthArea } from '@components/src/AuthArea'
+import { Home } from '@web/src/pages/Home'
 
 const themeState = vi.hoisted(() => ({ theme: 'light' }))
 

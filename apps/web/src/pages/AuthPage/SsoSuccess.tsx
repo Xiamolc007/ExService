@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, Card } from '@exre/exui'
 import { ExIcon } from '@workspace/components'
 import { ArrowLeftIcon } from 'lucide-react'
-import { readRecentSsoSuccess } from '../../auth/storage'
-import { AuthBackdrop } from './AuthBackdrop'
-import styles from './AuthPage.module.scss'
+import { readRecentSsoSuccess } from '@web/src/auth/storage'
+import { AuthBackdrop } from '@web/src/pages/AuthPage/AuthBackdrop'
+import styles from '@web/src/pages/AuthPage/AuthPage.module.scss'
 
 export function SsoSuccess() {
   const [closeAttempted, setCloseAttempted] = useState(false)

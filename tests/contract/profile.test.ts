@@ -2,8 +2,8 @@ import { readdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createApp, serviceHandlers } from '@workspace/mock-server'
-import { ProfileService, publicAvatarBaseUrl } from '../../apps/mock-server/src/profile/service'
-import { createTestAuth } from '../helpers/auth'
+import { ProfileService, publicAvatarBaseUrl } from '@server/src/profile/service'
+import { createTestAuth } from '@tests/helpers/auth'
 
 const sharp = createRequire(new URL('../../apps/mock-server/package.json', import.meta.url))('sharp')
 

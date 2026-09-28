@@ -1,6 +1,6 @@
 ﻿import type { components } from '@workspace/api-client'
 import type { JoinApplicationDraft } from '@workspace/components'
-import { api } from '../api/client'
+import { api } from '@web/src/api/client'
 
 export class JoinApplicationTextLimitError extends Error {
   constructor() {

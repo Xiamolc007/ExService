@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { ExIcon } from './ExIcon'
+import { ExIcon } from '@components/src/ExIcon'
 
 describe('ExIcon', () => {
   it('uses ExUI Glass and accepts a custom size and background', () => {

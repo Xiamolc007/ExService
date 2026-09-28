@@ -4,8 +4,8 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { ThemeProvider, toast, useTheme } from '@exre/exui'
 import { StrictMode, useEffect, useLayoutEffect } from 'react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { ExMessage } from './ExMessage'
-import type { ExMessageProps } from './ExMessage'
+import { ExMessage } from '@components/src/ExMessage'
+import type { ExMessageProps } from '@components/src/ExMessage'
 
 function host(props: ExMessageProps = {}) {
   return render(<ThemeProvider><ExMessage {...props} /></ThemeProvider>)

@@ -1,5 +1,5 @@
 import type { FastifyError, FastifyInstance } from 'fastify'
-import { AuthError, type AuthErrorCode } from './auth/errors.js'
+import { AuthError, type AuthErrorCode } from '@server/src/auth/errors.js'
 
 /**
  * Contract 只把 `ErrorEnvelope.error.code` 约束为 string；下列取值是实现侧的约定。

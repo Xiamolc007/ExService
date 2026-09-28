@@ -4,7 +4,7 @@ import {
   SSO_SUCCESS_KEY,
   readRecentSsoSuccess,
   removeMatchingToken,
-} from './storage'
+} from '@web/src/auth/storage'
 
 class MemoryStorage {
   private readonly values = new Map<string, string>()

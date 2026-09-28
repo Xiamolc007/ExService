@@ -1,7 +1,7 @@
 import { useId } from 'react'
 import { Controller, type FieldValues, type Path, type UseFormReturn } from 'react-hook-form'
 import { Button, Checkbox, Field, FieldContent, FieldDescription, FieldError, FieldLabel, Input, NativeSelect, NativeSelectOption, Textarea } from '@exre/exui'
-import styles from './ConfiguredField.module.scss'
+import styles from '@components/src/forms/ConfiguredField.module.scss'
 
 export interface FieldOption { value: string; label: string }
 export interface FieldDefinition {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { minimumAvatarZoom } from './avatarCrop'
+import { minimumAvatarZoom } from '@components/src/avatarCrop'
 
 describe('minimumAvatarZoom', () => {
   it('keeps a square image fully visible in a square crop inside a wide container', () => {

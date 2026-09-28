@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { AuthDisplayState, AuthMode } from '@workspace/components'
-import { api } from '../api/client'
-import { AUTH_TOKEN_KEY, readToken, removeMatchingToken } from './storage'
+import { api } from '@web/src/api/client'
+import { AUTH_TOKEN_KEY, readToken, removeMatchingToken } from '@web/src/auth/storage'
 
 interface AuthContextValue {
   state: AuthDisplayState

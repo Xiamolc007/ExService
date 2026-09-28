@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import Database from 'better-sqlite3'
 import { afterEach, describe, expect, it } from 'vitest'
-import { assertCommunitySchemaAvailable } from '../../apps/mock-server/src/community/schema-check'
-import { createTestAuth, approvedInvitation } from '../helpers/auth'
+import { assertCommunitySchemaAvailable } from '@server/src/community/schema-check'
+import { createTestAuth, approvedInvitation } from '@tests/helpers/auth'
 
 function migration(name: string) {
   return readFileSync(fileURLToPath(new URL(`../../apps/mock-server/drizzle/${name}`, import.meta.url)), 'utf8')

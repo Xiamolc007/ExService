@@ -1,6 +1,6 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
-import type { AvatarUpload, ProfileUpdate } from '../profile/service.js'
-import { requireSession } from './auth.js'
+import type { AvatarUpload, ProfileUpdate } from '@server/src/profile/service.js'
+import { requireSession } from '@server/src/handlers/auth.js'
 
 export async function updateCurrentUser(request: FastifyRequest, reply: FastifyReply) {
   void reply.header('Cache-Control', 'no-store')

@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "node --env-file-if-exists=.env.local --import tsx --watch src/server.ts",
     "start": "node --env-file-if-exists=.env.local dist/server.js",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node ../../scripts/rewrite-server-imports.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:reset": "tsx src/db/reset.ts && tsx src/db/migrate.ts",

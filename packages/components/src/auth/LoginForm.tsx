@@ -16,9 +16,9 @@ import {
   Spinner,
 } from "@exre/exui";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
-import type { AuthFormHandle, AuthFormProps, LoginDraft } from "./AuthForm";
-import { ExIcon } from "../ExIcon";
-import styles from "./AuthForm.module.scss";
+import type { AuthFormHandle, AuthFormProps, LoginDraft } from "@components/src/auth/AuthForm";
+import { ExIcon } from "@components/src/ExIcon";
+import styles from "@components/src/auth/AuthForm.module.scss";
 
 const loginSchema = z.object({
   email: z

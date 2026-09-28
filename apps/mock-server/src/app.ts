@@ -3,14 +3,14 @@ import { fileURLToPath } from 'node:url'
 import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyServerOptions } from 'fastify'
 import openapiGlue from 'fastify-openapi-glue'
 import multipart from '@fastify/multipart'
-import { registerJoinTransport } from './join/transport.js'
-import { AuthError } from './auth/errors.js'
-import type { JoinService } from './join/service.js'
-import type { InvitationService } from './invitations/service.js'
-import * as joinHandlers from './handlers/join.js'
-import type { AuthService } from './auth/service.js'
-import type { ProfileService } from './profile/service.js'
-import { registerErrorHandlers } from './errors.js'
+import { registerJoinTransport } from '@server/src/join/transport.js'
+import { AuthError } from '@server/src/auth/errors.js'
+import type { JoinService } from '@server/src/join/service.js'
+import type { InvitationService } from '@server/src/invitations/service.js'
+import * as joinHandlers from '@server/src/handlers/join.js'
+import type { AuthService } from '@server/src/auth/service.js'
+import type { ProfileService } from '@server/src/profile/service.js'
+import { registerErrorHandlers } from '@server/src/errors.js'
 import {
   createCaptchaChallenge,
   confirmSsoWithSession,
@@ -19,9 +19,9 @@ import {
   login,
   loginForSso,
   logout,
-} from './handlers/auth.js'
-import { getHealth } from './handlers/health.js'
-import { getAvatarImage, updateCurrentUser, uploadCurrentUserAvatar } from './handlers/profile.js'
+} from '@server/src/handlers/auth.js'
+import { getHealth } from '@server/src/handlers/health.js'
+import { getAvatarImage, updateCurrentUser, uploadCurrentUserAvatar } from '@server/src/handlers/profile.js'
 
 /**
  * Fastify 路由前缀。Contract 的 `servers[0].url` 只描述客户端 base URL，

@@ -5,8 +5,8 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 
 const post = vi.hoisted(() => vi.fn())
-vi.mock('../api/client', () => ({ api: { POST: post } }))
-vi.mock('../pages/AuthPage/AuthBackdrop', () => ({ AuthBackdrop: () => null }))
+vi.mock('@web/src/api/client', () => ({ api: { POST: post } }))
+vi.mock('@web/src/pages/AuthPage/AuthBackdrop', () => ({ AuthBackdrop: () => null }))
 
 class TestResizeObserver {
   observe() {}
@@ -16,8 +16,8 @@ class TestResizeObserver {
 vi.stubGlobal('ResizeObserver', TestResizeObserver)
 Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: () => document.body })
 
-import { AuthFlow } from './AuthFlow'
-import { AuthPage } from '../pages/AuthPage'
+import { AuthFlow } from '@web/src/auth/AuthFlow'
+import { AuthPage } from '@web/src/pages/AuthPage'
 
 afterEach(() => { cleanup(); post.mockReset() })
 

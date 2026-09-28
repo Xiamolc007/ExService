@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Dialog, DialogContent, DialogTitle } from '@exre/exui'
 import { SettingsPanel, type SettingsCategory } from '@workspace/components'
-import { useAuth } from '../auth/AuthContext'
-import { useSettingsController } from './useSettingsController'
-import { settingsConfig } from './settingsConfig'
-import styles from './SettingsExperience.module.scss'
+import { useAuth } from '@web/src/auth/AuthContext'
+import { useSettingsController } from '@web/src/settings/useSettingsController'
+import { settingsConfig } from '@web/src/settings/settingsConfig'
+import styles from '@web/src/settings/SettingsExperience.module.scss'
 
 export function SettingsExperience({ initialCategory }: { initialCategory: SettingsCategory }) {
   const [category, setCategory] = useState<SettingsCategory>(initialCategory)

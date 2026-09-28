@@ -1,5 +1,5 @@
 ﻿import type { FastifyReply, FastifyRequest } from 'fastify'
-import { getJoinProofs } from '../join/transport.js'
+import { getJoinProofs } from '@server/src/join/transport.js'
 const noStore = (reply: FastifyReply) => { void reply.header('Cache-Control', 'no-store') }
 const applicant = (request: FastifyRequest, reply: FastifyReply) => { noStore(reply); request.server.invitationServices.limit(request.ip) }
 const id = (request: FastifyRequest) => (request.params as { applicationId: string }).applicationId

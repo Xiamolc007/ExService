@@ -40,7 +40,8 @@ Contract 是唯一的中心节点，所有其他部分都是它的消费者：
 ## 依赖与构建边界
 
 - `packages/api-client` 与 `packages/components` 都以**源码形式**导出（`exports` 直接指向 `src/index.ts`），由消费方的打包器编译，因此没有自己的构建步骤。
-- 它们是**为打包器准备的包**，不是 Node 运行时包：内部使用无扩展名的相对 import，Node ESM 不接受这种说明符。若将来需要在 Node 侧复用，必须补充真正的构建产物与 `exports` 条件，或统一改为显式扩展名。
+- 它们是**为打包器准备的包**，不是 Node 运行时包：内部使用仓库路径别名，Node ESM 不直接识别。若将来需要在 Node 侧复用，必须补充真正的构建产物与 `exports` 条件。
+- TypeScript 别名在 `tsconfig.base.json` 中声明，Vite 与 Vitest 分别在 `apps/web/vite.config.ts` 和 `vitest.config.ts` 中解析；根 `tsconfig.json` 供从仓库根目录运行的 `tsx` 子进程使用。`tsc` 不改写路径，Mock Server 构建由 `scripts/rewrite-server-imports.mjs` 将服务端别名改成产物中的相对导入。
 - `packages/components` 的 `react` / `react-dom` / `react-router` 同时声明为 peer 与 dev 依赖：peer 保证消费方单一实例与 context 共享，dev 供本包 `typecheck` 使用。`@exre/exui` 与 `lucide-react` 是普通依赖。
 - 根 `package.json` 只承载跨工作区的命令与工具依赖，不含运行时依赖；运行时依赖按上表的边界声明在各自包内。
 

@@ -1,15 +1,15 @@
 import { readFileSync } from 'node:fs'
 import Database from 'better-sqlite3'
 import { afterEach, expect, it, vi } from 'vitest'
-import { createAppAuthService } from '../../apps/mock-server/src/cli/support'
-import { openDatabase } from '../../apps/mock-server/src/db/client'
+import { createAppAuthService } from '@server/src/cli/support'
+import { openDatabase } from '@server/src/db/client'
 
 const isolated = vi.hoisted(() => ({ exists: true, sqlite: undefined as Database.Database | undefined }))
 vi.mock('node:fs', async importOriginal => {
   const actual = await importOriginal<typeof import('node:fs')>()
   return { ...actual, existsSync: (path: unknown) => path === 'isolated-auth-cli.sqlite' ? isolated.exists : actual.existsSync(path as string) }
 })
-vi.mock('../../apps/mock-server/src/db/client', () => ({
+vi.mock('@server/src/db/client', () => ({
   DATABASE_PATH: 'isolated-auth-cli.sqlite',
   openDatabase: vi.fn(() => {
     if (!isolated.sqlite) throw new Error('isolated test connection was not prepared')

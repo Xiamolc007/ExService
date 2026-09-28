@@ -1,5 +1,5 @@
-import { createApp } from '../../apps/mock-server/src/app.ts'
-import { createTestAuth } from './auth.ts'
+import { createApp } from '@server/src/app.ts'
+import { createTestAuth } from '@tests/helpers/auth.ts'
 
 // Isolated process fixture: createTestAuth uses only in-memory SQLite and a temporary avatar directory.
 const fixture = createTestAuth()

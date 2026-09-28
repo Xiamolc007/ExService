@@ -1,6 +1,6 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import { randomBytes } from 'node:crypto'
-import type { LoginInput } from '../auth/service.js'
+import type { LoginInput } from '@server/src/auth/service.js'
 
 function noStore(reply: FastifyReply): void {
   void reply.header('Cache-Control', 'no-store')

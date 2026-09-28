@@ -13,7 +13,7 @@ import {
   Spinner,
 } from '@exre/exui'
 import type { Ref } from 'react'
-import styles from './AuthArea.module.scss'
+import styles from '@components/src/AuthArea.module.scss'
 
 export type AuthDisplayState =
   | { status: 'loading' }

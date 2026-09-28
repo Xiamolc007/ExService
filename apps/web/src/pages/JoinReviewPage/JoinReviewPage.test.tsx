@@ -2,11 +2,11 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { JoinReviewPage } from './index'
+import { JoinReviewPage } from '@web/src/pages/JoinReviewPage/index'
 import { ExMessage } from '@workspace/components'
 import type { components } from '@workspace/api-client'
 const { get, post } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
-vi.mock('../../api/client', () => ({ api: { GET: get, POST: post } }))
+vi.mock('@web/src/api/client', () => ({ api: { GET: get, POST: post } }))
 const application: components['schemas']['JoinApplicationSummary'] = { id: 'a', email: 'member@example.com', nickname: '成员', qq: '001234', status: 'pending', createdAt: 1000, reviewedAt: null, reviewedByUserId: null, invitationStatus: null, deliveryStatus: null, applicationType: 'legacy' }
 afterEach(() => { cleanup(); get.mockReset(); post.mockReset(); vi.restoreAllMocks(); vi.useRealTimers(); vi.unstubAllGlobals() })
 const listOf = (items = [application], offset = 0, total = items.length) => ({ items, offset, total, limit: 20, serverTime: 1000 })

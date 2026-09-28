@@ -5,8 +5,8 @@ import { parse } from 'yaml'
 import { afterEach, expect, it } from 'vitest'
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import { createApp, serviceHandlers } from '@workspace/mock-server'
-import { approvedInvitation, createTestAuth, joinSnapshot, newJoinApplication } from '../helpers/auth'
-import { joinMultipart } from '../helpers/multipart'
+import { approvedInvitation, createTestAuth, joinSnapshot, newJoinApplication } from '@tests/helpers/auth'
+import { joinMultipart } from '@tests/helpers/multipart'
 const contract=parse(readFileSync(fileURLToPath(new URL('../../api/openapi.yaml',import.meta.url)),'utf8'))
 const definitions=JSON.parse(JSON.stringify(contract.components.schemas).replaceAll('#/components/schemas/','#/definitions/'))
 function validate(name:string,value:unknown) { const check=new Ajv({strict:false,allErrors:true}).compile({...definitions[name],definitions});expect(check(value),JSON.stringify(check.errors)).toBe(true) }
@@ -61,6 +61,6 @@ it('rejects review extras and produces retryable/safe errors through actual glue
  f.sqlite.exec('DROP TABLE join_delivery_attempts');f.sqlite.exec('DROP TABLE join_invitations');const failure=await app.inject({method:'POST',url:'/api/auth/invitations/check',payload:{email:a.email}});expect(failure.statusCode).toBe(500);expect(failure.json().error.message).toBe('An unexpected error occurred.');expect(failure.body).not.toContain('join_invitations');expect(failure.headers['cache-control']).toBe('no-store');
 })
 it('maps password resource saturation to 503 without creating account/session rows',async()=>{
- const { AuthError }=await import('../../apps/mock-server/src/auth/errors');const f=createTestAuth({passwordHasher:{hash:async()=>{throw new AuthError('AUTH_BUSY',{retryAfterSeconds:1})},verify:async()=>false}});fixtures.push(f);const app=createApp({...f});apps.push(app);const a=await approvedInvitation(f),grant=f.invitationServices.verifyCode(a.email,a.code);
+ const { AuthError }=await import('@server/src/auth/errors');const f=createTestAuth({passwordHasher:{hash:async()=>{throw new AuthError('AUTH_BUSY',{retryAfterSeconds:1})},verify:async()=>false}});fixtures.push(f);const app=createApp({...f});apps.push(app);const a=await approvedInvitation(f),grant=f.invitationServices.verifyCode(a.email,a.code);
  const response=await app.inject({method:'POST',url:'/api/auth/invitations/complete',payload:{completionToken:grant.completionToken,nickname:'Name',password:'valid password'}});expect(response.statusCode).toBe(503);expect(response.headers['retry-after']).toBe('1');expect(response.json().error.code).toBe('AUTH_BUSY');expect(f.sqlite.prepare('SELECT count(*) n FROM auth_users').get()).toEqual({n:0});expect(f.sqlite.prepare('SELECT count(*) n FROM auth_sessions').get()).toEqual({n:0});
 })

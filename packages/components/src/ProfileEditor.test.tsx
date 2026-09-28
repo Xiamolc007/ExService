@@ -2,8 +2,8 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ProfileEditor } from './ProfileEditor'
-import { qqSchema } from './profileValidation'
+import { ProfileEditor } from '@components/src/ProfileEditor'
+import { qqSchema } from '@components/src/profileValidation'
 
 afterEach(cleanup)
 

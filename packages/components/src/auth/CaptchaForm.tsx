@@ -6,9 +6,9 @@ import {
   Alert, AlertDescription, Button, Field, FieldContent, FieldError,
   FieldLabel, Input, Spinner,
 } from '@exre/exui'
-import type { AuthFormHandle, AuthFormProps } from './AuthForm'
-import { ExIcon } from '../ExIcon'
-import styles from './AuthForm.module.scss'
+import type { AuthFormHandle, AuthFormProps } from '@components/src/auth/AuthForm'
+import { ExIcon } from '@components/src/ExIcon'
+import styles from '@components/src/auth/AuthForm.module.scss'
 
 const captchaSchema = z.object({
   answer: z.string().max(64, '验证码不能超过 64 个字符'),

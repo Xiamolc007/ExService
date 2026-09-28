@@ -1,9 +1,9 @@
 import { Link, useLocation } from 'react-router'
 import { Button, Card } from '@exre/exui'
 import { ArrowLeftIcon } from 'lucide-react'
-import { InvitationRegistrationFlow } from '../../invitations/InvitationRegistrationFlow'
-import { AuthBackdrop } from './AuthBackdrop'
-import styles from './AuthPage.module.scss'
+import { InvitationRegistrationFlow } from '@web/src/invitations/InvitationRegistrationFlow'
+import { AuthBackdrop } from '@web/src/pages/AuthPage/AuthBackdrop'
+import styles from '@web/src/pages/AuthPage/AuthPage.module.scss'
 
 export function InvitationRegistrationPage() {
   const location = useLocation()

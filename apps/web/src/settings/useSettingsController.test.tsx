@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { writeToken } from '../auth/storage'
-import { bindSettingsToken, settingsConfig } from './settingsConfig'
+import { writeToken } from '@web/src/auth/storage'
+import { bindSettingsToken, settingsConfig } from '@web/src/settings/settingsConfig'
 
 const get = vi.hoisted(() => vi.fn())
 const patch = vi.hoisted(() => vi.fn())
@@ -11,8 +11,8 @@ const refreshProfile = vi.hoisted(() => vi.fn(async () => undefined))
 const invalidateSession = vi.hoisted(() => vi.fn())
 const logout = vi.hoisted(() => vi.fn())
 const authState = vi.hoisted(() => ({ current: { status: 'authenticated', message: '' } }))
-vi.mock('../api/client', () => ({ api: { GET: get, PATCH: patch, POST: post } }))
-vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({
+vi.mock('@web/src/api/client', () => ({ api: { GET: get, PATCH: patch, POST: post } }))
+vi.mock('@web/src/auth/AuthContext', () => ({ useAuth: () => ({
   state: authState.current, refreshProfile, invalidateSession,
   retrySession: vi.fn(), logout,
 }) }))
@@ -21,7 +21,7 @@ vi.mock('@exre/exui', async (importOriginal) => ({
   useTheme: () => ({ theme: 'dark', setTheme: vi.fn() }),
 }))
 
-import { useSettingsController } from './useSettingsController'
+import { useSettingsController } from '@web/src/settings/useSettingsController'
 
 const user = { id: 'one', email: 'a@example.com', nickname: 'Alice',
   qq: '123', fivemId: null, avatarUrl: null }

@@ -1,13 +1,13 @@
 import { existsSync } from 'node:fs'
-import { createApp } from './app.js'
-import { parseAuthCodeHmacKey } from './auth/crypto.js'
-import { assertAuthSchemaAvailable } from './auth/service.js'
-import { createAuthServices } from './auth/create-services.js'
-import { DATABASE_PATH, openDatabase } from './db/client.js'
-import { assertCommunitySchemaAvailable } from './community/schema-check.js'
-import { ProfileService, publicAvatarBaseUrl } from './profile/service.js'
-import { assertProfileSchemaAvailable } from './profile/schema-check.js'
-import { assertJoinSchemaAvailable } from './join/schema-check.js'
+import { createApp } from '@server/src/app.js'
+import { parseAuthCodeHmacKey } from '@server/src/auth/crypto.js'
+import { assertAuthSchemaAvailable } from '@server/src/auth/service.js'
+import { createAuthServices } from '@server/src/auth/create-services.js'
+import { DATABASE_PATH, openDatabase } from '@server/src/db/client.js'
+import { assertCommunitySchemaAvailable } from '@server/src/community/schema-check.js'
+import { ProfileService, publicAvatarBaseUrl } from '@server/src/profile/service.js'
+import { assertProfileSchemaAvailable } from '@server/src/profile/schema-check.js'
+import { assertJoinSchemaAvailable } from '@server/src/join/schema-check.js'
 
 const PORT = 8080
 /** 只绑定回环地址：这是本地 Mock，不对局域网暴露。 */

@@ -1,7 +1,7 @@
 ﻿import { afterEach, describe, expect, it } from 'vitest'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import { createApp, serviceHandlers } from '@workspace/mock-server'
-import { createTestAuth } from '../helpers/auth'
+import { createTestAuth } from '@tests/helpers/auth'
 const fixtures: Array<ReturnType<typeof createTestAuth>> = [], apps: Array<ReturnType<typeof createApp>> = []
 afterEach(async () => { await Promise.all(apps.splice(0).map(app => app.close())); fixtures.splice(0).forEach(f => f.close()) })
 function setup() { const f=createTestAuth(); fixtures.push(f); const app=createApp({...f}); apps.push(app); return {f,app} }

@@ -3,10 +3,10 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { Alert, AlertDescription, Avatar, AvatarFallback, AvatarImage, Button, Field, FieldContent,
   FieldError, FieldGroup, FieldLabel, Input, Spinner } from '@exre/exui'
 import { useForm } from 'react-hook-form'
-import { avatarSchema, profileTextSchema, type ProfileTextValues } from './profileValidation'
-import styles from './ProfileEditor.module.scss'
+import { avatarSchema, profileTextSchema, type ProfileTextValues } from '@components/src/profileValidation'
+import styles from '@components/src/ProfileEditor.module.scss'
 
-export type { ProfileTextValues } from './profileValidation'
+export type { ProfileTextValues } from '@components/src/profileValidation'
 
 export interface ProfileEditorProps {
   initial: ProfileTextValues

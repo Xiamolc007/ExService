@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createRef, type Ref } from 'react'
-import { AuthForm, type AuthFormHandle, type AuthFormProps } from './AuthForm'
+import { AuthForm, type AuthFormHandle, type AuthFormProps } from '@components/src/auth/AuthForm'
 
 class TestResizeObserver {
   observe() {}
