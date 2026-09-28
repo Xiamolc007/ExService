@@ -12,22 +12,22 @@ vi.mock('@workspace/components', async (importOriginal) => ({
   SiteHeader: () => <header>Site header</header>,
 }))
 
-vi.mock('./pages/Home', () => ({
+vi.mock('@web/src/pages/Home', () => ({
   Home: () => <main>Home</main>,
 }))
 
-vi.mock('./pages/NotFound', () => ({
+vi.mock('@web/src/pages/NotFound', () => ({
   NotFound: () => <main>Page not found</main>,
 }))
 
-vi.mock('./pages/AuthPage/SsoSuccess', () => ({
+vi.mock('@web/src/pages/AuthPage/SsoSuccess', () => ({
   SsoSuccess: () => <main>SSO success</main>,
 }))
 
-import { App } from './App'
+import { App } from '@web/src/App'
 
 describe('auth routes', () => {
-  it.each([['/login', '登录到 Exre'], ['/register', '邀请注册']])('renders %s without the site navbar', (path, title) => {
+  it.each([['/login', '登录到 Exre'], ['/register', '注册Exre账号']])('renders %s without the site navbar', (path, title) => {
     const markup = renderToStaticMarkup(
       <MemoryRouter initialEntries={[path]}>
         <App />

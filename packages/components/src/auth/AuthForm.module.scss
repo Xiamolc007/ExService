@@ -43,6 +43,25 @@
   }
 }
 
+.registrationLinks {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  white-space: nowrap;
+  font-size: 0.75rem;
+
+  > span {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  button {
+    padding-inline: 0;
+    font-size: inherit;
+  }
+}
+
 .authIcon {
   justify-self: center;
   margin-bottom: 0.75rem;
@@ -131,12 +150,6 @@
   margin: 0;
   text-align: center;
   color: var(--exui-component-dialog-description-foreground);
-}
-
-.actions {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
 }
 
 .busy {
