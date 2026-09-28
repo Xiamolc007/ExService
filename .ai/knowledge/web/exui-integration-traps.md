@@ -91,6 +91,14 @@ ExUI 的 `Button` 渲染 `<button>` 但**不写** `role="button"`（依赖隐式
 
 `useTheme().theme` 可能为 `system`，不能只用 `theme === 'dark'` 决定 Canvas 的颜色。404 背景在 system 模式下订阅 `prefers-color-scheme`，跟随操作系统实时更新；显式 light/dark 优先于系统偏好。普通 DOM 样式直接继承 provider 在根节点应用的主题 token，避免页面局部强制 `.dark` 造成 Canvas 与组件主题不一致。
 
+### 12. 居中导航需要同时处理滚动条占位与弹窗补偿
+
+使用传统滚动条的浏览器中，短页与长页的可用宽度不同，会让居中的导航产生半个滚动条宽度的横向偏移。`apps/web/src/styles/index.scss` 在根节点设置 `scrollbar-gutter: stable`，保证页面切换时预留空间一致。
+
+ExUI 弹窗的滚动锁定会给 `body[data-scroll-locked]` 添加滚动条宽度的右外边距。根节点已固定占位时，这会重复补偿，因此在支持 `scrollbar-gutter` 的浏览器中将该右外边距覆盖为零。必须同时验证短页、长页以及弹窗打开和关闭，不能只检查页面切换。
+
+`tests/browser/navbar-geometry.mjs` 提供真实浏览器的坐标断言，接受 Browser Use 的 tab；这不是 Vitest/jsdom 测试，也不由 `pnpm test` 自动执行。使用桌面视口与传统滚动条运行 `assertNavbarGeometry(tab, baseUrl)` 和 `assertNavbarModalGeometry(tab, baseUrl)`；jsdom 没有布局计算，无法覆盖该问题。
+
 ## 证据
 
 - 已安装包内：`dist/index.css`（含 `body{background-color:var(--background);color:var(--foreground)}`、`html{font-family:var(--exui-font-family)}`）、`dist/tokens/style.css`（`:root` / `.dark` / `.pitch-black` 三个主题选择器）、`src/components/theme-provider.tsx`、`src/components/ui/{button,navigation-menu,dropdown-menu}.tsx`、`types/components/ui/*.d.ts`。

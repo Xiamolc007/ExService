@@ -18,6 +18,8 @@
 :root {
   line-height: 1.5;
   color-scheme: light;
+  // Keep centered navigation aligned across short and scrollable routes.
+  scrollbar-gutter: stable;
 
   --exui-control-primary: #0a0a0a;
   --exui-control-primary-foreground: #ffffff;
@@ -63,6 +65,13 @@
 
 body {
   margin: 0;
+}
+
+@supports (scrollbar-gutter: stable) {
+  // The root gutter already reserves the scrollbar width during modal scroll lock.
+  :root body[data-scroll-locked] {
+    margin-right: 0 !important;
+  }
 }
 
 .app-shell {
