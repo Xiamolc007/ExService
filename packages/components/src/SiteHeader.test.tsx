@@ -24,6 +24,19 @@ function renderHeader(state: AuthAreaProps['state']) {
 
 afterEach(cleanup)
 
+describe('SiteHeader Join menu', () => {
+  it('reveals both projects on hover and keeps the Join page reachable', async () => {
+    renderHeader({ status: 'anonymous' })
+
+    await userEvent.hover(screen.getByRole('button', { name: 'Join' }))
+    expect(await screen.findByRole('link', { name: 'CAEP' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Rifling 911' })).toBeTruthy()
+
+    await userEvent.click(screen.getByRole('link', { name: 'CAEP' }))
+    expect(screen.getByTestId('path').textContent).toBe('/join')
+  })
+})
+
 describe('SiteHeader mobile navigation', () => {
   it('opens a Select with the existing navigation targets and navigates within the router', async () => {
     const originalScrollIntoView = Element.prototype.scrollIntoView

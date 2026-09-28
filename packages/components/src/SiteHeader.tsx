@@ -3,9 +3,11 @@ import {
   AvatarFallback,
   AvatarImage,
   NavigationMenu,
+  NavigationMenuContent,
   NavigationMenuList,
   NavigationMenuItem,
   NavigationMenuLink,
+  NavigationMenuTrigger,
   navigationMenuTriggerStyle,
   SelectContent,
   SelectField,
@@ -70,13 +72,20 @@ export function SiteHeader({ auth, mobileMenuButtonRef }: SiteHeaderProps) {
         <div className={styles.nav}>
           <NavigationMenu viewport={false} aria-label="主导航">
             <NavigationMenuList>
-              {NAV_ITEMS.map(({ to, label }) => (
+              {NAV_ITEMS.filter(({ to }) => to !== '/join').map(({ to, label }) => (
                 <NavigationMenuItem key={to}>
                   <NavigationMenuLink asChild className={navigationMenuTriggerStyle()}>
                     <Link to={to}>{label}</Link>
                   </NavigationMenuLink>
                 </NavigationMenuItem>
               ))}
+              <NavigationMenuItem>
+                <NavigationMenuTrigger>Join</NavigationMenuTrigger>
+                <NavigationMenuContent className={styles.joinMenu}>
+                  <NavigationMenuLink asChild><Link to="/join">CAEP</Link></NavigationMenuLink>
+                  <NavigationMenuLink asChild><Link to="/join">Rifling 911</Link></NavigationMenuLink>
+                </NavigationMenuContent>
+              </NavigationMenuItem>
             </NavigationMenuList>
           </NavigationMenu>
         </div>
