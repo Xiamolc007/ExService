@@ -3,9 +3,9 @@
 - 状态：已接受
 - 模块：`web`
 - 日期：2026-09-18
-- 来源：`.notes/web/specs/2026-09-18-homepage-and-components-design.md`
+- 来源：`apps/web/src/main.tsx`、`packages/components/package.json` 的现有实现
 
-_最后更新：2026-09-18_
+_最后更新：2026-09-29_
 
 ## 背景
 
@@ -18,7 +18,7 @@ _最后更新：2026-09-18_
 - `@exre/exui/style.css` 只在 `apps/web/src/main.tsx` 导入一次。
 - `ThemeProvider` 挂在 `main.tsx`，包住 `<BrowserRouter>`；主题切换用 `useTheme` 的三态（`light` / `dark` / `system`）。
 - 不新建本地设计 token 层：颜色、边框、圆角一律取 `var(--exui-*)`。
-- 应用侧自己补 `color-scheme`（原因见 [knowledge/web/exui-integration-traps.md](../../knowledge/web/exui-integration-traps.md)）。
+- 应用侧自己补 `color-scheme`（原因见 `.ai/knowledge/web/exui-integration-traps.md`）。
 
 ## 理由
 
@@ -41,7 +41,7 @@ _最后更新：2026-09-18_
 - 需要一个 ExUI 未覆盖的组件，或 ExUI 缺失既定 API 时（此时应先核对已安装版本，不得用私有导入或自造 API 兜底）。
 - 首屏体积成为实际约束，需要按需引入或路由级懒加载时。
 - 需要视觉上与 ExUI 的品牌观感脱钩时。
-- 引入前端测试基建时——ExUI 组件在测试环境下的 provider 与 `localStorage` 依赖需要重新评估。
+- ExUI 的 provider、`localStorage` 或测试环境行为变化时，复核已有组件测试覆盖与真实浏览器行为。
 
 ## 证据
 

@@ -1,5 +1,7 @@
 # Contract-first 前端与本地 Backend Sandbox 脚手架设计
 
+> 迁移说明（2026-09-29）：本文件保留当时的业务与实现决定；其中旧 `apps/mock-server/` 路径、本地 SQLite Mock 与未来 PHP/MySQL 接管的基础设施描述，已由 `.notes/server-promotion/specs/2026-09-29-server-promotion-design.md` 和 `.notes/server-promotion/rfcs/server-postgresql-migration-rfc.md` 取代。当前唯一 Server 位于 `apps/server/`，使用独立 PostgreSQL `exre`；正文中的旧路径和目标仅作历史记录。
+
 - **日期：**2026-09-16
 - **状态：**已批准；已交接实施型 RFC
 - **模块根目录：**`notes/backend-sandbox/`

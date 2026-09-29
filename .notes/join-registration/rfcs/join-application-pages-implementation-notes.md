@@ -1,5 +1,7 @@
 ﻿# 完整加入申请的技术实施补充
 
+> 迁移说明（2026-09-29）：本文件保留当时的业务与实现决定；其中旧 `apps/mock-server/` 路径、本地 SQLite Mock 与未来 PHP/MySQL 接管的基础设施描述，已由 `.notes/server-promotion/specs/2026-09-29-server-promotion-design.md` 和 `.notes/server-promotion/rfcs/server-postgresql-migration-rfc.md` 取代。当前唯一 Server 位于 `apps/server/`，使用独立 PostgreSQL `exre`；正文中的旧路径和目标仅作历史记录。
+
 日期：2026-09-27。本文补充已批准的 `.notes/join-registration/rfcs/join-application-pages-rfc.md`，保留源 RFC/spec 原文。邀请快照导入与 Contract `0.4.0` → `0.5.0` 一次破坏性切换已获批准；HTTP 的现行事实来源为 `api/openapi.yaml`。产品字段、一次申请规则、只读查询及邀请生命周期不因以下技术修正改变。
 
 ## multipart 编码修正

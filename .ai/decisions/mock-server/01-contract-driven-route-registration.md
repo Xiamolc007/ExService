@@ -1,11 +1,11 @@
 # 由 Contract 注册路由，并显式声明前缀与 handler 映射
 
 - 状态：已接受
-- 模块：`mock-server`
+- 模块：`server`（原文档目录名保留）
 - 日期：2026-09-16
-- 来源：`notes/backend-sandbox/rfcs/2026-09-16-contract-first-backend-sandbox-scaffold-rfc.md`「Contract 到运行时的映射」
+- 来源：`.notes/archive/backend-sandbox/rfcs/2026-09-16-contract-first-backend-sandbox-scaffold-rfc.md`「Contract 到运行时的映射」
 
-_最后更新：2026-09-17_
+_最后更新：2026-09-29_
 
 ## 背景
 
@@ -38,6 +38,6 @@ Fastify 可以手写路由（`app.get('/health', handler)`），也可以由 `fa
 
 ## 证据
 
-- `apps/mock-server/src/app.ts` 的 `API_PREFIX`、`OPENAPI_PATH`、`serviceHandlers` 与 `createApp()`。
+- `apps/server/src/app.ts` 的 `API_PREFIX`、`OPENAPI_PATH`、`serviceHandlers` 与 `createApp()`。
 - `tests/contract/health.test.ts` 的 `registers the contract path under the explicit /api prefix`。
-- `AGENTS.md` 的「Mock Server 实现约定」。
+- `AGENTS.md` 的「Server 实现约定」。

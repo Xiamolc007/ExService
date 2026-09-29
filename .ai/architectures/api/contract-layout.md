@@ -1,48 +1,37 @@
-# `api` 模块：Contract 的结构
+# API Contract 的结构与消费路径
 
-本文件说明 `api/openapi.yaml` 自身的组织方式，以及它作为运行时来源被消费的路径。选择理由见 [decisions/api](../../decisions/README.md)。
+`api/openapi.yaml` 是唯一 HTTP API Contract，定义 Server 与生成式 Client 共享的路径、操作、认证及 schema。选择理由见 `.ai/decisions/api/01-openapi-as-single-contract.md`。
 
-_最后更新：2026-09-17_
+_最后更新：2026-09-29_
 
 ## 单文件布局
 
-首版把 Contract 聚合为一个文件，内部的顶层段落各司其职：
+Contract 仍聚合在一个文件中：
 
 | 段落 | 作用 |
 | --- | --- |
-| `openapi` / `info` | 声明规范版本与这份 Contract 的适用范围。 |
-| `servers[].url: /api` | **只**描述客户端 API base URL，不参与服务端路由前缀。 |
-| `tags` | operation 的归类；`system` 表示与业务数据无关的 Mock Server 自身状态。 |
-| `paths` | operation：HTTP 方法、`operationId`、summary、`tags`、responses。 |
-| `components.responses` | 可复用的响应定义。当前只有 `ErrorResponse`。 |
-| `components.schemas` | 可复用的 schema。当前只有 `HealthResponse` 与 `ErrorEnvelope`。 |
+| `openapi` / `info` | 规范版本与 Contract 适用范围。 |
+| `servers[].url: /api` | 描述客户端 API base URL；服务端路由前缀另由 Glue 注册。 |
+| `tags` | operation 的归类。 |
+| `paths` | HTTP 方法、`operationId`、请求、响应与逐操作 security。 |
+| `components.securitySchemes` | 声明 HTTP Bearer `bearerAuth`；受保护操作显式引用它。 |
+| `components.headers` | 复用 `Cache-Control` 与 `Retry-After` header 规则。 |
+| `components.responses` | 复用普通安全错误与带重试延迟的错误响应。 |
+| `components.schemas` | 健康、认证、资料、申请、邀请及错误 envelope 等共享 schema。 |
 
-`paths` 中每个 operation 必须带 `operationId`：它是 Contract 与实现之间的绑定键，缺失或重复都会让实现侧无法映射。
+每个 operation 都以 `operationId` 绑定 Server handler；缺失或重复会破坏映射。部分公开操作显式写 `security: []`，受保护操作声明 `bearerAuth`。当前没有 API 版本策略或兼容层；破坏性 Contract 变更须单独评审。
 
-业务资源增多、单文件不再可维护时，才拆分 `paths/` 与 `schemas/`，并且仍聚合为同一个 Contract。当前没有拆分。
+## 错误响应
 
-## 错误结构
+`components.responses.ErrorResponse` 和 `RetryableErrorResponse` 都引用同一份 `components.schemas.ErrorEnvelope`。后者额外要求 `Retry-After`，供需要告知等待时间的失败响应使用。operation 可显式声明 4xx/5xx，并以 `default` 覆盖其他失败；不能把早期“只有一份 response、没有显式 4xx”的描述当作当前 Contract。`ErrorEnvelope.error.code` 在 Contract 中仅约束为字符串，具体码值由 Server 实现维护。
 
-错误没有多条并列定义，而是集中在同一处：
-
-- 每个 operation 用 `default` 响应指向 `components/responses/ErrorResponse`。
-- `ErrorResponse` 引用 `components/schemas/ErrorEnvelope`。
-- `ErrorEnvelope.error.code` 只被约束为 `string`：**具体取值属于实现侧约定**，新增取值不需要改 Contract。
-- 因此额外声明一个 `4xx` response 会引入第二份错误定义，Redocly 的 `operation-4xx-response` 规则被显式关闭。
-
-## 被消费的路径
-
-同一个文件被三处独立消费，任何一处都不能成为「第二份 API 定义」：
+## 消费路径
 
 | 消费者 | 使用方式 |
 | --- | --- |
-| `pnpm api:lint` | Redocly 校验可解析性、引用完整性与项目规则。 |
-| `pnpm api:generate` | `openapi-typescript` 生成 `packages/api-client/src/generated/schema.d.ts`。 |
-| `apps/mock-server/src/app.ts` | 把整个文件交给 `fastify-openapi-glue`，由它注册路径、方法与校验 schema。 |
-| `tests/contract/health.test.ts` | 直接读取同一文件，把 `components.schemas` 转成 Ajv 可校验的 definitions。 |
+| `pnpm api:lint` | 用 Redocly 检查解析、引用和项目规则。 |
+| `pnpm api:generate` | 用 `openapi-typescript` 生成 `packages/api-client/src/generated/schema.d.ts`。 |
+| `apps/server/src/app.ts` | 通过 `fastify-openapi-glue` 注册方法、路径、schema 与 Bearer security handler。 |
+| `tests/contract/` | 从同一 Contract 提取 schema，检查路由、响应和双向 `operationId` 覆盖。 |
 
-`redocly.yaml` 中被关闭的规则都附有理由注释（`security-defined`、`operation-4xx-response`、`info-license`）；它们对应的是「首版范围不包含认证」「错误只有一份定义」「这不是对外发布的 API 描述」这三件事，不是遗漏。
-
-## 认证与版本
-
-首版 Contract 中不存在 security scheme，也没有版本策略或兼容层。这两者都必须先作为独立设计引入，不能只改 Contract。
+`redocly.yaml` 的规则开关属于仓库 lint 配置，不改变 Contract 中已存在的 Bearer scheme、显式错误响应或 schema。业务扩大到单文件难以维护时，可拆分源文件，但仍需聚合为唯一 Contract。

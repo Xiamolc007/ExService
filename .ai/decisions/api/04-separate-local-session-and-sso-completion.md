@@ -3,9 +3,9 @@
 - 状态：已接受
 - 模块：`api`
 - 日期：2026-09-23
-- 来源：`.notes/auth/specs/2026-09-23-auth-design.md`、`.notes/auth/rfcs/authentication-rfc.md`
+- 来源：`.notes/archive/auth/specs/2026-09-23-auth-design.md`、`.notes/archive/auth/rfcs/authentication-rfc.md`
 
-_最后更新：2026-09-23_
+_最后更新：2026-09-29_
 
 ## 背景
 
@@ -29,7 +29,7 @@ _最后更新：2026-09-23_
 - 前端认证流程必须显式区分普通登录和 SSO 上下文。
 - SSO 密码路径不能调用会创建本站会话的普通登录方法。
 - `/sso/success` 的浏览器展示记录不是凭据；服务端完成状态才是实际结果。
-- 未来 PHP 实现必须保持相同的响应分离与会话边界，但不复用 Node、SQLite 或本地 CLI 代码。
+- 唯一 Server 保持响应分离与会话边界；SSO CLI 仍是开发期显式入口，当前没有生产发起方或轮询协议。
 
 ## 重新审视的条件
 
@@ -40,6 +40,6 @@ _最后更新：2026-09-23_
 ## 证据
 
 - `api/openapi.yaml` 的 `/auth/login`、`/auth/sso/login` 与 `/auth/sso/confirm` 响应 schema。
-- `apps/mock-server/src/auth/service.ts` 的普通登录与两条 SSO 完成路径。
+- `apps/server/src/auth/service.ts` 的普通登录与两条 SSO 完成路径。
 - `apps/web/src/auth/AuthFlow.tsx` 的普通登录存储分支和 SSO 完成分支。
 - `tests/contract/auth.test.ts` 对 SSO 不创建新本站会话的断言。

@@ -5,7 +5,7 @@
 - 日期：2026-09-24
 - 来源：用户设置面板设计 `.notes/archive/backend-sandbox/user-settings/specs/2026-09-24-user-settings-panel-design.md` 与技术 RFC `.notes/archive/backend-sandbox/user-settings/rfcs/user-settings-panel-rfc.md`
 
-_最后更新：2026-09-24_
+_最后更新：2026-09-29_
 
 ## 背景
 
@@ -15,7 +15,7 @@ _最后更新：2026-09-24_
 
 - 在 `apps/web` 使用全局 Valtio `settingsConfig` 存放设置资料的内存缓存与读取状态，并保留未来分类扩展的位置。它不接管登录态，也不替换现有 `AuthContext`。
 - `AuthContext` 的职责、接口和行为保持现状。资料保存成功后，设置层以服务器返回值更新自身缓存，再调用现有 `refreshProfile()` 同步顶栏；会话失效仍使用现有 `invalidateSession()`，退出仍使用现有 `logout()`。
-- 主题仍由 ExUI `ThemeProvider` 决定；`settingsConfig` 只能投影当前主题，不提供第二个持久化或写入来源。理由与现有[主题决策](03-exui-as-component-and-theme-source.md)一致。
+- 主题仍由 ExUI `ThemeProvider` 决定；`settingsConfig` 只能投影当前主题，不提供第二个持久化或写入来源。理由与现有`.ai/decisions/web/03-exui-as-component-and-theme-source.md`一致。
 - 设置界面由 `packages/components` 接收值和回调展示。通用的整块内容加载、错误与重试组件也属于该共享 UI 包；API、Valtio、路由和浏览器会话访问留在 `apps/web`。
 - 设置缓存仅在当前浏览器内存中存在，绑定当前会话；账号切换、退出或明确失效时清空，迟到响应不得覆盖新会话。
 

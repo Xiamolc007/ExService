@@ -3,9 +3,9 @@
 - 状态：已接受
 - 模块：`api-client`
 - 日期：2026-09-16
-- 来源：`notes/backend-sandbox/specs/2026-09-16-backend-sandbox-scaffold-design.md` §5.1、§9
+- 来源：`.notes/archive/backend-sandbox/specs/2026-09-16-backend-sandbox-scaffold-design.md` §5.1、§9
 
-_最后更新：2026-09-17_
+_最后更新：2026-09-29_
 
 ## 背景
 

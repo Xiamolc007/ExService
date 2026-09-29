@@ -1,5 +1,7 @@
 # RFC：完整加入申请、结果查询与审核资料扩展
 
+> 迁移说明（2026-09-29）：本文件保留当时的业务与实现决定；其中旧 `apps/mock-server/` 路径、本地 SQLite Mock 与未来 PHP/MySQL 接管的基础设施描述，已由 `.notes/server-promotion/specs/2026-09-29-server-promotion-design.md` 和 `.notes/server-promotion/rfcs/server-postgresql-migration-rfc.md` 取代。当前唯一 Server 位于 `apps/server/`，使用独立 PostgreSQL `exre`；正文中的旧路径和目标仅作历史记录。
+
 - 日期：2026-09-27。
 - 状态：技术提案，待 RFC 评审；产品范围已由用户确认。
 - 已批准来源：`.notes/join-registration/specs/2026-09-27-join-application-pages-design.md`。用户在完整文档审阅后回复 `y`；保留源文档原文。

@@ -1,40 +1,29 @@
 # 决策索引
 
-本索引记录 ExWebsite 中已接受的设计决策：背景、替代方案、理由、代价，以及重新审视它们的条件。
+本索引记录已接受决策及被取代的历史选择。数据库专属决策集中于 `.ai/databases/decisions/`；当前结构另见 `.ai/architectures/overview.md`。
 
-决策按模块编号，编号在每个模块内从 `01` 开始且不重复使用。数据库专属决策存于 `../databases/decisions/`，沿用原 `mock-server` 编号；引用时使用指向实际文件的 Markdown 链接。
+_最后更新：2026-09-29_
 
-决定「为什么这样做」的内容留在本目录或 `../databases/decisions/`；它产生的结构写在 `../architectures/` 或 `../databases/data-model.md`，运行中暴露的失败模式写在 `../knowledge/` 或 `../databases/knowledge/`。
+| 决策 | 模块 | 状态 |
+| --- | --- | --- |
+| `.ai/decisions/api/01-openapi-as-single-contract.md` | API | Contract 原则继续适用；早期接管动机属于历史背景。 |
+| `.ai/decisions/api/02-draft07-compatible-schema-subset.md` | API | 已接受。 |
+| `.ai/decisions/api/03-unified-error-envelope.md` | API | 已接受。 |
+| `.ai/decisions/api/04-separate-local-session-and-sso-completion.md` | API | 已接受。 |
+| `.ai/decisions/api-client/01-generated-types-committed-and-read-only.md` | Client | 已接受。 |
+| `.ai/decisions/components/01-app-level-shared-component-package.md` | UI | 已接受。 |
+| `.ai/decisions/mock-server/01-contract-driven-route-registration.md` | Server | 已接受，原目录名保留。 |
+| `.ai/databases/decisions/02-fixed-local-sqlite-database.md` | 数据库 | 已被 PostgreSQL 决策取代。 |
+| `.ai/databases/decisions/03-database-changes-only-by-explicit-command.md` | 数据库 | 已接受，执行细节已更新。 |
+| `.ai/decisions/mock-server/04-safe-error-messages.md` | Server | 已接受。 |
+| `.ai/decisions/mock-server/05-normalize-new-avatars-to-512-square.md` | Server | 已实现。 |
+| `.ai/databases/decisions/06-implicit-ordinary-explicit-admin-membership.md` | 数据库 | 已接受。 |
+| `.ai/databases/decisions/07-independent-postgresql-exre-database.md` | 数据库 | 已接受并在开发环境实现。 |
+| `.ai/decisions/web/01-shared-client-with-configurable-base-url.md` | Web | Client 配置原则继续适用。 |
+| `.ai/decisions/web/02-react-route-skeleton.md` | Web | 已接受。 |
+| `.ai/decisions/web/03-exui-as-component-and-theme-source.md` | Web | 已接受。 |
+| `.ai/decisions/web/04-settings-state-separate-from-auth-context.md` | Web | 已实现。 |
+| `.ai/decisions/contract-tests/01-assert-raw-handler-output.md` | 测试 | 已接受。 |
+| `.ai/decisions/contract-tests/02-contract-as-sole-schema-source.md` | 测试 | 已接受。 |
 
-_最后更新：2026-09-24_
-
-## 索引
-
-| 编号 | 标题 | 模块 | 状态 | 日期 |
-| --- | --- | --- | --- | --- |
-| 01 | [以单份 OpenAPI Contract 作为唯一的 API 事实来源](api/01-openapi-as-single-contract.md) | `api` | 已接受 | 2026-09-16 |
-| 02 | [把 Contract schema 限制在 Draft-07 兼容子集](api/02-draft07-compatible-schema-subset.md) | `api` | 已接受 | 2026-09-16 |
-| 03 | [所有错误共用同一个 envelope](api/03-unified-error-envelope.md) | `api` | 已接受 | 2026-09-16 |
-| 04 | [本站会话与 SSO 完成使用不同的 Contract 结果](api/04-separate-local-session-and-sso-completion.md) | `api` | 已接受 | 2026-09-23 |
-| 01 | [生成的类型纳入版本控制，共享 Client 以源码形式导出](api-client/01-generated-types-committed-and-read-only.md) | `api-client` | 已接受 | 2026-09-16 |
-| 01 | [共享 UI 组件放在独立工作区包，而不是 app 内部目录](components/01-app-level-shared-component-package.md) | `components` | 已接受 | 2026-09-18 |
-| 01 | [由 Contract 注册路由，并显式声明前缀与 handler 映射](mock-server/01-contract-driven-route-registration.md) | `mock-server` | 已接受 | 2026-09-16 |
-| 02 | [本地 Mock 数据库使用固定路径，不接受覆盖](../databases/decisions/02-fixed-local-sqlite-database.md) | `mock-server` | 已接受 | 2026-09-16 |
-| 03 | [数据库变更只由显式命令执行](../databases/decisions/03-database-changes-only-by-explicit-command.md) | `mock-server` | 已接受 | 2026-09-16 |
-| 04 | [只对外回显安全的错误消息](mock-server/04-safe-error-messages.md) | `mock-server` | 已接受 | 2026-09-16 |
-| 05 | [新上传头像统一为 512×512 WebP](mock-server/05-normalize-new-avatars-to-512-square.md) | `mock-server` | 已实现 | 2026-09-24 |
-| 06 | [普通身份隐含，管理员身份显式记录](../databases/decisions/06-implicit-ordinary-explicit-admin-membership.md) | `mock-server` | 已接受 | 2026-09-24 |
-| 01 | [前端只经共享 Client 调用，base URL 由配置决定](web/01-shared-client-with-configurable-base-url.md) | `web` | 已接受 | 2026-09-16 |
-| 02 | [前端使用 react-router 的声明式路由](web/02-react-route-skeleton.md) | `web` | 已接受 | 2026-09-18 |
-| 03 | [以 ExUI 作为组件库与主题来源](web/03-exui-as-component-and-theme-source.md) | `web` | 已接受 | 2026-09-18 |
-| 04 | [设置状态与 AuthContext 保持独立](web/04-settings-state-separate-from-auth-context.md) | `web` | 已实现 | 2026-09-24 |
-| 01 | [Contract Test 必须断言 handler 的原始返回值](contract-tests/01-assert-raw-handler-output.md) | `contract-tests` | 已接受 | 2026-09-16 |
-| 02 | [测试直接以 Contract 为 schema 来源，并做双向覆盖检查](contract-tests/02-contract-as-sole-schema-source.md) | `contract-tests` | 已接受 | 2026-09-16 |
-
-## 模块目录
-
-模块列对应 `../README.md` 中的模块划分。除数据库专属决策集中于 `../databases/decisions/` 外，其余决策按模块放在本目录的 `api/`、`api-client/`、`components/`、`mock-server/`、`web/`、`contract-tests/`。
-
-尚未包含的决策领域：API 版本策略与兼容层、完整 Draft 2020-12 支持、PHP 侧 Contract Test 与 CI。它们都不是既有决策的例外，而是尚未开始的独立设计。
-
-`web/02` 把「`RootLayout` 是否加入导航」留成了待决项。该问题已结掉：导航现在是 `RootLayout` 渲染的共享组件，见 [components/01](components/01-app-level-shared-component-package.md) 与 [web/03](web/03-exui-as-component-and-theme-source.md)。
+过时决策保留当时理由，但其旧运行指令不适用于当前 Server。公网部署、共享头像和限流、真实邮件、人机验证、备份恢复与监控仍需后续独立设计。

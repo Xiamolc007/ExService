@@ -1,13 +1,13 @@
 # ExWebsite
 
-本仓库是一个 Contract-first 的本地 Backend Sandbox：在前端生产后端（PHP + MySQL）尚未交付期间，用一个可运行、可保存状态的本地 Node 后端替代固定 JSON Mock；未来 PHP 服务按同一份 API Contract 实现后，前端只需切换 API base URL。
+本仓库以单份 HTTP Contract 驱动 Web、生成式 Client 和唯一 Fastify Server。Server 使用独立的 PostgreSQL `exre` 数据库；目前仍处开发阶段。
 
-_最后更新：2026-09-27_
+_最后更新：2026-09-29_
 
 ## Language
 
 **Contract（API Contract）**:
-前端、本地 Mock 实现与未来生产实现共同遵守的唯一 HTTP API 事实来源。任何一方都不得在 Contract 之外新增路径、字段或错误格式；实现只能从 Contract 派生行为或类型。
+前端与 Server 共同遵守的唯一 HTTP API 事实来源。任何一方都不得在 Contract 之外新增路径、字段或错误格式；实现只能从 Contract 派生行为或类型。
 _Avoid_: 接口文档、Swagger 文件、示例 API
 
 **operation**:
@@ -18,24 +18,16 @@ _Avoid_: 接口、路由、endpoint 定义
 把一个 operation 绑定到其实现者（handler）的稳定标识。Service handler 是否被注册，以及覆盖检查是否通过，都以它为准；文件位置不参与解析。
 _Avoid_: handler 名、路由名、函数名
 
-**Mock Server**:
-本地替代生产后端的 Fastify 进程。它按 Contract 注册路由并实现行为，可写本地数据库，但只服务于本地开发。
-_Avoid_: 假后端、stub 服务、测试服务器
+**Server**:
+本仓库唯一的 Fastify 服务，按 Contract 注册路由并实现行为。当前单实例开发拓扑不意味着已具备公网生产部署条件。
+_Avoid_: Mock Server、临时后端、PHP 接管服务
 
-**生产实现（PHP 实现）**:
-未来按同一份 Contract 实现的 PHP + MySQL 后端。它不使用本仓库的 Node、Drizzle 或 SQLite 代码，但必须实现相同的行为与错误结构。
-_Avoid_: 真实后端、正式服务器、上线环境
-
-**Mock 数据**:
-只存在于本地 Mock 数据库中、可被受控重置丢弃的数据。它不代表任何业务事实，也不得提交到版本控制。
-_Avoid_: 测试数据、种子数据、演示数据
-
-**Mock 数据库**:
-服务本地 Mock 环境的固定 SQLite 文件，不连接、不共享生产数据库。
-_Avoid_: 本地库、开发库、测试数据库
+**开发数据库**:
+独立的 PostgreSQL `exre` 数据库，由环境变量明确指定；不与 `outline` 共用数据库。自动测试使用独立容器和隔离 schema。
+_Avoid_: Mock SQLite、生产数据库、共享测试库
 
 **健康检查**:
-Mock Server 自身可用性的最小信号。它表示进程已完成监听前置检查，不表示业务数据可被读写。
+Server 自身可用性的最小信号。它表示进程已完成监听前置检查，不表示所有业务流程已经验收。
 _Avoid_: 存活探针、业务就绪检查、状态接口
 
 **envelope（错误 envelope）**:
@@ -43,15 +35,15 @@ _Avoid_: 存活探针、业务就绪检查、状态接口
 _Avoid_: 错误对象、错误详情、error 结构
 
 **migration**:
-对本地 Mock 数据库结构的可执行、可累积的变更单元。它只能由显式命令应用，服务启动不会生成或应用它。
+对 PostgreSQL 应用结构的可执行变更单元。它只能由显式命令应用，服务启动不会生成或应用它。
 _Avoid_: 建表脚本、schema 变更、SQL 文件
 
 **baseline migration**:
-记录迁移基线的 migration。它不产生业务结构，且不可回写；首个业务表必须由新的 migration 创建。
-_Avoid_: 初始 migration、0000 脚本、空迁移
+从空 `exre` 数据库建立当前有效业务结构的首条 PostgreSQL migration；不回放旧 SQLite 历史。
+_Avoid_: SQLite 基线、历史数据导入
 
 **受控重置**:
-只丢弃本地 Mock 数据库及其 SQLite 伴随文件、随后重建为空结构的操作。它不接受路径参数，也不删除目录、migration、源码或其他工作区文件。
+开发专用命令：显式确认 `exre` 后，核验回环地址、连接身份和对象归属，清理本应用结构并重新应用基线；不删除头像目录，也不触及其他数据库。
 _Avoid_: 清库、重置环境、删除数据库
 
 **共享 Client**:
@@ -59,7 +51,7 @@ _Avoid_: 清库、重置环境、删除数据库
 _Avoid_: API 封装、请求库、SDK wrapper
 
 **API base URL**:
-前端请求前缀。它由部署配置决定，使同一份前端代码可以从本地 Mock Server 切换到生产实现而不改动业务调用点。
+前端请求前缀。开发环境缺省 `/api`，Vite 将请求代理到唯一 Server。
 _Avoid_: 接口域名、服务地址、代理地址
 
 **破坏性 Contract 变更**:
@@ -107,7 +99,7 @@ _Avoid_: `general` 成员关系、匿名用户身份
 _Avoid_: 注册默认权限、游戏管理员权限
 
 **本站会话**:
-普通登录成功后由 Mock Server 签发、浏览器通过 Bearer 使用的 7 天固定期限会话。原始 token 只交付给浏览器，数据库只保存摘要；它与 SSO 完成结果是两类状态。
+普通登录成功后由 Server 签发、浏览器通过 Bearer 使用的 7 天固定期限会话。原始 token 只交付给浏览器，数据库只保存摘要；它与 SSO 完成结果是两类状态。
 _Avoid_: 登录信息、用户缓存、SSO token
 
 **SSO 请求**:

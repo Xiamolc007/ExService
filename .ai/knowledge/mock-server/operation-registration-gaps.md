@@ -2,7 +2,7 @@
 
 **结论：Contract 中新增 operation 却漏登记 handler 时，只有「双向覆盖检查」能发现；既有断言不会失败。**
 
-_最后更新：2026-09-17_
+_最后更新：2026-09-29_
 
 ## 失败模式
 
@@ -15,12 +15,12 @@ _最后更新：2026-09-17_
 
 ## 如何应用
 
-- 新增 operation 时必须同时改两处：`api/openapi.yaml` 与 `apps/mock-server/src/app.ts` 的 `serviceHandlers`。
+- 新增 operation 时必须同时改两处：`api/openapi.yaml` 与 `apps/server/src/app.ts` 的 `serviceHandlers`。
 - 依赖 `contract coverage` 的两个反向断言来兜住这两个方向，不要用「人肉检查 `serviceHandlers`」替代。选择双向覆盖检查的理由见 [[contract-tests/02-contract-as-sole-schema-source]]。
 - 重命名 `operationId` 等同于「删除旧 operation + 新增新 operation」，两个方向都要同步。
 
 ## 证据
 
 - `tests/contract/health.test.ts` 的 `contract coverage` 两组用例（`registers a handler for every operation declared in the contract`、`registers no handler that the contract does not declare`）及其注释。
-- `apps/mock-server/src/app.ts` 中 `serviceHandlers` 的定义与注释。
-- `AGENTS.md` 的「Mock Server 实现约定」与「修改 API 的固定顺序」。
+- `apps/server/src/app.ts` 中 `serviceHandlers` 的定义与注释。
+- `AGENTS.md` 的「Server 实现约定」与「修改 API 的固定顺序」。

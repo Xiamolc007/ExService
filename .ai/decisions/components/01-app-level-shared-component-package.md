@@ -3,7 +3,7 @@
 - 状态：已接受
 - 模块：`components`
 - 日期：2026-09-18
-- 来源：`.notes/web/specs/2026-09-18-homepage-and-components-design.md`
+- 来源：`packages/components/package.json`、`packages/components/src/index.ts` 的共享包实现
 
 _最后更新：2026-09-18_
 
@@ -16,7 +16,7 @@ _最后更新：2026-09-18_
 - 新建工作区包 `packages/components`，包名 `@workspace/components`，与 `packages/api-client` 同级。
 - 包定位是**应用级共享组件**（承载站点语义，如 `SiteHeader`），不是原子化设计系统。
 - 形态对齐 `packages/api-client`：源码形式导出（`exports` 直接指向 `src/index.ts`）、无构建步骤、自带 `tsconfig.json` 与 `typecheck` 脚本。
-- 公开面只导出 `SiteHeader`；`Logo` / `ThemeToggle` / `AuthArea` 是包的内部模块。
+- 公开面由 `packages/components/src/index.ts` 管理，包含站点顶栏及认证、资料、加入流程所需的共享组件。
 - 依赖边界：`react` / `react-dom` / `react-router` 同时是 `peerDependencies` 与 `devDependencies`；`@exre/exui` 与 `lucide-react` 是普通 `dependencies`。
 - 样式用 CSS Modules，包内自带一个 `.module.scss` 的类型声明文件。
 
@@ -31,18 +31,18 @@ _最后更新：2026-09-18_
 
 - 新增或修改跨页面 UI 时，改动点在这个包，`apps/web` 只负责把它挂到布局里。
 - `pnpm-workspace.yaml` 已是 `packages/*`，新包自动纳入，不需要改工作区配置；`pnpm typecheck` 会自动带上它。
-- 这个包没有自动化覆盖：仓库没有前端测试基建，只有 typecheck、build 与人工验证能兜住。
+- `packages/components/src/` 已有组件及交互测试；变更共享 UI 时按受影响组件运行测试，并结合 typecheck、build 与必要的浏览器验证。
 - `apps/web` 的 `tsc` 会跟随 import 进入本包源码，因此本包内部的类型错误会同时让 `apps/web` 的 typecheck 失败。
 
 ## 重新审视的条件
 
 - 出现第二个消费方（例如后台应用），需要重新评估公开面与是否补构建产物。
 - 需要在不引入打包器的环境下使用本包时——源码形式导出依赖消费方解析 `@components` 别名，Node ESM 不直接识别。
-- 引入前端测试基建时，本包的覆盖缺口需要重新评估。
+- 新的共享交互超出现有组件测试覆盖时，补充相应行为验证并复核浏览器中的 provider 与路由 context。
 
 ## 证据
 
-- `packages/components/package.json`、`tsconfig.json`、`src/{index.ts,scss.d.ts}`。
+- `packages/components/package.json`、`packages/components/tsconfig.json`、`packages/components/src/index.ts`、`packages/components/src/scss.d.ts`。
 - `packages/api-client/package.json`（被对齐的形态来源）。
 - `pnpm-workspace.yaml` 的 `packages/*`。
-- `AGENTS.md` 目录边界表中的 `packages/components/` 行。
+- `AGENTS.md` 目录边界表中的 `packages/components/` 行；`packages/components/src/SiteHeader.test.tsx` 等组件测试。

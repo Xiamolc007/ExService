@@ -1,15 +1,15 @@
 # 只对外回显安全的错误消息
 
 - 状态：已接受
-- 模块：`mock-server`
+- 模块：`server`（原文档目录名保留）
 - 日期：2026-09-16
-- 来源：`notes/backend-sandbox/rfcs/2026-09-16-contract-first-backend-sandbox-scaffold-rfc.md`「安全与运行边界」
+- 来源：`.notes/archive/backend-sandbox/rfcs/2026-09-16-contract-first-backend-sandbox-scaffold-rfc.md`「安全与运行边界」
 
-_最后更新：2026-09-27_
+_最后更新：2026-09-29_
 
 ## 背景
 
-未捕获异常的 `message` 可能包含 SQL 语句、SQLite 绝对路径、堆栈或原始异常内容。这个服务虽然是本地开发用的 Mock，但它的响应会被浏览器、日志和未来的调用方消费。
+未捕获异常的 `message` 可能包含 SQL 语句、PostgreSQL 连接信息、堆栈或原始异常内容。当前 Server 的响应会被浏览器与日志消费，即使尚未公网部署也必须避免泄漏。
 
 ## 决策
 
@@ -21,14 +21,14 @@ _最后更新：2026-09-27_
 其他异常（包括应用代码主动抛出的 4xx）一律不回显 `error.message`。另外：
 
 - `error.statusCode` 先被规范到 `[400, 600)`，超出范围一律按 500 处理，避免异常状态码原样透出；
-- 已知业务错误使用 `apps/mock-server/src/auth/errors.ts` 的固定分类与文案；其他异常按状态码推导（404 → `NOT_FOUND`，≥500 → `INTERNAL_ERROR`，其余 → `BAD_REQUEST`）；
+- 已知业务错误使用 `apps/server/src/auth/errors.ts` 的固定分类与文案；其他异常按状态码推导（404 → `NOT_FOUND`，≥500 → `INTERNAL_ERROR`，其余 → `BAD_REQUEST`）；
 - Fastify request ID 同时用于响应中的 `requestId` 与日志关联；5xx 写 `error` 日志，4xx 写 `warn` 日志。
 
 邀请注册的哈希、投递和数据库异常可能带有提交秘密，因此 HTTP 异常日志只记录安全 code/status 分类，不序列化原始 Error、message 或堆栈。本地模拟邮件终端输出是显式投递适配器行为，不是普通请求异常日志。
 
 ## 理由
 
-- 本地 Mock 也应当保持与生产实现相同的「不泄漏内部状态」标准，否则前端会在开发期依赖上那些迟早会消失的信息。
+- 当前开发环境也必须避免泄漏内部状态，否则前端会依赖不安全的错误信息。
 - 把状态码规范到合理区间，避免上游库传入的异常值（如 0 或 6xx）被原样发回。
 - 校验错误是唯一有价值的安全回显，因为它直接告诉调用方 Contract 要求什么。
 - 固定业务分类使调用方可处理重试或失效；保留原始异常日志会绕过响应已做的保密约束，因此不能把服务端日志当作任意秘密输出入口。
@@ -46,7 +46,7 @@ _最后更新：2026-09-27_
 
 ## 证据
 
-- `apps/mock-server/src/errors.ts` 全文，尤其是 `resolvePublicMessage()` 与 `codeForStatus()`。
+- `apps/server/src/errors.ts` 全文，尤其是 `resolvePublicMessage()` 与 `codeForStatus()`。
 - `tests/contract/health.test.ts` 的 `does not leak internal details`。
 - `api/openapi.yaml` 中 `ErrorEnvelope.error.message` 的 description。
 - `.notes/join-registration/rfcs/join-registration-rfc.md` 的错误语义及敏感日志边界。
