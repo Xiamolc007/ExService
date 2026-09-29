@@ -450,6 +450,11 @@ export interface components {
         JoinExperiencedCommitments: {
             /** @constant */
             informationAccurate: true;
+            /**
+             * @description Present on applications submitted by the current form; optional for previously stored version 1 forms.
+             * @constant
+             */
+            obeyCommunityRules?: true;
         };
         /** @description Answer and freeTime strings are trimmed then counted as Unicode code points. The server independently checks calendar and text semantics. */
         JoinNewForm: {

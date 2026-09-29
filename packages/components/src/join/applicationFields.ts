@@ -202,18 +202,19 @@ export function joinApplicationCommitments(
     name: "form.commitments.informationAccurate",
     label: "我确认以上信息真实无误。",
   };
+  const obeyRules = {
+    name: "form.commitments.obeyCommunityRules",
+    label: "我确认能够遵守服务器规定与政策。",
+  };
   return type === "new"
     ? [
         accurate,
-        {
-          name: "form.commitments.obeyCommunityRules",
-          label: "我确认能够遵守服务器规定与政策。",
-        },
+        obeyRules,
         {
           name: "form.commitments.acceptAcademyAttendanceConsequences",
           label:
             "我清楚面试通过进入学院后，因自身原因缺课、旷课所产生的后果由自己承担。",
         },
       ]
-    : [accurate];
+    : [accurate, obeyRules];
 }

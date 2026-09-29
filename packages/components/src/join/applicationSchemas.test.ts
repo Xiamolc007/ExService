@@ -12,7 +12,7 @@ export const validNewDraft = {
 export const validExperiencedDraft = {
   ...validNewDraft, form: { ...validNewDraft.form, applicationType: 'experienced',
     answers: { previousServer: '原服务器', leaveReason: '想学习', previousDepartment: '巡逻', lawEnforcementExperience: '有执法经验', highestRank: '警员', punishmentHistory: '无', deescalationEssay: '😀'.repeat(150), discretionEssay: '学'.repeat(150), transferReason: '愿意认真扮演' },
-    commitments: { informationAccurate: true } },
+    commitments: { informationAccurate: true, obeyCommunityRules: true } },
 }
 
 describe('完整申请规则', () => {
@@ -35,6 +35,7 @@ describe('完整申请规则', () => {
     }
     expect(newJoinApplicationSchema.safeParse({ ...validNewDraft, form: { ...validNewDraft.form, discoveryChannels: ['friends', 'friends'] } }).success).toBe(false)
     expect(newJoinApplicationSchema.safeParse({ ...validNewDraft, form: { ...validNewDraft.form, commitments: { ...validNewDraft.form.commitments, informationAccurate: false } } }).success).toBe(false)
+    expect(experiencedJoinApplicationSchema.safeParse({ ...validExperiencedDraft, form: { ...validExperiencedDraft.form, commitments: { ...validExperiencedDraft.form.commitments, obeyCommunityRules: false } } }).success).toBe(false)
   })
   it('rejects category pollution and new applicant proofs', () => {
     expect(newJoinApplicationSchema.safeParse(validExperiencedDraft).success).toBe(false)

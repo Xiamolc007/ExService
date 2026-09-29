@@ -25,7 +25,7 @@ export function experiencedJoinApplication(email = 'experienced@example.com') {
   const common = newJoinApplication(email)
   return { ...common, form: { ...common.form, applicationType: 'experienced' as const,
     answers: { previousServer: 'Previous server', leaveReason: '寻找新社区', previousDepartment: '巡逻', lawEnforcementExperience: '有相关经历', highestRank: 'Officer', punishmentHistory: '无', deescalationEssay: '😀'.repeat(150), discretionEssay: '自'.repeat(150), transferReason: '继续学习' },
-    commitments: { informationAccurate: true as const } } }
+    commitments: { informationAccurate: true as const, obeyCommunityRules: true as const } } }
 }
 
 export async function createTestAuth(overrides: Partial<AuthServiceDependencies & InvitationServiceDependencies> = {}) {

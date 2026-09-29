@@ -504,9 +504,12 @@ describe("完整申请 Modal", () => {
     await user.click(screen.getByRole("button", { name: /继续|检查申请/ }));
     expect(screen.getByText("航空救援")).toBeTruthy();
     expect(screen.getByText("周末白天和周二晚间")).toBeTruthy();
-    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
     await user.click(
       screen.getByRole("checkbox", { name: "我确认以上信息真实无误。" }),
+    );
+    await user.click(
+      screen.getByRole("checkbox", { name: "我确认能够遵守服务器规定与政策。" }),
     );
     await user.click(screen.getByRole("button", { name: "提交申请" }));
     expect(
@@ -519,7 +522,10 @@ describe("完整申请 Modal", () => {
     expect(draft.form.applicationType).toBe("experienced");
     expect(draft.form.freeTime).toBe("周末白天和周二晚间");
     expect(draft.form.discoveryChannels).toEqual(["bilibili", "other"]);
-    expect(draft.form.commitments).toEqual({ informationAccurate: true });
+    expect(draft.form.commitments).toEqual({
+      informationAccurate: true,
+      obeyCommunityRules: true,
+    });
     expect(draft.proofs[0]).toBe(proof);
     expect(Object.keys(draft.form.answers)).toHaveLength(9);
     await user.click(screen.getByRole("button", { name: "返回修改" }));

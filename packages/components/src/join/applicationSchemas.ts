@@ -133,7 +133,10 @@ export const experiencedJoinApplicationSchema = z.strictObject({
       discretionEssay: text(150, 4000),
       transferReason: text(1, 4000),
     }),
-    commitments: z.strictObject({ informationAccurate: consent }),
+    commitments: z.strictObject({
+      informationAccurate: consent,
+      obeyCommunityRules: consent,
+    }),
   }),
   proofs: proofFilesSchema,
 });

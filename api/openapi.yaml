@@ -974,6 +974,10 @@ components:
         informationAccurate:
           type: boolean
           const: true
+        obeyCommunityRules:
+          type: boolean
+          const: true
+          description: Present on applications submitted by the current form; optional for previously stored version 1 forms.
     JoinNewForm:
       type: object
       additionalProperties: false

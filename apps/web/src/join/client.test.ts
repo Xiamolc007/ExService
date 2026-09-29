@@ -13,7 +13,7 @@ function draft(length = 150): ExperiencedJoinApplicationDraft {
     form: {
       applicationType: 'experienced', birthDate: '2000-01-01', applicantCategory: '100', department: 'leo', freeTime: '周末', discoveryChannels: ['friends'],
       answers: { previousServer: '旧服', leaveReason: '中'.repeat(length), previousDepartment: '巡逻', lawEnforcementExperience: '中'.repeat(length), highestRank: '警员', punishmentHistory: '中'.repeat(length), deescalationEssay: '中'.repeat(length), discretionEssay: '中'.repeat(length), transferReason: '中'.repeat(length) },
-      commitments: { informationAccurate: true },
+      commitments: { informationAccurate: true, obeyCommunityRules: true },
     },
   }
 }

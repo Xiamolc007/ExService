@@ -525,7 +525,10 @@ function ExperiencedApplicationForm(props: FormProps) {
                 discretionEssay: "",
                 transferReason: "",
               },
-              commitments: { informationAccurate: false },
+              commitments: {
+                informationAccurate: false,
+                obeyCommunityRules: false,
+              },
             },
           },
   });
