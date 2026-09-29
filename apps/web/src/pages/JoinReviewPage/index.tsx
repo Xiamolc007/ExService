@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, AlertDescription, Button, Card, Tabs, TabsList, TabsTrigger } from '@exre/exui'
-import { ExMessage, JoinReviewDialog, joinApplicationFields, joinApplicationCommitments, joinApplicationSteps } from '@workspace/components'
+import { Alert, AlertDescription, Button, Card, ExMessage, Tabs, TabsList, TabsTrigger } from '@exre/exui'
+import { JoinReviewDialog, joinApplicationFields, joinApplicationCommitments, joinApplicationSteps } from '@workspace/components'
 import type { components } from '@workspace/api-client'
 import { api } from '@web/src/api/client'
 import styles from '@web/src/pages/JoinReviewPage/JoinReviewPage.module.scss'

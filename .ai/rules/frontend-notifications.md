@@ -4,9 +4,9 @@
 
 ## 统一入口
 
-1. 全站临时通知统一使用 `ExMessage`。应用代码从 `@workspace/components` 导入；共享组件包内部从 `@components/src/ExMessage` 导入。
-2. 业务代码不得直接调用 ExUI 的 `toast`，不得另建 Toaster、通知容器或通知状态系统，也不得另装 Sonner 等通知库。底层 `toast/Toaster` 仅由 ExMessage 实现及其测试使用。
-3. 全站宿主只在 `apps/web/src/main.tsx` 的 `ThemeProvider` 内挂载一次。页面、布局和弹窗只调用静态方法；全局配置统一在根宿主调整。
+1. 全站临时通知统一从 `@exre/exui` 导入 `ExMessage`；`packages/components/` 不再提供本站自写的同名封装。
+2. 业务代码不得直接调用 ExUI 的 `toast`，不得另建 Toaster、通知容器或通知状态系统，也不得另装 Sonner 等通知库。直接调用 `toast` 会绕过 `ExMessage` 的容量及 loading 生命周期管理。
+3. 全站宿主只在 `apps/web/src/main.tsx` 的 `ThemeProvider` 内挂载一次 `<ExMessageContext />`。页面、布局和弹窗只调用 `ExMessage` 静态方法；全局配置统一在根宿主调整。
 4. 通知调用放在已挂载页面的事件处理或后续 passive effect 中；不要在模块初始化、React render 或首次 layout effect 中发送。宿主激活时机与底层行为见 `.ai/knowledge/components/ex-message-host-lifecycle.md`。
 
 ## 场景与方法
@@ -20,7 +20,7 @@
 
 字段校验错误继续在对应 Form 字段内显示，页面的持续错误和重试入口继续由页面状态承载；ExMessage 用于临时反馈。聊天消息和持久通知中心不属于本规则的临时通知范围。
 
-当前没有 `ExMessage.success` 静态方法；普通成功反馈使用 `info`，loading 的成功结果使用句柄的 `onSuccess`。文案说明结果或下一步操作，不直接显示原始异常、堆栈或服务器内部信息。
+ExUI 还提供 `ExMessage.success` 和 `ExMessage.dismiss(id)`；现有普通成功反馈继续使用 `info`，loading 的成功结果继续使用句柄的 `onSuccess`。文案说明结果或下一步操作，不直接显示原始异常、堆栈或服务器内部信息。
 
 ## 异步操作与时长
 
@@ -30,7 +30,7 @@
 - 普通消息及完成态优先沿用全站默认时长；确需覆盖时使用 `options.duration`，单位为毫秒，值必须为正有限数。
 
 ```ts
-import { ExMessage } from '@workspace/components'
+import { ExMessage } from '@exre/exui'
 
 // 作为已挂载页面的事件处理函数调用。
 function notifySaved(): void {
@@ -53,4 +53,4 @@ async function runWithFeedback(task: () => Promise<void>): Promise<boolean> {
 
 ## 修改时检查
 
-确认新增通知使用上述入口、应用仍只有一个根宿主、loading 的成功/失败/取消路径有对应的完成或关闭处理；涉及显示时检查当前主题下的文案和位置。组件本身的生命周期改动沿用 `packages/components/src/ExMessage.test.tsx` 的行为测试。
+确认新增通知使用上述入口、应用仍只有一个根宿主、loading 的成功/失败/取消路径有对应的完成或关闭处理；涉及显示时检查当前主题下的文案和位置。本站的接线回归由 `apps/web/src/pages/JoinReviewPage/JoinReviewPage.test.tsx` 覆盖；ExUI 宿主及控制器行为由 ExUI 自身测试覆盖。

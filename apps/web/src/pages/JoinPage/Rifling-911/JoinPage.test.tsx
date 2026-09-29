@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { JoinPage } from '@web/src/pages/JoinPage/Rifling-911/index'
-import { ExMessage } from '@workspace/components'
+import { ExMessage } from '@exre/exui'
 const post = vi.hoisted(() => vi.fn())
 vi.mock('@web/src/api/client', () => ({ api: { POST: post } }))
 vi.mock('@web/src/join/hero-images', () => ({ getJoinHeroImages: () => ['/images/heros/join/rifling-911/465563.jpg', '/images/heros/join/rifling-911/X1.png'] }))

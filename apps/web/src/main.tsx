@@ -1,8 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
-import { ThemeProvider, GlassSeed } from '@exre/exui'
-import { ExMessage } from '@workspace/components'
+import { ThemeProvider, GlassSeed, ExMessageContext } from '@exre/exui'
 import { api } from '@web/src/api/client'
 import { App } from '@web/src/App'
 import { SettingsThemeProjection } from '@web/src/settings/SettingsThemeProjection'
@@ -35,7 +34,7 @@ createRoot(container).render(
     <ThemeProvider>
       <SettingsThemeProjection />
       <GlassSeed />
-      <ExMessage />
+      <ExMessageContext />
       <BrowserRouter>
         <App />
       </BrowserRouter>

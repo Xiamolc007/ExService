@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation } from 'react-router'
-import { ExMessage } from '@workspace/components'
+import { ExMessage } from '@exre/exui'
 import { InvitationRegistrationFlow } from '@web/src/invitations/InvitationRegistrationFlow'
 
 const post = vi.hoisted(() => vi.fn())

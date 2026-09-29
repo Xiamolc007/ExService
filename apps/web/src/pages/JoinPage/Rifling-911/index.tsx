@@ -6,12 +6,12 @@ import {
   AccordionTrigger,
   AccordionContent,
   Button,
+  ExMessage,
 } from "@exre/exui";
 import { ArrowUpRight } from "lucide-react";
 import { HalftoneDots } from "@paper-design/shaders-react";
 import {
   CompleteJoinApplicationModal,
-  ExMessage,
   type CompleteJoinApplicationModalHandle,
   type JoinApplicationDraft,
   type JoinApplicationType,

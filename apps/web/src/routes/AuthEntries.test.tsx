@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { AuthProvider } from '@web/src/auth/AuthContext'
 import { RootLayout } from '@web/src/routes/RootLayout'
-import { ExMessage } from '@workspace/components'
+import { ExMessage } from '@exre/exui'
 const { post, get } = vi.hoisted(() => ({ post: vi.fn(), get: vi.fn() }))
 vi.mock('@web/src/api/client', () => ({ api: { POST: post, GET: get } }))
 let mobile = false

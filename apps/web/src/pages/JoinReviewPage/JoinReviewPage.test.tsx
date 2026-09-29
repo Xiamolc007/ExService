@@ -2,8 +2,8 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { ExMessage, ExMessageContext } from '@exre/exui'
 import { JoinReviewPage } from '@web/src/pages/JoinReviewPage/index'
-import { ExMessage } from '@workspace/components'
 import type { components } from '@workspace/api-client'
 const { get, post } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
 vi.mock('@web/src/api/client', () => ({ api: { GET: get, POST: post } }))
@@ -12,6 +12,17 @@ afterEach(() => { cleanup(); get.mockReset(); post.mockReset(); vi.restoreAllMoc
 const listOf = (items = [application], offset = 0, total = items.length) => ({ items, offset, total, limit: 20, serverTime: 1000 })
 const detailOf = (item = application) => ({ application: item, invitation: null, serverTime: 1000, formVersion: 0, form: null, attachments: [] })
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done }); return { promise, resolve } }
+it('shows approval feedback through the ExUI message host', async () => {
+  const user = userEvent.setup()
+  vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }))
+  get.mockImplementation((path: string) => Promise.resolve({ data: path.endsWith('{applicationId}') ? detailOf() : listOf() }))
+  post.mockResolvedValue({ data: detailOf({ ...application, status: 'approved' }) })
+  render(<><ExMessageContext /><JoinReviewPage /></>)
+  await user.click(await screen.findByRole('button', { name: '查看 成员' }))
+  await user.click(await screen.findByRole('button', { name: '同意并发送邀请' }))
+  expect(await screen.findByText('审核与邀请状态已更新')).toBeTruthy()
+})
+
 it('opens fresh detail in two tabs and restores focus without changing the list filter', async () => {
   const user = userEvent.setup()
   get.mockImplementation((path: string) => Promise.resolve({ data: path.endsWith('{applicationId}') ? detailOf() : listOf() }))
