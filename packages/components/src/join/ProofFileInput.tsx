@@ -1,34 +1,138 @@
-import { useId } from 'react'
-import { Controller, type FieldValues, type Path, type UseFormReturn } from 'react-hook-form'
-import { Button, Field, FieldContent, FieldDescription, FieldError, FieldLabel, Input } from '@exre/exui'
-import { proofExtensions, proofFilesSchema } from '@components/src/join/applicationSchemas'
-import styles from '@components/src/join/CompleteJoinApplication.module.scss'
+import { useRef, useState } from "react";
+import { Button, Input } from "@exre/exui";
+import { FileText, Upload, X } from "lucide-react";
+import {
+  proofExtensions,
+  proofFilesSchema,
+} from "@components/src/join/applicationSchemas";
+import styles from "@components/src/join/CompleteJoinApplication.module.scss";
 
-export function ProofFileInput<T extends FieldValues, O extends FieldValues>({ form, disabled }: { form: UseFormReturn<T, unknown, O>; disabled: boolean }) {
-  const id = useId()
-  const name = 'proofs' as Path<T>
-  const { error } = form.getFieldState(name, form.formState)
-  return <Field data-invalid={!!error}><FieldContent>
-    <FieldLabel htmlFor={id}>证明文件（可选）</FieldLabel>
-    <FieldDescription id={`${id}-hint`}>最多 5 个文件，每个 1 字节至 10 MiB。可选择、拖放或粘贴文件。支持 {proofExtensions.map(extension => `.${extension}`).join('、')}。文件仅供审核下载，不会在页面内预览。</FieldDescription>
-    <Controller name={name} control={form.control} render={({ field }) => {
-      const files: File[] = Array.isArray(field.value) ? field.value : []
-      function add(incoming: File[]) {
-        if (disabled || incoming.length === 0) return
-        const candidate = [...files, ...incoming]
-        const parsed = proofFilesSchema.safeParse(candidate)
-        if (!parsed.success) { form.setError(name, { message: parsed.error.issues[0]?.message ?? '证明文件不符合要求' }); return }
-        field.onChange(parsed.data)
-        form.clearErrors(name)
-      }
-      return <div className={styles.dropArea} role="group" aria-label="证明文件输入" aria-describedby={`${id}-hint${error ? ` ${id}-error` : ''}`} tabIndex={disabled ? -1 : 0}
-        onDragOver={event => { event.preventDefault() }} onDrop={event => { event.preventDefault(); add(Array.from(event.dataTransfer.files)) }}
-        onPaste={event => { const incoming = Array.from(event.clipboardData.files); if (incoming.length > 0) { event.preventDefault(); add(incoming) } }}>
-        <Input id={id} ref={field.ref} type="file" multiple accept={proofExtensions.map(extension => `.${extension}`).join(',')} disabled={disabled} aria-invalid={!!error} aria-describedby={`${id}-hint${error ? ` ${id}-error` : ''}`} onBlur={field.onBlur} onChange={event => { add(Array.from(event.target.files ?? [])); event.target.value = '' }} />
-        <p>也可将文件拖到此处，或聚焦此区域后粘贴文件。</p>
-        {files.length === 0 ? <p>未选择证明文件。</p> : <ul className={styles.files}>{files.map((file, index) => <li key={`${file.name}-${index}`}><span>{file.name}<small>{(file.size / (1024 * 1024)).toFixed(2)} MiB</small></span><Button type="button" variant="outline" size="sm" disabled={disabled} aria-label={`移除 ${file.name}`} onClick={() => { field.onChange(files.filter((_, position) => position !== index)); form.clearErrors(name) }}>移除</Button></li>)}</ul>}
+interface Props {
+  files: readonly File[];
+  disabled: boolean;
+  accessibility: {
+    id: string;
+    name: string;
+    "aria-invalid": boolean;
+    "aria-describedby"?: string;
+  };
+  onChange: (files: File[]) => void;
+  onError: (message: string) => void;
+  onBlur: () => void;
+  inputRef: (element: HTMLElement | null) => void;
+}
+export function ProofFileInput({
+  files,
+  disabled,
+  accessibility,
+  onChange,
+  onError,
+  onBlur,
+  inputRef,
+}: Props) {
+  const chooser = useRef<HTMLInputElement | null>(null);
+  const [dragging, setDragging] = useState(false);
+  function add(incoming: File[]) {
+    if (disabled || !incoming.length) return;
+    const parsed = proofFilesSchema.safeParse([...files, ...incoming]);
+    if (!parsed.success) {
+      onError(parsed.error.issues[0]?.message ?? "证明文件不符合要求");
+      return;
+    }
+    onChange(parsed.data);
+  }
+  return (
+    <div>
+      <div
+        className={styles.dropArea}
+        data-dragging={dragging && !disabled}
+        role="group"
+        aria-label="证明文件输入"
+        aria-describedby={accessibility["aria-describedby"]}
+        tabIndex={disabled ? -1 : 0}
+        onDragOver={(event) => {
+          event.preventDefault();
+          if (!disabled) setDragging(true);
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+            setDragging(false);
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragging(false);
+          add(Array.from(event.dataTransfer.files));
+        }}
+        onPaste={(event) => {
+          if (event.clipboardData.files.length) {
+            event.preventDefault();
+            add(Array.from(event.clipboardData.files));
+          }
+        }}
+      >
+        <Upload size={24} aria-hidden="true" />
+        <p className={styles.uploadTitle}>拖放文件到这里，或点击选择</p>
+        <p>支持粘贴文件 · 最多 5 个 · 单个不超过 10 MiB</p>
+        <Input
+          {...accessibility}
+          className={styles.fileInput}
+          ref={(element) => {
+            chooser.current = element;
+            inputRef(element);
+          }}
+          type="file"
+          multiple
+          accept={proofExtensions.map((extension) => `.${extension}`).join(",")}
+          disabled={disabled}
+          onBlur={onBlur}
+          onChange={(event) => {
+            add(Array.from(event.target.files ?? []));
+            event.target.value = "";
+          }}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled}
+          onClick={() => chooser.current?.click()}
+        >
+          选择文件
+        </Button>
       </div>
-    }} />
-    {error && <FieldError id={`${id}-error`}>{error.message}</FieldError>}
-  </FieldContent></Field>
+      {files.length > 0 && (
+        <ul className={styles.files}>
+          {files.map((file, index) => (
+            <li key={`${file.name}-${index}`}>
+              <FileText size={20} aria-hidden="true" />
+              <span>
+                <span>{file.name}</span>
+                <small>
+                  {file.size < 1024
+                    ? `${file.size} B`
+                    : file.size < 1024 * 1024
+                      ? `${(file.size / 1024).toFixed(1)} KiB`
+                      : `${(file.size / (1024 * 1024)).toFixed(2)} MiB`}
+                </small>
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                disabled={disabled}
+                aria-label={`移除 ${file.name}`}
+                onClick={() =>
+                  onChange(files.filter((_, position) => position !== index))
+                }
+              >
+                <X size={16} aria-hidden="true" />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className={styles.uploadCount} aria-live="polite">
+        已选择 {files.length} / 5 个文件，提交申请时一并上传。
+      </p>
+    </div>
+  );
 }

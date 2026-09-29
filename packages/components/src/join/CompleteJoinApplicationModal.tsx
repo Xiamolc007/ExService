@@ -1,44 +1,43 @@
 import {
   forwardRef,
   useEffect,
-  useId,
   useImperativeHandle,
+  useMemo,
   useRef,
+  useState,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import {
-  Controller,
-  useForm,
-  type FieldErrors,
-  type FieldValues,
-  type Path,
-  type UseFormReturn,
-} from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  Alert,
-  AlertDescription,
   Button,
-  Checkbox,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  Field,
-  FieldContent,
-  FieldError,
+  ExForm,
+  Input,
+  Textarea,
+  useForm,
+  type FormInstance,
+  type FormValues,
+  type FormPath,
+  type FormFieldConfig,
+  type FormStep,
+  type FormRenderArguments,
+  type FormSnapshot,
 } from "@exre/exui";
-import { ConfiguredField } from "@components/src/forms/ConfiguredField";
+import { X } from "lucide-react";
+import { SelectOrOther } from "@components/src/join/SelectOrOther";
 import {
   experiencedJoinApplicationSchema,
   newJoinApplicationSchema,
-  type ExperiencedJoinApplicationDraft,
-  type ExperiencedJoinApplicationInput,
+  newApplicationStepSchemas,
+  experiencedApplicationStepSchemas,
   type JoinApplicationDraft,
   type JoinApplicationType,
-  type NewJoinApplicationDraft,
   type NewJoinApplicationInput,
+  type ExperiencedJoinApplicationInput,
 } from "@components/src/join/applicationSchemas";
 import {
   joinApplicationCommitments,
@@ -50,6 +49,9 @@ import styles from "@components/src/join/CompleteJoinApplication.module.scss";
 
 export interface CompleteJoinApplicationModalHandle {
   setError: (message: string, field?: "email" | "nickname" | "qq") => void;
+  getDraft: () =>
+    | FormSnapshot<NewJoinApplicationInput | ExperiencedJoinApplicationInput>
+    | undefined;
 }
 interface InternalHandle extends CompleteJoinApplicationModalHandle {
   isSubmitting: () => boolean;
@@ -59,18 +61,21 @@ export interface CompleteJoinApplicationModalProps {
   applicationType: JoinApplicationType;
   step: number;
   busy: boolean;
+  initialDraft?: FormSnapshot<
+    NewJoinApplicationInput | ExperiencedJoinApplicationInput
+  >;
   onStepChange: (step: number) => void;
   onOpenChange: (open: boolean) => void;
   onSubmit: (draft: JoinApplicationDraft) => Promise<void>;
   onCloseAutoFocus?: (event: Event) => void;
   serverAction?: ReactNode;
+  resultTitle?: string;
   children?: ReactNode;
 }
 type FormProps = Omit<
   CompleteJoinApplicationModalProps,
   "open" | "onCloseAutoFocus" | "children"
 > & { handleRef: React.Ref<InternalHandle> };
-
 function atPath(value: unknown, path: string): unknown {
   return path
     .split(".")
@@ -82,22 +87,19 @@ function atPath(value: unknown, path: string): unknown {
       value,
     );
 }
-function FormSummary<T extends FieldValues, O extends JoinApplicationDraft>({
+function FormSummary<T extends FormValues, O extends JoinApplicationDraft>({
   form,
   type,
 }: {
-  form: UseFormReturn<T, unknown, O>;
+  form: FormInstance<T, O>;
   type: JoinApplicationType;
 }) {
   const values = form.getValues();
   const fields = joinApplicationFields(type);
   const steps = joinApplicationSteps(type);
-  const proofs = atPath(values, "proofs") as File[];
+  const proofs = atPath(values, "proofs") as readonly File[];
   return (
     <div className={styles.summary}>
-      <p>
-        请核对全部资料和证明文件。提交后资料不可修改，同一邮箱只能申请一次。
-      </p>
       {steps.slice(0, -1).map((step, index) => (
         <section key={step} aria-label={`${step}摘要`}>
           <h3>{step}</h3>
@@ -154,11 +156,28 @@ function FormSummary<T extends FieldValues, O extends JoinApplicationDraft>({
   );
 }
 
-function Wizard<T extends FieldValues, O extends JoinApplicationDraft>({
+const stepHints = {
+  new: [
+    "留下常用联系方式，方便接收审核结果。",
+    "补充基本资料，并选择你希望申请的部门。",
+    "谈谈你对角色扮演和紧急职业模拟的理解。",
+    "最后补充你的空闲安排和了解我们的渠道。",
+    "请核对全部资料和证明文件，并阅读、确认申请承诺。提交后资料不可修改，同一邮箱只能申请一次。",
+  ],
+  experienced: [
+    "留下常用联系方式，方便接收审核结果。",
+    "补充基本资料，并选择你希望申请的部门。",
+    "介绍一下你过去的服务器与任职经历。",
+    "完成以下问答，如有证明材料也可以一并补充。",
+    "最后补充你的空闲安排和了解我们的渠道。",
+    "请核对全部资料和证明文件，并阅读、确认申请承诺。提交后资料不可修改，同一邮箱只能申请一次。",
+  ],
+};
+function Wizard<T extends FormValues, O extends JoinApplicationDraft>({
   form,
   props,
 }: {
-  form: UseFormReturn<T, unknown, O>;
+  form: FormInstance<T, O>;
   props: FormProps;
 }) {
   const {
@@ -171,292 +190,344 @@ function Wizard<T extends FieldValues, O extends JoinApplicationDraft>({
     serverAction,
     handleRef,
   } = props;
-  const fields = joinApplicationFields(applicationType);
-  const commitments = joinApplicationCommitments(applicationType);
-  const steps = joinApplicationSteps(applicationType);
-  const last = steps.length - 1;
-  const disabled = busy || form.formState.isSubmitting;
-  const pendingFocus = useRef<Path<T> | null>(null);
-  const bodyRef = useRef<HTMLElement>(null);
-  const synchronousSubmitting = useRef(false);
-  const id = useId();
+  const titles = joinApplicationSteps(applicationType);
+  const last = titles.length - 1;
+  const disabled = busy || form.state.isSubmitting;
+  const body = useRef<HTMLElement>(null);
+  const pendingFocus = useRef<FormPath<T> | null>(null);
+  const [footerHost, setFooterHost] = useState<HTMLDivElement | null>(null);
   useImperativeHandle(handleRef, () => ({
+    getDraft: () =>
+      form.getValues() as unknown as FormSnapshot<
+        NewJoinApplicationInput | ExperiencedJoinApplicationInput
+      >,
+    isSubmitting: () => busy || form.state.isSubmitting,
     setError: (message, field) => {
-      form.setError(field ? (field as Path<T>) : "root.server", { message });
+      form.setError(field ? (field as FormPath<T>) : "root.server", {
+        message,
+      });
       if (field) {
-        pendingFocus.current = field as Path<T>;
+        pendingFocus.current = field as FormPath<T>;
         onStepChange(0);
       }
     },
-    isSubmitting: () =>
-      busy || form.formState.isSubmitting || synchronousSubmitting.current,
   }));
   useEffect(() => {
-    if (bodyRef.current) bodyRef.current.scrollTop = 0;
-    const target = pendingFocus.current;
-    if (target) {
-      form.setFocus(target);
+    if (body.current) body.current.scrollTop = 0;
+  }, [step]);
+  useEffect(() => {
+    if (!pendingFocus.current) return;
+    // ExForm commits its controlled step after our render. Focus on the next
+    // frame, when that step's real input has registered with the form instance.
+    const frame = requestAnimationFrame(() => {
+      if (pendingFocus.current) form.setFocus(pendingFocus.current);
       pendingFocus.current = null;
-    }
-  }, [step, form]);
-  async function next() {
-    if (disabled) return;
-    const names = fields
-      .filter((field) => field.step === step)
-      .map((field) => field.name as Path<T>);
-    if (applicationType === "experienced" && step === 3)
-      names.push("proofs" as Path<T>);
-    if (await form.trigger(names, { shouldFocus: true }))
-      onStepChange(Math.min(step + 1, last));
-  }
-  function invalid(errors: FieldErrors<T>) {
-    const groups = steps.map((_, index) =>
-      index === last
-        ? commitments.map((field) => field.name)
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [step, form, form.state.errors]);
+  const fields = useMemo(() => {
+    const configured = joinApplicationFields(applicationType).map(
+      (definition) => {
+        const base = {
+          name: definition.name,
+          label: definition.label,
+          description: definition.description,
+          preserve: true,
+        };
+        if (definition.kind === "select")
+          return {
+            ...base,
+            control: "select",
+            controlProps: {
+              options: definition.options,
+              placeholder: "请选择",
+            },
+          };
+        if (definition.kind === "choices")
+          return {
+            ...base,
+            control: "checkbox-group",
+            controlProps: { options: definition.options },
+          };
+        return {
+          ...base,
+          render: ({
+            field,
+            state,
+            accessibility,
+          }: FormRenderArguments<T, FormPath<T>>) => {
+            const value = typeof field.value === "string" ? field.value : "";
+            const onChange = (next: string) => field.onChange(next as never);
+            const Control = definition.kind === "textarea" ? Textarea : Input;
+            return (
+              <>
+                {definition.presets ? (
+                  <SelectOrOther
+                    value={value}
+                    options={definition.presets}
+                    label={definition.label}
+                    multiline={definition.kind === "textarea"}
+                    disabled={state.disabled}
+                    accessibility={accessibility}
+                    onChange={onChange}
+                    onBlur={field.onBlur}
+                    inputRef={field.ref}
+                  />
+                ) : (
+                  <Control
+                    {...accessibility}
+                    ref={field.ref}
+                    disabled={state.disabled}
+                    value={value}
+                    type={
+                      definition.kind === "textarea"
+                        ? undefined
+                        : (definition.kind ?? "text")
+                    }
+                    autoComplete={definition.autoComplete}
+                    inputMode={definition.inputMode}
+                    onBlur={field.onBlur}
+                    onChange={(event) => onChange(event.target.value)}
+                  />
+                )}
+              </>
+            );
+          },
+        };
+      },
+    );
+    // This is the adapter from the existing string-path field catalogue to ExForm.
+    // Schemas remain the authority for the value at each path.
+    const result = configured as unknown as FormFieldConfig<T>[];
+    if (applicationType === "experienced")
+      result.push({
+        name: "proofs",
+        label: "证明文件（可选）",
+        preserve: true,
+        description:
+          "支持图片、PDF、Office 文档、文本和压缩包。文件仅供审核下载，不在页面内预览。",
+        render: ({
+          field,
+          state,
+          accessibility,
+        }: FormRenderArguments<T, FormPath<T>>) => (
+          <ProofFileInput
+            files={field.value as readonly File[]}
+            disabled={state.disabled}
+            accessibility={accessibility}
+            inputRef={field.ref}
+            onBlur={field.onBlur}
+            onChange={(files) => {
+              field.onChange(files as never);
+              form.clearErrors("proofs" as FormPath<T>);
+            }}
+            onError={(message) =>
+              form.setError("proofs" as FormPath<T>, { message })
+            }
+          />
+        ),
+      } as unknown as FormFieldConfig<T>);
+    for (const commitment of joinApplicationCommitments(applicationType))
+      result.push({
+        name: commitment.name,
+        label: commitment.label,
+        control: "checkbox",
+        className: styles.commitment,
+        preserve: true,
+      } as unknown as FormFieldConfig<T>);
+    return result;
+  }, [applicationType, form]);
+  const steps = useMemo(() => {
+    const schemas =
+      applicationType === "new"
+        ? newApplicationStepSchemas
+        : experiencedApplicationStepSchemas;
+    const definitions = joinApplicationFields(applicationType);
+    return titles.map((title, index) => ({
+      id: `step-${index}`,
+      title,
+      fields: (index === last
+        ? joinApplicationCommitments(applicationType).map((entry) => entry.name)
         : [
-            ...fields
-              .filter((field) => field.step === index)
-              .map((field) => field.name),
+            ...definitions
+              .filter((entry) => entry.step === index)
+              .map((entry) => entry.name),
             ...(applicationType === "experienced" && index === 3
               ? ["proofs"]
               : []),
-          ],
-    );
-    for (let index = 0; index < groups.length; index++) {
-      const first = groups[index]?.find((name) => atPath(errors, name));
-      if (first) {
-        pendingFocus.current = first as Path<T>;
-        onStepChange(index);
-        return;
-      }
-    }
-  }
-  const submit = form.handleSubmit(async (draft) => {
-    if (busy || synchronousSubmitting.current) return;
-    synchronousSubmitting.current = true;
-    form.clearErrors("root.server");
-    try {
-      await onSubmit(draft);
-    } catch {
-      form.setError("root.server", {
-        message: "提交失败，请稍后重试。已填写的资料与文件会保留。",
-      });
-    } finally {
-      synchronousSubmitting.current = false;
-    }
-  }, invalid);
+          ]) as FormPath<T>[],
+      validationSchema: schemas[index]!,
+    })) satisfies FormStep<T>[];
+  }, [applicationType, last]);
   return (
-    <form
-      className={styles.form}
-      noValidate
-      aria-busy={disabled}
-      onSubmit={(event) => {
-        if (disabled) {
-          event.preventDefault();
-          return;
-        }
-        if (step !== last) {
-          event.preventDefault();
-          void next();
-        } else void submit(event);
-      }}
-    >
+    <>
       <DialogHeader className={styles.header}>
-        <DialogTitle>
-          {applicationType === "new" ? "全新玩家申请" : "经验玩家申请"}
+        <DialogTitle className={styles.title}>
+          {applicationType === "new" ? "新玩家申请" : "调转申请"}
         </DialogTitle>
-        <DialogDescription>
-          请填写完整资料，提交后等待人工审核与社区安排。
-        </DialogDescription>
-        <p className={styles.progress} aria-live="polite">
-          第 {step + 1} / {steps.length} 步 · {steps[step]}
-        </p>
-        <ol className={styles.steps} aria-label="申请表步骤">
-          {steps.map((title, index) => (
-            <li key={title} aria-current={step === index ? "step" : undefined}>
-              {index + 1}. {title}
-            </li>
-          ))}
-        </ol>
-      </DialogHeader>
-      <section
-        ref={bodyRef}
-        className={styles.body}
-        aria-label={`${steps[step]}内容`}
-      >
-        <h2>{steps[step]}</h2>
-        {form.formState.errors.root?.server && (
-          <Alert variant="destructive" role="alert">
-            <AlertDescription>
-              {form.formState.errors.root.server.message}
-            </AlertDescription>
-          </Alert>
-        )}
-        {serverAction && (
-          <div className={styles.serverAction}>{serverAction}</div>
-        )}
-        <fieldset disabled={disabled} className={styles.fields}>
-          {step !== last ? (
-            fields
-              .filter((field) => field.step === step)
-              .map((field) => (
-                <ConfiguredField
-                  key={field.name}
-                  definition={field}
-                  form={form}
-                />
-              ))
-          ) : (
-            <FormSummary form={form} type={applicationType} />
-          )}
-          {applicationType === "experienced" && step === 3 && (
-            <ProofFileInput form={form} disabled={disabled} />
-          )}
-          {step === last && (
-            <section className={styles.commitments} aria-label="申请承诺">
-              <h3>请阅读并确认承诺</h3>
-              {commitments.map((commitment, index) => {
-                const name = commitment.name as Path<T>;
-                const error = form.getFieldState(name, form.formState).error;
-                const checkboxId = `${id}-commitment-${index}`;
-                return (
-                  <Field key={name} data-invalid={!!error}>
-                    <FieldContent>
-                      <Controller
-                        name={name}
-                        control={form.control}
-                        render={({ field }) => (
-                          <label
-                            className={styles.commitment}
-                            htmlFor={checkboxId}
-                          >
-                            <Checkbox
-                              id={checkboxId}
-                              ref={field.ref}
-                              checked={field.value === true}
-                              disabled={disabled}
-                              onBlur={field.onBlur}
-                              onCheckedChange={(value) =>
-                                field.onChange(value === true)
-                              }
-                              aria-invalid={!!error}
-                              aria-describedby={
-                                error ? `${checkboxId}-error` : undefined
-                              }
-                            />
-                            <span>{commitment.label}</span>
-                          </label>
-                        )}
-                      />
-                      {error && (
-                        <FieldError id={`${checkboxId}-error`}>
-                          {error.message}
-                        </FieldError>
-                      )}
-                    </FieldContent>
-                  </Field>
-                );
-              })}
-            </section>
-          )}
-        </fieldset>
-      </section>
-      <div className={styles.footer}>
         <Button
+          className={styles.close}
           type="button"
           variant="ghost"
+          size="icon"
+          aria-label="关闭申请"
           disabled={disabled}
           onClick={() => onOpenChange(false)}
         >
-          关闭申请
+          <X size={18} aria-hidden="true" />
         </Button>
-        <div className={styles.navigation}>
-          {step > 0 && (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={disabled}
-              onClick={() => onStepChange(step - 1)}
-            >
-              {step === last ? "返回修改" : "上一步"}
-            </Button>
-          )}
-          <Button type="submit" disabled={disabled}>
-            {disabled ? "提交中" : step === last ? "提交申请" : "下一步"}
-          </Button>
-        </div>
+      </DialogHeader>
+      <section
+        ref={body}
+        className={styles.body}
+        aria-label={`${titles[step]}内容`}
+      >
+        <p className={styles.hint} aria-live="polite">
+          {stepHints[applicationType][step]}
+        </p>
+        {step === last && <FormSummary form={form} type={applicationType} />}
+        {serverAction && (
+          <div className={styles.serverAction}>{serverAction}</div>
+        )}
+        <ExForm
+          form={form}
+          fields={fields}
+          steps={steps}
+          currentStep={`step-${step}`}
+          onStepChange={(id) => onStepChange(Number(id.slice(5)))}
+          className={styles.form}
+          disabled={busy}
+          errorSummaryTitle={null}
+          submitErrorMessage="提交失败，请稍后重试。已填写的资料与文件会保留。"
+          onSubmit={async (draft) => {
+            form.clearErrors("root.server");
+            await onSubmit(draft);
+          }}
+          footer={(args) =>
+            footerHost &&
+            createPortal(
+              <div className={styles.navigation}>
+                {!args.isFirstStep && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={disabled || args.state.isValidating}
+                    onClick={args.back}
+                  >
+                    {args.isLastStep ? "返回修改" : "上一步"}
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  disabled={disabled || args.state.isValidating}
+                  onClick={() => {
+                    if (args.isLastStep) void args.submit();
+                    else void args.next();
+                  }}
+                >
+                  {disabled
+                    ? "提交中"
+                    : args.isLastStep
+                      ? "提交申请"
+                      : step === last - 1
+                        ? "检查申请"
+                        : "继续"}
+                </Button>
+              </div>,
+              footerHost,
+            )
+          }
+        />
+      </section>
+      <div className={styles.footer} ref={setFooterHost}>
+        <DialogDescription className={styles.footerDescription}>
+          请如实填写资料，提交后等待社区审核。
+        </DialogDescription>
       </div>
-    </form>
+    </>
   );
 }
-
-function NewApplicationForm(props: FormProps) {
-  const form = useForm<
-    NewJoinApplicationInput,
-    unknown,
-    NewJoinApplicationDraft
-  >({
-    resolver: zodResolver(newJoinApplicationSchema),
-    shouldUnregister: false,
-    defaultValues: {
-      email: "",
-      nickname: "",
-      qq: "",
-      proofs: [],
-      form: {
-        applicationType: "new",
-        birthDate: "",
-        freeTime: "",
-        discoveryChannels: [],
-        answers: {
-          fiveMExperience: "",
-          emergencyRoleplayKnowledge: "",
-          emergencyProceduresKnowledge: "",
-          rpUnderstanding: "",
-          frpUnderstanding: "",
-        },
-        commitments: {
-          informationAccurate: false,
-          obeyCommunityRules: false,
-          acceptAcademyAttendanceConsequences: false,
-        },
-      },
+// ExForm snapshots are frozen. Copy every draft container before reusing it as
+// defaults, keeping the original in-memory File objects intact.
+function restoreDraft(
+  draft: NonNullable<CompleteJoinApplicationModalProps["initialDraft"]>,
+) {
+  return {
+    ...draft,
+    proofs: [...draft.proofs],
+    form: {
+      ...draft.form,
+      discoveryChannels: [...draft.form.discoveryChannels],
+      answers: { ...draft.form.answers },
+      commitments: { ...draft.form.commitments },
     },
+  };
+}
+function NewApplicationForm(props: FormProps) {
+  const form = useForm({
+    schema: newJoinApplicationSchema,
+
+    defaultValues:
+      props.initialDraft?.form.applicationType === "new"
+        ? (restoreDraft(props.initialDraft) as NewJoinApplicationInput)
+        : {
+            email: "",
+            nickname: "",
+            qq: "",
+            proofs: [],
+            form: {
+              applicationType: "new",
+              birthDate: "",
+              freeTime: "",
+              discoveryChannels: [],
+              answers: {
+                fiveMExperience: "",
+                emergencyRoleplayKnowledge: "",
+                emergencyProceduresKnowledge: "",
+                rpUnderstanding: "",
+                frpUnderstanding: "",
+              },
+              commitments: {
+                informationAccurate: false,
+                obeyCommunityRules: false,
+                acceptAcademyAttendanceConsequences: false,
+              },
+            },
+          },
   });
   return <Wizard form={form} props={props} />;
 }
 function ExperiencedApplicationForm(props: FormProps) {
-  const form = useForm<
-    ExperiencedJoinApplicationInput,
-    unknown,
-    ExperiencedJoinApplicationDraft
-  >({
-    resolver: zodResolver(experiencedJoinApplicationSchema),
-    shouldUnregister: false,
-    defaultValues: {
-      email: "",
-      nickname: "",
-      qq: "",
-      proofs: [],
-      form: {
-        applicationType: "experienced",
-        birthDate: "",
-        freeTime: "",
-        discoveryChannels: [],
-        answers: {
-          previousServer: "",
-          leaveReason: "",
-          previousDepartment: "",
-          lawEnforcementExperience: "",
-          highestRank: "",
-          punishmentHistory: "",
-          deescalationEssay: "",
-          discretionEssay: "",
-          transferReason: "",
-        },
-        commitments: { informationAccurate: false },
-      },
-    },
+  const form = useForm({
+    schema: experiencedJoinApplicationSchema,
+
+    defaultValues:
+      props.initialDraft?.form.applicationType === "experienced"
+        ? (restoreDraft(props.initialDraft) as ExperiencedJoinApplicationInput)
+        : {
+            email: "",
+            nickname: "",
+            qq: "",
+            proofs: [],
+            form: {
+              applicationType: "experienced",
+              birthDate: "",
+              freeTime: "",
+              discoveryChannels: [],
+              answers: {
+                previousServer: "",
+                leaveReason: "",
+                previousDepartment: "",
+                lawEnforcementExperience: "",
+                highestRank: "",
+                punishmentHistory: "",
+                deescalationEssay: "",
+                discretionEssay: "",
+                transferReason: "",
+              },
+              commitments: { informationAccurate: false },
+            },
+          },
   });
   return <Wizard form={form} props={props} />;
 }
@@ -468,6 +539,7 @@ export const CompleteJoinApplicationModal = forwardRef<
   const formRef = useRef<InternalHandle>(null);
   useImperativeHandle(ref, () => ({
     setError: (message, field) => formRef.current?.setError(message, field),
+    getDraft: () => formRef.current?.getDraft(),
   }));
   function locked() {
     return props.busy || formRef.current?.isSubmitting() === true;
@@ -478,7 +550,11 @@ export const CompleteJoinApplicationModal = forwardRef<
   return (
     <Dialog open={props.open} onOpenChange={change}>
       <DialogContent
-        className={styles.modal}
+        className={
+          props.children
+            ? `${styles.modal} ${styles.resultModal}`
+            : styles.modal
+        }
         showCloseButton={false}
         onCloseAutoFocus={props.onCloseAutoFocus}
         onEscapeKeyDown={(event) => {
@@ -494,12 +570,22 @@ export const CompleteJoinApplicationModal = forwardRef<
         {props.children ? (
           <>
             <DialogHeader className={styles.header}>
-              <DialogTitle>
-                {props.applicationType === "new"
-                  ? "全新玩家申请"
-                  : "经验玩家申请"}
+              <DialogTitle className={styles.title}>
+                {props.resultTitle ??
+                  (props.applicationType === "new" ? "新玩家申请" : "调转申请")}
               </DialogTitle>
-              <DialogDescription>申请结果与下一步</DialogDescription>
+              <DialogDescription className="sr-only">
+                申请结果与下一步
+              </DialogDescription>
+              <Button
+                className={styles.close}
+                variant="ghost"
+                size="icon"
+                aria-label="关闭申请"
+                onClick={() => change(false)}
+              >
+                <X size={18} />
+              </Button>
             </DialogHeader>
             <div className={styles.body}>{props.children}</div>
           </>

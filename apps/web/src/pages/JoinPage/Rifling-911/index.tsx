@@ -8,7 +8,7 @@ import {
   Button,
   ExMessage,
 } from "@exre/exui";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, CircleCheck } from "lucide-react";
 import { HalftoneDots } from "@paper-design/shaders-react";
 import {
   CompleteJoinApplicationModal,
@@ -40,6 +40,19 @@ export function JoinPage() {
     live = useRef(false),
     form = useRef<CompleteJoinApplicationModalHandle>(null);
   const trigger = useRef<HTMLButtonElement | null>(null);
+  const drafts = useRef<
+    Partial<
+      Record<
+        JoinApplicationType,
+        {
+          values: NonNullable<
+            ReturnType<CompleteJoinApplicationModalHandle["getDraft"]>
+          >;
+          step: number;
+        }
+      >
+    >
+  >({});
   useEffect(() => {
     live.current = true;
     return () => {
@@ -51,11 +64,15 @@ export function JoinPage() {
     trigger.current = button;
     setReceived(false);
     setServerAction(null);
-    setStep(0);
+    setStep(drafts.current[type]?.step ?? 0);
     setApplicationType(type);
   }
   function close() {
     if (!pending.current) {
+      if (applicationType && !received) {
+        const values = form.current?.getDraft();
+        if (values) drafts.current[applicationType] = { values, step };
+      }
       setApplicationType(null);
       setReceived(false);
       setServerAction(null);
@@ -70,6 +87,7 @@ export function JoinPage() {
       const result = await submitApplication(draft);
       if (!live.current) return;
       if (result.data?.status === "received") {
+        delete drafts.current[draft.form.applicationType];
         setReceived(true);
         ExMessage.info("申请已收到，请等待社区审核安排");
         return;
@@ -355,6 +373,8 @@ export function JoinPage() {
           ref={form}
           open
           applicationType={applicationType}
+          resultTitle="申请已收到"
+          initialDraft={drafts.current[applicationType]?.values}
           busy={busy}
           step={step}
           onStepChange={setStep}
@@ -375,18 +395,17 @@ export function JoinPage() {
           }
         >
           {received ? (
-            <section aria-live="polite">
-              <h2>申请已收到</h2>
+            <section className={styles.applicationSuccess} aria-live="polite">
+              <CircleCheck
+                className={styles.successIcon}
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+              <p className={styles.successLead}>资料提交成功</p>
               <p>
-                资料已提交，请等待社区审核与后续安排。申请提交不会创建账号。
+                申请资料已提交，接下来将等待安排远程语音面试。进行面试后，社区会确认申请结果，请留意后续通知。
               </p>
-              <p>请保持联系并留意邀请邮箱；你可以主动查询申请结果。</p>
-              <Button asChild>
-                <Link to="/join/result">查询申请结果</Link>
-              </Button>
-              <Button variant="outline" onClick={close}>
-                关闭
-              </Button>
+              <Button disabled>面试预约</Button>
             </section>
           ) : undefined}
         </CompleteJoinApplicationModal>

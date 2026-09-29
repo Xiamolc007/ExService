@@ -58,7 +58,7 @@ function text(min: number, max: number) {
     .refine(
       (value) =>
         Array.from(value).length >= min && Array.from(value).length <= max,
-      `请填写 ${min} 至 ${max} 个字符（按 Unicode 码点计算）`,
+      `请填写 ${min} 至 ${max} 个字符`,
     );
 }
 
@@ -151,3 +151,69 @@ export type JoinApplicationDraft =
   | ExperiencedJoinApplicationDraft;
 export type JoinApplicationType =
   JoinApplicationDraft["form"]["applicationType"];
+
+// Each step receives only its own paths. Reuse the same rules as full submission.
+const contactStep = z.object(contact);
+const basicStep = z.object({
+  form: z.object({
+    birthDate: commonForm.birthDate,
+    applicantCategory: commonForm.applicantCategory,
+    department: commonForm.department,
+  }),
+});
+const timeStep = z.object({
+  form: z.object({
+    freeTime: commonForm.freeTime,
+    discoveryChannels: commonForm.discoveryChannels,
+  }),
+});
+const experiencedAnswers =
+  experiencedJoinApplicationSchema.shape.form.shape.answers;
+export const newApplicationStepSchemas = [
+  contactStep,
+  basicStep,
+  z.object({
+    form: z.object({
+      answers: newJoinApplicationSchema.shape.form.shape.answers,
+    }),
+  }),
+  timeStep,
+  z.object({
+    form: z.object({
+      commitments: newJoinApplicationSchema.shape.form.shape.commitments,
+    }),
+  }),
+] as const;
+export const experiencedApplicationStepSchemas = [
+  contactStep,
+  basicStep,
+  z.object({
+    form: z.object({
+      answers: experiencedAnswers.pick({
+        previousServer: true,
+        leaveReason: true,
+        previousDepartment: true,
+        lawEnforcementExperience: true,
+        highestRank: true,
+        punishmentHistory: true,
+      }),
+    }),
+  }),
+  z.object({
+    form: z.object({
+      answers: experiencedAnswers.pick({
+        deescalationEssay: true,
+        discretionEssay: true,
+        transferReason: true,
+      }),
+    }),
+    proofs: proofFilesSchema,
+  }),
+  timeStep,
+  z.object({
+    form: z.object({
+      commitments:
+        experiencedJoinApplicationSchema.shape.form.shape.commitments,
+    }),
+  }),
+] as const;
