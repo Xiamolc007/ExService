@@ -44,7 +44,7 @@ export function joinApplicationFields(
       kind: "email",
       step: 0,
       autoComplete: "email",
-      description: "用于联系、申请去重、结果查询和注册邀请，请填写常用邮箱。",
+      description: "用于联系、结果查询和注册邀请，请填写常用邮箱。",
     },
     {
       name: "nickname",
@@ -64,8 +64,8 @@ export function joinApplicationFields(
       label: "出生日期",
       kind: "date",
       step: 1,
-      autoComplete: "bday",
-      description: "填写真实出生日期，不会根据年龄来决定你是否通过。",
+      description:
+        "请选择 1990 年 1 月 1 日至 2016 年 1 月 1 日之间的真实出生日期，不会根据年龄来决定你是否通过。",
     },
     {
       name: "form.applicantCategory",

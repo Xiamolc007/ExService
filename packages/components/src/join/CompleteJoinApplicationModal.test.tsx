@@ -77,6 +77,45 @@ HTMLElement.prototype.releasePointerCapture = () => {};
 HTMLElement.prototype.scrollIntoView = () => {};
 
 describe("完整申请 Modal", () => {
+  it.each(["new", "experienced"] as const)(
+    "uses the ExUI date picker with the default and inclusive birth-date range for %s applications",
+    async (type) => {
+      const user = userEvent.setup();
+      render(
+        <CompleteJoinApplicationModal
+          open
+          applicationType={type}
+          step={1}
+          busy={false}
+          onStepChange={vi.fn()}
+          onOpenChange={vi.fn()}
+          onSubmit={vi.fn()}
+        />,
+      );
+      const trigger = screen.getByRole("button", { name: "出生日期" });
+      expect(trigger.textContent).toContain("2000-01-01");
+      expect(document.querySelector('input[type="date"]')).toBeNull();
+      await user.click(trigger);
+      const year = screen.getByRole("combobox", { name: /year/i });
+      await user.click(year);
+      expect(screen.queryByRole("option", { name: "1989" })).toBeNull();
+      expect(screen.getByRole("option", { name: "1990" })).toBeTruthy();
+      expect(screen.getByRole("option", { name: "2016" })).toBeTruthy();
+      expect(screen.queryByRole("option", { name: "2017" })).toBeNull();
+      await user.click(screen.getByRole("option", { name: "1990" }));
+      expect(document.querySelector<HTMLButtonElement>('[data-day="1990-01-01"] button')?.disabled).toBe(false);
+      await user.click(document.querySelector<HTMLButtonElement>('[data-day="1990-01-01"] button')!);
+      expect(trigger.textContent).toContain("1990-01-01");
+      await user.click(trigger);
+      const nextYear = screen.getByRole("combobox", { name: /year/i });
+      await user.click(nextYear);
+      await user.click(screen.getByRole("option", { name: "2016" }));
+      expect(document.querySelector<HTMLButtonElement>('[data-day="2016-01-01"] button')?.disabled).toBe(false);
+      expect(document.querySelector<HTMLButtonElement>('[data-day="2016-01-02"] button')?.disabled).toBe(true);
+      await user.click(document.querySelector<HTMLButtonElement>('[data-day="2016-01-01"] button')!);
+      expect(trigger.textContent).toContain("2016-01-01");
+    },
+  );
   it.each(["text", "checkbox"] as const)(
     "preserves scroll position when editing %s without changing steps",
     async (control) => {
@@ -156,13 +195,13 @@ describe("完整申请 Modal", () => {
       screen.getByRole("textbox", { name: "每周空闲时间（其它）" }),
     ).toBeTruthy();
     await user.click(screen.getByRole("checkbox", { name: "朋友介绍" }));
-    await user.click(screen.getByRole("button", { name: "检查申请" }));
+    await user.click(screen.getByRole("button", { name: "继续" }));
     expect(screen.queryByRole("button", { name: "提交申请" })).toBeNull();
     await choose(user, "每周空闲时间", "每晚都有空");
     expect(
       screen.queryByRole("textbox", { name: "每周空闲时间（其它）" }),
     ).toBeNull();
-    await user.click(screen.getByRole("button", { name: "检查申请" }));
+    await user.click(screen.getByRole("button", { name: "继续" }));
     expect(await screen.findByText("每晚都有空")).toBeTruthy();
   });
   it("validates only the current step and preserves earlier values when going backwards", async () => {
@@ -172,7 +211,7 @@ describe("完整申请 Modal", () => {
     await contact(user);
     screen.getByRole("region", { name: "联系方式内容" }).scrollTop = 200;
     await user.click(screen.getByRole("button", { name: /继续|检查申请/ }));
-    expect(screen.getByLabelText("出生日期")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "出生日期" }).textContent).toContain("2000-01-01");
     expect(screen.getByRole("region", { name: "基本资料内容" }).scrollTop).toBe(
       0,
     );
@@ -381,9 +420,7 @@ describe("完整申请 Modal", () => {
     render(<Harness onSubmit={onSubmit} />);
     await contact(user);
     await user.click(screen.getByRole("button", { name: /继续|检查申请/ }));
-    fireEvent.change(screen.getByLabelText("出生日期"), {
-      target: { value: "2000-02-29" },
-    });
+    expect(screen.getByRole("button", { name: "出生日期" }).textContent).toContain("2000-01-01");
     await choose(user, "申请人类型", "普通成年申请人");
     await choose(user, "申请部门", "警察部门");
     await user.click(screen.getByRole("button", { name: /继续|检查申请/ }));
@@ -451,9 +488,7 @@ describe("完整申请 Modal", () => {
     render(<Harness type="experienced" onSubmit={onSubmit} />);
     await contact(user, "IC 名字");
     await user.click(screen.getByRole("button", { name: /继续|检查申请/ }));
-    fireEvent.change(screen.getByLabelText("出生日期"), {
-      target: { value: "2000-02-29" },
-    });
+    expect(screen.getByRole("button", { name: "出生日期" }).textContent).toContain("2000-01-01");
     await choose(user, "申请人类型", "曾任其他服务器技术");
     await choose(user, "申请部门", "医疗和消防部门");
     await user.click(screen.getByRole("button", { name: /继续|检查申请/ }));

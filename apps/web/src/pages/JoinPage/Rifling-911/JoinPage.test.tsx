@@ -169,7 +169,7 @@ async function fill(
   change(type === "new" ? "你的名字" : "IC 名字", "成员");
   change("QQ 号码", "001234");
   await user.click(screen.getByRole("button", { name: /继续|检查申请/ }));
-  change("出生日期", "2000-01-01");
+  expect(screen.getByRole("button", { name: "出生日期" }).textContent).toContain("2000-01-01");
   await choose(user, "申请人类型", "普通成年申请人");
   await choose(user, "申请部门", "警察部门");
   await user.click(screen.getByRole("button", { name: /继续|检查申请/ }));
@@ -322,7 +322,7 @@ it("submits a complete new payload only on confirmation and waits for server ack
   expect(
     result.queryByRole("button", { name: "关闭" }),
   ).toBeNull();
-  expect(result.getByText(/面试通过后，社区才会确认申请结果/)).toBeTruthy();
+  expect(result.getByText(/进行面试后，社区会确认申请结果/)).toBeTruthy();
 });
 it("retains experienced values and the same File on a failed submit and successful retry", async () => {
   vi.spyOn(ExMessage, "info").mockReturnValue("info");

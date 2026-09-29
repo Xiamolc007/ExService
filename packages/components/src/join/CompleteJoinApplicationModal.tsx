@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
   ExForm,
+  FormErrorSummary,
   Input,
   Textarea,
   useForm,
@@ -249,6 +250,12 @@ function Wizard<T extends FormValues, O extends JoinApplicationDraft>({
             control: "checkbox-group",
             controlProps: { options: definition.options },
           };
+        if (definition.kind === "date")
+          return {
+            ...base,
+            control: "date",
+            controlProps: { min: "1990-01-01", max: "2016-01-01" },
+          };
         return {
           ...base,
           render: ({
@@ -397,7 +404,6 @@ function Wizard<T extends FormValues, O extends JoinApplicationDraft>({
           onStepChange={(id) => onStepChange(Number(id.slice(5)))}
           className={styles.form}
           disabled={busy}
-          errorSummaryTitle={null}
           submitErrorMessage="提交失败，请稍后重试。已填写的资料与文件会保留。"
           onSubmit={async (draft) => {
             form.clearErrors("root.server");
@@ -425,19 +431,15 @@ function Wizard<T extends FormValues, O extends JoinApplicationDraft>({
                     else void args.next();
                   }}
                 >
-                  {disabled
-                    ? "提交中"
-                    : args.isLastStep
-                      ? "提交申请"
-                      : step === last - 1
-                        ? "检查申请"
-                        : "继续"}
+                  {disabled ? "提交中" : args.isLastStep ? "提交申请" : "继续"}
                 </Button>
               </div>,
               footerHost,
             )
           }
-        />
+        >
+          <FormErrorSummary title={null} />
+        </ExForm>
       </section>
       <div className={styles.footer} ref={setFooterHost}>
         <DialogDescription className={styles.footerDescription}>
@@ -477,7 +479,7 @@ function NewApplicationForm(props: FormProps) {
             proofs: [],
             form: {
               applicationType: "new",
-              birthDate: "",
+              birthDate: "2000-01-01",
               freeTime: "",
               discoveryChannels: [],
               answers: {
@@ -511,7 +513,7 @@ function ExperiencedApplicationForm(props: FormProps) {
             proofs: [],
             form: {
               applicationType: "experienced",
-              birthDate: "",
+              birthDate: "2000-01-01",
               freeTime: "",
               discoveryChannels: [],
               answers: {

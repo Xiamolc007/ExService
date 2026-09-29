@@ -29,6 +29,23 @@ describe('完整申请规则', () => {
     expect(newJoinApplicationSchema.safeParse({ ...validNewDraft, form: { ...validNewDraft.form, answers: { ...validNewDraft.form.answers, rpUnderstanding: `  ${'😀'.repeat(4000)}  ` } } }).success).toBe(true)
     expect(newJoinApplicationSchema.safeParse({ ...validNewDraft, form: { ...validNewDraft.form, answers: { ...validNewDraft.form.answers, rpUnderstanding: '😀'.repeat(4001) } } }).success).toBe(false)
   })
+  it('reports the breached minimum or maximum text length', () => {
+    const parseAnswer = (value: string) => experiencedJoinApplicationSchema.safeParse({
+      ...validExperiencedDraft,
+      form: { ...validExperiencedDraft.form, answers: { ...validExperiencedDraft.form.answers, deescalationEssay: value } },
+    })
+    const tooShort = parseAnswer('😀'.repeat(149))
+    const tooLong = parseAnswer('字'.repeat(4001))
+    for (const value of ['', '  \n  ']) {
+      const empty = parseAnswer(value)
+      expect(empty.success).toBe(false)
+      if (!empty.success) expect(empty.error.issues.map(issue => issue.message)).toEqual(['必须填写'])
+    }
+    expect(tooShort.success).toBe(false)
+    expect(tooLong.success).toBe(false)
+    if (!tooShort.success) expect(tooShort.error.issues.map(issue => issue.message)).toContain('至少150个文字')
+    if (!tooLong.success) expect(tooLong.error.issues.map(issue => issue.message)).toContain('至多4000个文字')
+  })
   it('rejects invalid/future UTC calendar dates, duplicate channels and false commitments', () => {
     for (const birthDate of ['2001-02-29', '2026-02-30', '2999-01-01']) {
       expect(newJoinApplicationSchema.safeParse({ ...validNewDraft, form: { ...validNewDraft.form, birthDate } }).success).toBe(false)

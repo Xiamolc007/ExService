@@ -55,11 +55,12 @@ function text(min: number, max: number) {
   return z
     .string()
     .trim()
+    .refine((value) => value.length > 0, "必须填写")
     .refine(
-      (value) =>
-        Array.from(value).length >= min && Array.from(value).length <= max,
-      `请填写 ${min} 至 ${max} 个字符`,
-    );
+      (value) => value.length === 0 || Array.from(value).length >= min,
+      `至少${min}个文字`,
+    )
+    .refine((value) => Array.from(value).length <= max, `至多${max}个文字`);
 }
 
 const birthDateSchema = z.string().refine((value) => {
