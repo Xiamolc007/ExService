@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -11,7 +11,7 @@ export default defineConfig({
     dedupe: ['react', 'react-dom'],
     alias: [
       { find: '@web', replacement: resolve(repositoryRoot, 'apps/web') },
-      { find: '@server', replacement: resolve(repositoryRoot, 'apps/mock-server') },
+      { find: '@server', replacement: resolve(repositoryRoot, 'apps/server') },
       { find: '@api-client', replacement: resolve(repositoryRoot, 'packages/api-client') },
       { find: '@components', replacement: resolve(repositoryRoot, 'packages/components') },
       { find: '@tests', replacement: resolve(repositoryRoot, 'tests') },
@@ -24,5 +24,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    testTimeout: 60_000,
+    exclude: [...configDefaults.exclude, '**/dist/**'],
   },
 })

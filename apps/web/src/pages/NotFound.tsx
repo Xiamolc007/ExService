@@ -5,7 +5,7 @@ import styles from '@web/src/pages/NotFound.module.scss'
 
 /**
  * 未匹配路径的兜底页面。
- * 它不能替代 Mock Server 的 404 envelope —— 这里只处理前端路由，不发起任何 API 请求。
+ * 它不能替代 Server 的 404 envelope；这里只处理前端路由，不发起任何 API 请求。
  */
 export function NotFound() {
   return (

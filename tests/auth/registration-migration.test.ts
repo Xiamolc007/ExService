@@ -1,43 +1,26 @@
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import Database from 'better-sqlite3'
 import { expect, it } from 'vitest'
+import { isolatedPostgres } from '@tests/helpers/postgres'
 
-function migration(name: string) {
-  return readFileSync(fileURLToPath(new URL(`../../apps/mock-server/drizzle/${name}`, import.meta.url)), 'utf8')
-    .replaceAll('--> statement-breakpoint', '')
-}
-
-it('removes QQ while preserving existing users, sessions, SSO and pending registrations', () => {
-  const sqlite = new Database(':memory:')
+it('starts from the current auth model without retaining legacy registration secrets', async () => {
+  const fixture = await isolatedPostgres()
   try {
-    sqlite.pragma('foreign_keys = ON')
-    sqlite.exec(migration('0001_auth.sql'))
-    sqlite.exec(`
-      INSERT INTO auth_users VALUES ('user-1', 'old@example.com', 'Existing', '12345678', 'hash', 100);
-      INSERT INTO auth_sessions VALUES ('token-hash', 'user-1', 100, 1000, NULL);
-      INSERT INTO auth_sso_requests VALUES ('sso-hash', 100, 1000, 'completed', 'user-1', 101);
-      INSERT INTO auth_registrations (id_hash, email, nickname, qq, password_hash, code_digest, status,
-        failed_attempts, last_sent_at, code_expires_at, retain_until)
-      VALUES ('pending-hash', 'new@example.com', 'Pending', '23456789', 'pending-password', 'code-hash', 'pending', 0, 100, 1000, 2000);
-    `)
-    sqlite.transaction(() => sqlite.exec(migration('0002_remove-registration-qq.sql')))()
-    expect(sqlite.prepare('SELECT * FROM auth_users').get()).toEqual({
-      id: 'user-1', email: 'old@example.com', nickname: 'Existing', password_hash: 'hash', created_at: 100,
-    })
-    expect(sqlite.prepare('SELECT user_id FROM auth_sessions').get()).toEqual({ user_id: 'user-1' })
-    expect(sqlite.prepare('SELECT user_id FROM auth_sso_requests').get()).toEqual({ user_id: 'user-1' })
-    expect(sqlite.prepare('SELECT nickname, password_hash, code_digest FROM auth_registrations').get()).toEqual({
-      nickname: 'Pending', password_hash: 'pending-password', code_digest: 'code-hash',
-    })
-    expect(sqlite.pragma('foreign_key_check')).toEqual([])
-    for (const table of ['auth_users', 'auth_registrations']) {
-      expect((sqlite.pragma(`table_info(${table})`) as Array<{ name: string }>).map(({ name }) => name)).not.toContain('qq')
-    }
-    sqlite.prepare('INSERT INTO auth_users (id, email, nickname, password_hash, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run('user-2', 'new@example.com', 'Existing', 'hash', 102)
-    expect(sqlite.prepare('SELECT count(*) AS count FROM auth_users').get()).toEqual({ count: 2 })
-  } finally {
-    sqlite.close()
-  }
+    const { db, schema } = fixture
+    const { rows: legacy } = await db.query<{ table_name: string }>(
+      'SELECT table_name FROM information_schema.tables WHERE table_schema = $1 AND table_name = ANY($2::text[])',
+      [schema, ['auth_registrations', 'auth_email_delivery']])
+    expect(legacy).toEqual([])
+    const userId = '10000000-0000-4000-8000-000000000001'
+    await db.query('INSERT INTO auth_users (id,email,nickname,password_hash,created_at,qq) VALUES ($1,$2,$3,$4,$5,$6)',
+      [userId, 'member@example.com', 'Member', 'password-hash', 100, '00123'])
+    await db.query('INSERT INTO auth_sessions (token_hash,user_id,created_at,expires_at) VALUES ($1,$2,$3,$4)',
+      ['session-hash', userId, 100, 1000])
+    await db.query('INSERT INTO auth_sso_requests (id_hash,created_at,expires_at,status,user_id,completed_at) VALUES ($1,$2,$3,$4,$5,$6)',
+      ['sso-hash', 100, 1000, 'completed', userId, 101])
+    expect((await db.query<{ qq: string }>('SELECT qq FROM auth_users WHERE id = $1', [userId])).rows).toEqual([{ qq: '00123' }])
+    expect((await db.query<{ user_id: string }>('SELECT user_id FROM auth_sessions')).rows).toEqual([{ user_id: userId }])
+    expect((await db.query<{ user_id: string }>('SELECT user_id FROM auth_sso_requests')).rows).toEqual([{ user_id: userId }])
+    await expect(db.query('INSERT INTO auth_users (id,email,nickname,password_hash,created_at) VALUES ($1,$2,$3,$4,$5)',
+      ['10000000-0000-4000-8000-000000000002', 'member@example.com', 'Other', 'hash', 200]))
+      .rejects.toMatchObject({ code: '23505' })
+  } finally { await fixture.close() }
 })

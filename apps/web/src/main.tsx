@@ -18,7 +18,7 @@ if (!container) {
 
 /**
  * `<BrowserRouter>` 只在挂载点提供一次；`App` 只声明路由表。
- * 使用 history 路由意味着未来的 PHP 部署必须把未知路径回落到 `index.html`，
+ * 使用 history 路由要求静态页面服务将未知前端路径回落到 `index.html`，
  * 否则深链接会由服务端直接 404。
  *
  * `<ThemeProvider>` 挂在路由之上，因此所有页面（含兜底页）都能使用 `useTheme`。
@@ -48,24 +48,24 @@ createRoot(container).render(
  *
  * 失败只输出明确的开发错误，不渲染健康检查面板或任何业务 UI。
  */
-async function checkMockServer(): Promise<void> {
+async function checkServer(): Promise<void> {
   try {
     const { error } = await api.GET('/health')
 
     if (error) {
-      console.error('[dev] GET /api/health returned an error response from the Mock Server.', error)
+      console.error('[dev] GET /api/health returned an error response from the Server.', error)
       return
     }
 
-    console.info('[dev] GET /api/health reached the Mock Server.')
+    console.info('[dev] GET /api/health reached the Server.')
   } catch (cause) {
     console.error(
-      '[dev] GET /api/health could not reach the Mock Server on 127.0.0.1:8080. Start it with `pnpm dev`.',
+      '[dev] GET /api/health could not reach the Server on 127.0.0.1:8080. Start it with `pnpm dev`.',
       cause,
     )
   }
 }
 
 if (import.meta.env.DEV) {
-  void checkMockServer()
+  void checkServer()
 }

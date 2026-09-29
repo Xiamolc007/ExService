@@ -1,37 +1,142 @@
 import { spawnSync } from 'node:child_process'
-import { readFileSync,writeFileSync,mkdtempSync,rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { tmpdir } from 'node:os'
-import { resolve } from 'node:path'
-import { pathToFileURL } from 'node:url'
-import Database from 'better-sqlite3'
-import { expect,it } from 'vitest'
-const requireServer=createRequire(new URL('../../apps/mock-server/package.json',import.meta.url))
-const migrations=new URL('../../apps/mock-server/drizzle/',import.meta.url)
-const journal=JSON.parse(readFileSync(new URL('meta/_journal.json',migrations),'utf8')) as {entries:Array<{tag:string}>}
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { expect, it } from 'vitest'
+import { isolatedPostgres } from '@tests/helpers/postgres'
+import { resetDatabase } from '@server/src/db/reset-plan'
+import { runMigrations } from '@server/src/db/migration-runner'
 
-it('executes the real migration CLI logic against an isolated boundary and stops Unicode normalization faults before migration',()=>{
- const directory=mkdtempSync(resolve(tmpdir(),'exwebsite-join-migration-cli-')),databasePath=resolve(directory,'isolated.sqlite'),entry=resolve(directory,'migrate.ts'),client=resolve(directory,'isolated-client.mjs')
- try{
-  const db=new Database(databasePath);db.pragma('foreign_keys=ON');db.transaction(()=>{for(const {tag} of journal.entries.slice(0,7))db.exec(readFileSync(new URL(`${tag}.sql`,migrations),'utf8').replaceAll('--> statement-breakpoint',''))})()
-  db.prepare("INSERT INTO join_applications (id,email,nickname,qq,status,created_at) VALUES ('unicode-cli-history',?,'Old','1','pending',1)").run('Äprivate@example.com');const before=db.prepare('SELECT * FROM join_applications').all();db.close()
-  const actual=readFileSync(new URL('../../apps/mock-server/src/db/migrate.ts',import.meta.url),'utf8')
-  // Only dependency paths and the fixed database opener are isolated; the CLI body is unchanged.
-  const source=actual.replace("'drizzle-orm/better-sqlite3/migrator'",JSON.stringify(pathToFileURL(requireServer.resolve('drizzle-orm/better-sqlite3/migrator')).href))
-   .replace("'@server/src/db/client.js'",JSON.stringify(pathToFileURL(client).href))
-   .replace("'@server/src/join/schema-check.js'",JSON.stringify(new URL('../../apps/mock-server/src/join/schema-check.ts',import.meta.url).href))
-  writeFileSync(entry,source)
-  writeFileSync(client,`import Database from ${JSON.stringify(pathToFileURL(requireServer.resolve('better-sqlite3')).href)};
-   import {drizzle} from ${JSON.stringify(pathToFileURL(requireServer.resolve('drizzle-orm/better-sqlite3')).href)};
-   export {assertCliEntry} from ${JSON.stringify(new URL('../../apps/mock-server/src/db/client.ts',import.meta.url).href)};
-   export const DATABASE_PATH=${JSON.stringify(databasePath)};export function ensureDatabaseDirectory(){}
-   export function openDatabase(){const sqlite=new Database(DATABASE_PATH);sqlite.pragma('foreign_keys=ON');return {sqlite,db:drizzle(sqlite)}};`)
-  const result=spawnSync(process.execPath,['--import',pathToFileURL(requireServer.resolve('tsx')).href,entry],{encoding:'utf8',timeout:10000})
-  expect(result.error).toBeUndefined();expect(result.status).not.toBe(0);expect(result.stderr).toContain('ids=unicode-cli-history');expect(result.stderr).not.toContain('private@example.com')
-  const inspect=new Database(databasePath);try{
-   expect(inspect.prepare('SELECT * FROM join_applications').all()).toEqual(before)
-   expect(inspect.prepare("SELECT name FROM sqlite_master WHERE name GLOB 'join_application_*'").all()).toEqual([])
-   expect(inspect.prepare("SELECT name FROM sqlite_master WHERE name = '__drizzle_migrations'").all()).toEqual([])
-  }finally{inspect.close()}
- }finally{rmSync(directory,{recursive:true,force:true})}
-},15000)
+const requireServer = createRequire(new URL('../../apps/server/package.json', import.meta.url))
+const entry = fileURLToPath(new URL('../../apps/server/src/db/migrate.ts', import.meta.url))
+const tsx = pathToFileURL(requireServer.resolve('tsx')).href
+function loopbackUrl(connectionString: string): string {
+  const url = new URL(connectionString)
+  url.hostname = '127.0.0.1'
+  return url.toString()
+}
+
+it('rejects a wrong database target before writing migration state', async () => {
+  const fixture = await isolatedPostgres({ migrate: false })
+  try {
+    const wrong = new URL(fixture.connectionString)
+    wrong.pathname = '/outline'
+    const result = spawnSync(process.execPath, ['--import', tsx, entry], {
+      cwd: fileURLToPath(new URL('../../apps/server/', import.meta.url)),
+      env: { ...process.env, DATABASE_URL: wrong.toString() },
+      encoding: 'utf8', timeout: 15_000,
+    })
+    expect(result.error).toBeUndefined()
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('exre')
+    expect(result.stderr).not.toContain(fixture.connectionString)
+    const { rows } = await fixture.db.query<{ name: string }>(
+      'SELECT tablename AS name FROM pg_catalog.pg_tables WHERE schemaname = $1', [fixture.schema])
+    expect(rows).toEqual([])
+  } finally { await fixture.close() }
+}, 30_000)
+
+it('rejects a DSN search_path override before migration writes any schema or journal', async () => {
+  const fixture = await isolatedPostgres({ migrate: false })
+  const otherSchema = `${fixture.schema}_other`
+  const objects = async (schema: string) => (await fixture.db.query<{ relname: string }>(
+    `SELECT c.relname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = $1 AND c.relkind IN ('r','p','v','m','S','f','i','I') ORDER BY c.relname`, [schema])).rows
+  try {
+    await fixture.db.query(`CREATE SCHEMA "${otherSchema}"`)
+    const before = await Promise.all(['public', fixture.schema, otherSchema, 'drizzle'].map(objects))
+    const overridden = new URL(fixture.connectionString)
+    overridden.searchParams.set('options', `-c search_path=${otherSchema}`)
+    await expect(runMigrations({ connectionString: overridden.toString() })).rejects.toThrow('DATABASE_URL')
+    const result = spawnSync(process.execPath, ['--import', tsx, entry], {
+      cwd: fileURLToPath(new URL('../../apps/server/', import.meta.url)),
+      env: { ...process.env, DATABASE_URL: overridden.toString() },
+      encoding: 'utf8', timeout: 15_000,
+    })
+    expect(result.error).toBeUndefined()
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('[db:migrate]')
+    expect(await Promise.all(['public', fixture.schema, otherSchema, 'drizzle'].map(objects))).toEqual(before)
+  } finally {
+    await fixture.db.query(`DROP SCHEMA IF EXISTS "${otherSchema}" CASCADE`)
+    await fixture.close()
+  }
+}, 30_000)
+
+it('refuses reset without confirmation or with an unknown schema object, leaving data intact', async () => {
+  const fixture = await isolatedPostgres()
+  try {
+    const options = { connectionString: loopbackUrl(fixture.connectionString), searchPath: fixture.schema }
+    await fixture.db.query('INSERT INTO auth_users (id,email,nickname,password_hash,created_at) VALUES ($1,$2,$3,$4,$5)',
+      ['user-1', 'keep@example.com', 'Keep', 'hash', 100])
+    await expect(resetDatabase(options, '')).rejects.toThrow()
+    await fixture.db.query('CREATE TABLE unrelated_data (id integer)')
+    await expect(resetDatabase(options, 'exre')).rejects.toThrow()
+    expect((await fixture.db.query<{ email: string }>('SELECT email FROM auth_users')).rows).toEqual([{ email: 'keep@example.com' }])
+    expect((await fixture.db.query<{ name: string }>(
+      'SELECT tablename AS name FROM pg_catalog.pg_tables WHERE schemaname = $1 AND tablename = $2',
+      [fixture.schema, 'unrelated_data'])).rows).toEqual([{ name: 'unrelated_data' }])
+  } finally { await fixture.close() }
+}, 30_000)
+
+it('refuses an outline URL for reset before any application write', async () => {
+  const fixture = await isolatedPostgres()
+  try {
+    await fixture.db.query('INSERT INTO auth_users (id,email,nickname,password_hash,created_at) VALUES ($1,$2,$3,$4,$5)',
+      ['user-1', 'keep@example.com', 'Keep', 'hash', 100])
+    const wrong = new URL(loopbackUrl(fixture.connectionString))
+    wrong.pathname = '/outline'
+    await expect(resetDatabase({ connectionString: wrong.toString(), searchPath: fixture.schema }, 'exre')).rejects.toThrow()
+    expect((await fixture.db.query<{ email: string }>('SELECT email FROM auth_users')).rows).toEqual([{ email: 'keep@example.com' }])
+  } finally { await fixture.close() }
+}, 30_000)
+
+it.each([
+  ['host', 'evil.example'],
+  ['port', '1'],
+])('refuses a DSN %s override before reset can alter the isolated database', async (key, value) => {
+  const fixture = await isolatedPostgres()
+  try {
+    await fixture.db.query('INSERT INTO auth_users (id,email,nickname,password_hash,created_at) VALUES ($1,$2,$3,$4,$5)',
+      ['user-1', 'keep@example.com', 'Keep', 'hash', 100])
+    const overridden = new URL(loopbackUrl(fixture.connectionString))
+    overridden.searchParams.set(key, value)
+    await expect(resetDatabase({ connectionString: overridden.toString(), searchPath: fixture.schema }, 'exre'))
+      .rejects.toThrow('DATABASE_URL')
+    expect((await fixture.db.query<{ email: string }>('SELECT email FROM auth_users')).rows)
+      .toEqual([{ email: 'keep@example.com' }])
+    expect((await fixture.db.query<{ n: number }>(
+      'SELECT count(*)::integer AS n FROM pg_catalog.pg_tables WHERE schemaname = $1 AND tablename = $2',
+      [fixture.schema, '__drizzle_migrations'])).rows).toEqual([{ n: 1 }])
+  } finally { await fixture.close() }
+}, 30_000)
+
+it('recreates only the isolated application baseline after explicit reset', async () => {
+  const fixture = await isolatedPostgres()
+  try {
+    await fixture.db.query('INSERT INTO auth_users (id,email,nickname,password_hash,created_at) VALUES ($1,$2,$3,$4,$5)',
+      ['user-1', 'deleted@example.com', 'Deleted', 'hash', 100])
+    await resetDatabase({ connectionString: loopbackUrl(fixture.connectionString), searchPath: fixture.schema }, 'exre')
+    expect((await fixture.db.query('SELECT * FROM auth_users')).rows).toEqual([])
+    expect((await fixture.db.query<{ code: string }>('SELECT code FROM community_groups')).rows).toEqual([{ code: 'admin' }])
+  } finally { await fixture.close() }
+}, 30_000)
+
+it('refuses import of the migration CLI before it can alter an isolated schema', async () => {
+  const fixture = await isolatedPostgres({ migrate: false })
+  try {
+    const before = (await fixture.db.query<{ name: string }>(
+      'SELECT tablename AS name FROM pg_catalog.pg_tables WHERE schemaname = $1 ORDER BY tablename', ['public'])).rows
+    const source = `import ${JSON.stringify(new URL('../../apps/server/src/db/migrate.ts', import.meta.url).href)}`
+    const result = spawnSync(process.execPath, ['--import', tsx, '--input-type=module', '-e', source], {
+      cwd: fileURLToPath(new URL('../../apps/server/', import.meta.url)),
+      env: { ...process.env, DATABASE_URL: fixture.connectionString },
+      encoding: 'utf8', timeout: 15_000,
+    })
+    expect(result.error).toBeUndefined()
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('CLI')
+    const after = (await fixture.db.query<{ name: string }>(
+      'SELECT tablename AS name FROM pg_catalog.pg_tables WHERE schemaname = $1 ORDER BY tablename', ['public'])).rows
+    expect(after).toEqual(before)
+  } finally { await fixture.close() }
+}, 30_000)

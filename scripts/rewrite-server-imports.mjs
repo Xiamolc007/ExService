@@ -3,7 +3,7 @@ import { dirname, extname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 
-const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../apps/mock-server')
+const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../apps/server')
 const distRoot = join(packageRoot, 'dist')
 const aliasPrefix = '@server/src/'
 

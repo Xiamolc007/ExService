@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+﻿import { createHash } from 'node:crypto'
 import { fork } from 'node:child_process'
 import { readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -9,9 +9,9 @@ import Ajv from 'ajv'
 import { parse } from 'yaml'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { FastifyReply, FastifyRequest } from 'fastify'
-import { createApp, serviceHandlers } from '@workspace/mock-server'
+import { createApp, serviceHandlers } from '@workspace/server'
 import { createApiClient } from '@api-client/src/client'
-import { createTestAuth, experiencedJoinApplication, newJoinApplication, joinSnapshot } from '@tests/helpers/auth'
+import { createTestAuth, experiencedJoinApplication, newJoinApplication, joinSnapshot, type TestAuth } from '@tests/helpers/auth'
 import { applicationPart, joinMultipart, multipartBody } from '@tests/helpers/multipart'
 
 const contract = parse(readFileSync(fileURLToPath(new URL('../../api/openapi.yaml', import.meta.url)), 'utf8'))
@@ -20,16 +20,16 @@ function validate(name: string, value: unknown) {
   const check = new Ajv({ strict: false, allErrors: true }).compile({ ...definitions[name], definitions })
   expect(check(value), JSON.stringify(check.errors)).toBe(true)
 }
-const fixtures: ReturnType<typeof createTestAuth>[] = [], apps: ReturnType<typeof createApp>[] = []
+const fixtures: TestAuth[] = [], apps: ReturnType<typeof createApp>[] = []
 const childCleanups: Array<() => Promise<void>> = []
 afterEach(async () => {
   await Promise.all(childCleanups.splice(0).map(cleanup => cleanup()))
-  await Promise.all(apps.splice(0).map(app => app.close())); fixtures.splice(0).forEach(f => f.close())
+  await Promise.all(apps.splice(0).map(app => app.close())); await Promise.all(fixtures.splice(0).map(f => f.close()))
 })
-function setup() { const f = createTestAuth(); fixtures.push(f); const app = createApp({ ...f }); apps.push(app); return { f, app } }
+async function setup() { const f = await createTestAuth(); fixtures.push(f); const app = createApp({ ...f }); apps.push(app); return { f, app } }
 const proof = (bytes = Buffer.from('review evidence'), filename = '证明.txt') => ({ filename, bytes, contentType: 'application/octet-stream' })
 async function liveSetup() {
-  const { f, app } = setup()
+  const { f, app } = await setup()
   await app.listen({ host: '127.0.0.1', port: 0 })
   const address = app.server.address()
   if (address === null || typeof address === 'string') throw new Error('Missing ephemeral address')
@@ -51,18 +51,19 @@ function sendProof(client: ReturnType<typeof createApiClient>, email: string, by
 }
 
 async function isolatedLiveClient() {
-  const loader = createRequire(new URL('../../apps/mock-server/package.json', import.meta.url)).resolve('tsx')
+  const loader = createRequire(new URL('../../apps/server/package.json', import.meta.url)).resolve('tsx')
   const child = fork(fileURLToPath(new URL('../helpers/join-proof-server.ts', import.meta.url)), {
     execArgv: ['--import', pathToFileURL(loader).href], stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+    env: { ...process.env, EXWEBSITE_PROOF_SERVER_CHILD: '1' },
   })
   let avatarDirectory: string | undefined
   let startupError = ''
   child.stderr?.on('data', chunk => { startupError = (startupError + String(chunk)).slice(-4000) })
   const exited = new Promise<void>(resolve => { child.once('exit', () => resolve()); child.once('error', () => resolve()) })
-  const deadline = setTimeout(() => child.kill('SIGKILL'), 10000)
+  const deadline = setTimeout(() => child.kill('SIGKILL'), 30000)
   childCleanups.push(async () => {
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM')
-    const hardStop = setTimeout(() => child.kill('SIGKILL'), 500)
+    const hardStop = setTimeout(() => child.kill('SIGKILL'), 5000)
     await exited; clearTimeout(hardStop); clearTimeout(deadline)
     // A forced stop cannot execute the child's normal fixture.close(); only clean its known temporary directory.
     if (avatarDirectory !== undefined) {
@@ -104,9 +105,9 @@ it('consumes JSON Blob and repeated proof files through the generated Client and
     expect(result.response.headers.get('cache-control')).toBe('no-store')
     validate('JoinApplicationReceived', result.data)
   }
-  expect(f.sqlite.prepare('SELECT count(*) n FROM join_application_forms').get()).toEqual({ n: 3 })
-  expect(f.sqlite.prepare('SELECT count(*) n FROM join_application_attachments').get()).toEqual({ n: 2 })
-  const stored = f.sqlite.prepare('SELECT original_name,bytes,sha256 FROM join_application_attachments ORDER BY ordinal').all() as Array<{ original_name: string; bytes: Buffer; sha256: string }>
+  expect((await f.db.query<{n:number}>('SELECT count(*) n FROM join_application_forms')).rows[0]).toEqual({ n: 3 })
+  expect((await f.db.query<{n:number}>('SELECT count(*) n FROM join_application_attachments')).rows[0]).toEqual({ n: 2 })
+  const stored = (await f.db.query<{ original_name: string; bytes: Buffer; sha256: string }>('SELECT original_name,bytes,sha256 FROM join_application_attachments ORDER BY ordinal')).rows
   expect(stored.map(row => row.original_name)).toEqual(['证明图.png', '证明文.txt'])
   const originals = [Buffer.from(png), Buffer.from(unicodeText)]
   stored.forEach((row, i) => {
@@ -123,7 +124,7 @@ it('accepts self-closing SVG roots with optional XML declarations through actual
     expect(response.response.headers.get('cache-control')).toBe('no-store')
     validate('JoinApplicationReceived', response.data)
   }
-  expect(f.sqlite.prepare('SELECT count(*) n FROM join_application_attachments').get()).toEqual({ n: 2 })
+  expect((await f.db.query<{n:number}>('SELECT count(*) n FROM join_application_attachments')).rows[0]).toEqual({ n: 2 })
 })
 
 it('accepts exact GIF87a/GIF89a signatures and rejects high-bit GIF spoofing through actual multipart HTTP', async () => {
@@ -138,7 +139,7 @@ it('accepts exact GIF87a/GIF89a signatures and rejects high-bit GIF spoofing thr
   expect(forged.error?.error.code).toBe('JOIN_UNSUPPORTED_MEDIA_TYPE')
   expect(forged.response.headers.get('cache-control')).toBe('no-store')
   validate('ErrorEnvelope', forged.error)
-  expect(f.sqlite.prepare('SELECT count(*) n FROM join_application_attachments').get()).toEqual({ n: 2 })
+  expect((await f.db.query<{n:number}>('SELECT count(*) n FROM join_application_attachments')).rows[0]).toEqual({ n: 2 })
 })
 
 it('rejects large BOM/comment/XML non-SVG prefixes over real multipart HTTP within an isolated process deadline', async () => {
@@ -156,15 +157,17 @@ it('rejects large BOM/comment/XML non-SVG prefixes over real multipart HTTP with
     expect(response.response.headers.get('cache-control')).toBe('no-store')
     validate('ErrorEnvelope', response.error)
   }
-}, 15000)
+// The child has a 30s startup deadline for its own PostgreSQL container; each
+// of the four HTTP requests independently retains its 2s abort deadline.
+}, 45000)
 
 it('validates nested normalized input without deleting unknown properties or coercing booleans', async () => {
-  const { f, app } = setup()
+  const { f, app } = await setup()
   const input = newJoinApplication('  Normalized@Example.COM  ', '  名字  ')
   input.form.answers.rpUnderstanding = '  角色扮演  '
   const received = await app.inject({ method: 'POST', url: '/api/join/applications', ...joinMultipart(input) })
   expect(received.statusCode, received.body).toBe(202)
-  const row = f.sqlite.prepare('SELECT email,nickname FROM join_applications').get()
+  const row = (await f.db.query('SELECT email,nickname FROM join_applications')).rows[0]
   expect(row).toEqual({ email: 'normalized@example.com', nickname: '名字' })
   for (const value of [
     { ...newJoinApplication('bad1@example.com'), unexpected: true },
@@ -175,11 +178,11 @@ it('validates nested normalized input without deleting unknown properties or coe
     const response = await app.inject({ method: 'POST', url: '/api/join/applications', ...joinMultipart(value) })
     expect(response.statusCode, response.body).toBe(400); validate('ErrorEnvelope', response.json())
   }
-  expect(f.sqlite.prepare('SELECT count(*) n FROM join_applications').get()).toEqual({ n: 1 })
+  expect((await f.db.query<{n:number}>('SELECT count(*) n FROM join_applications')).rows[0]).toEqual({ n: 1 })
 })
 
 it('rejects JSON/old shape, missing/repeated/unknown parts, invalid UTF-8, wrong MIME and new-player proofs', async () => {
-  const { f, app } = setup()
+  const { f, app } = await setup()
   const part = applicationPart(newJoinApplication())
   const cases = [
     [multipartBody([]), 400],
@@ -201,15 +204,15 @@ it('rejects JSON/old shape, missing/repeated/unknown parts, invalid UTF-8, wrong
     expect(response.headers['cache-control']).toBe('no-store'); validate('ErrorEnvelope', response.json())
   }
   expect((await app.inject({ method: 'POST', url: '/api/join/applications', payload: newJoinApplication() })).statusCode).toBe(415)
-  expect(f.sqlite.prepare('SELECT count(*) n FROM join_applications').get()).toEqual({ n: 0 })
+  expect((await f.db.query<{n:number}>('SELECT count(*) n FROM join_applications')).rows[0]).toEqual({ n: 0 })
 })
 
 it('enforces actual per-file, aggregate, JSON and part/header budgets and permits exact 50MiB', async () => {
-  const { f, app } = setup()
+  const { f, app } = await setup()
   const tenMiB = Buffer.alloc(10 * 1024 * 1024, 65)
   const accepted = await app.inject({ method: 'POST', url: '/api/join/applications', ...joinMultipart(experiencedJoinApplication('max@example.com'), Array.from({ length: 5 }, (_, i) => proof(tenMiB, `${i}.txt`))) })
   expect(accepted.statusCode, accepted.body).toBe(202)
-  expect(f.sqlite.prepare('SELECT sum(byte_length) n FROM join_application_attachments').get()).toEqual({ n: 50 * 1024 * 1024 })
+  expect((await f.db.query<{n:number}>('SELECT sum(byte_length) n FROM join_application_attachments')).rows[0]).toEqual({ n: 50 * 1024 * 1024 })
   for (const request of [
     joinMultipart(experiencedJoinApplication('over-file@example.com'), [proof(Buffer.alloc(tenMiB.length + 1, 65))]),
     joinMultipart(experiencedJoinApplication('six@example.com'), Array.from({ length: 6 }, () => proof())),
@@ -221,11 +224,11 @@ it('enforces actual per-file, aggregate, JSON and part/header budgets and permit
     const response = await app.inject({ method: 'POST', url: '/api/join/applications', ...request })
     expect(response.statusCode, response.body).toBe(413); expect(response.json().error.code).toBe('JOIN_UPLOAD_TOO_LARGE')
   }
-  expect(f.sqlite.prepare('SELECT count(*) n FROM join_applications').get()).toEqual({ n: 1 })
+  expect((await f.db.query<{n:number}>('SELECT count(*) n FROM join_applications')).rows[0]).toEqual({ n: 1 })
 }, 30000)
 
 it('permits exact JSON/header byte and header-pair budgets and rejects each next byte/pair', async () => {
-  const { app } = setup()
+  const { app } = await setup()
   const json = applicationPart(newJoinApplication('exact-json@example.com'))
   const exactJson = { ...json, bytes: Buffer.concat([json.bytes, Buffer.alloc(65536 - json.bytes.length, 32)]) }
   expect((await app.inject({ method: 'POST', url: '/api/join/applications', ...multipartBody([exactJson]) })).statusCode).toBe(202)
@@ -245,10 +248,10 @@ it('permits exact JSON/header byte and header-pair budgets and rejects each next
 })
 
 it('registers query and binary handlers with raw schema/Buffer checks, scoped IDs and safe download headers', async () => {
-  const { f, app } = setup()
-  f.joinServices.submit(experiencedJoinApplication(), [{ originalName: '证明.txt', bytes: Buffer.from('evidence') }])
-  const application = (f.joinServices.list({}).items[0])!
-  const detail = f.joinServices.get(application.id)
+  const { f, app } = await setup()
+  await f.joinServices.submit(experiencedJoinApplication(), [{ originalName: '证明.txt', bytes: Buffer.from('evidence') }])
+  const application = ((await f.joinServices.list({})).items[0])!
+  const detail = await f.joinServices.get(application.id)
   const attachment = detail.attachments[0]!
   const headers: Record<string, string> = {}
   const reply = { header(key: string, value: string) { headers[key.toLowerCase()] = value; return this } } as unknown as FastifyReply
@@ -262,17 +265,17 @@ it('registers query and binary handlers with raw schema/Buffer checks, scoped ID
   expect(response.statusCode).toBe(200); expect(response.rawPayload).toEqual(raw); expect(response.headers['cache-control']).toBe('no-store')
   const notFound = await app.inject({ method: 'GET', url: `/api/admin/join/applications/20000000-0000-4000-8000-999999999999/attachments/${attachment.id}` })
   expect(notFound.statusCode).toBe(404); expect(notFound.json().error.code).toBe('JOIN_ATTACHMENT_NOT_FOUND')
-  const before = joinSnapshot(f)
+  const before = await joinSnapshot(f)
   const query = await app.inject({ method: 'POST', url: '/api/join/applications/query', payload: { email: '  EXPERIENCED@EXAMPLE.COM  ' } })
   expect(query.statusCode).toBe(200); validate('JoinApplicationResult', query.json()); expect(query.json()).toEqual({ status: 'pending', nextAction: 'wait' })
-  expect(joinSnapshot(f)).toEqual(before)
+  expect(await joinSnapshot(f)).toEqual(before)
   const rawQuery = await serviceHandlers.queryJoinApplicationResult({ server: f, body: { email: 'experienced@example.com' } } as unknown as FastifyRequest, reply)
   validate('JoinApplicationResult', rawQuery); expect(rawQuery).toEqual(query.json())
   validate('JoinApplicationDetail', detail)
 })
 
 it('counts shared actual-IP budget once before parsing and rejects spoofed forwarded addresses', async () => {
-  const { f, app } = setup()
+  const { f, app } = await setup()
   const limit = vi.spyOn(f.invitationServices, 'limit')
   const accepted = await app.inject({ method: 'POST', url: '/api/join/applications', ...joinMultipart(newJoinApplication()) })
   expect(accepted.statusCode).toBe(202); expect(limit).toHaveBeenCalledTimes(1)
@@ -286,19 +289,22 @@ it('counts shared actual-IP budget once before parsing and rejects spoofed forwa
 })
 
 it('releases upload buffers and slots after storage rollback and refuses forged raw proof markers', async () => {
-  const { f, app } = setup()
-  const schema = f.sqlite.prepare("SELECT sql FROM sqlite_schema WHERE name='join_application_forms'").get() as { sql: string }
-  f.sqlite.exec('DROP TABLE join_application_forms')
+  const { f, app } = await setup()
+  await f.db.query(`CREATE FUNCTION fail_form_insert() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN RAISE EXCEPTION 'secret form insert failure'; END $$`)
+  await f.db.query(`CREATE TRIGGER fail_form_insert BEFORE INSERT ON join_application_forms
+    FOR EACH ROW EXECUTE FUNCTION fail_form_insert()`)
   for (let i = 0; i < 2; i++) {
     const response = await app.inject({ method: 'POST', url: '/api/join/applications', ...joinMultipart(experiencedJoinApplication(`failure-${i}@example.com`), [proof()]) })
     expect(response.statusCode, response.body).toBe(500)
     expect(response.json().error.message).toBe('An unexpected error occurred.')
     expect(response.headers['cache-control']).toBe('no-store'); expect(response.body).not.toContain('join_application_forms')
   }
-  expect(f.sqlite.prepare('SELECT count(*) n FROM join_applications').get()).toEqual({ n: 0 })
-  expect(f.sqlite.prepare('SELECT count(*) n FROM join_application_email_registry').get()).toEqual({ n: 0 })
-  expect(f.sqlite.prepare('SELECT count(*) n FROM join_application_attachments').get()).toEqual({ n: 0 })
-  f.sqlite.exec(schema.sql)
+  expect((await f.db.query<{n:number}>('SELECT count(*) n FROM join_applications')).rows[0]).toEqual({ n: 0 })
+  expect((await f.db.query<{n:number}>('SELECT count(*) n FROM join_application_email_registry')).rows[0]).toEqual({ n: 0 })
+  expect((await f.db.query<{n:number}>('SELECT count(*) n FROM join_application_attachments')).rows[0]).toEqual({ n: 0 })
+  await f.db.query('DROP TRIGGER fail_form_insert ON join_application_forms')
+  await f.db.query('DROP FUNCTION fail_form_insert()')
   const accepted = await app.inject({ method: 'POST', url: '/api/join/applications', ...joinMultipart(experiencedJoinApplication('after-storage-failure@example.com'), [proof()]) })
   expect(accepted.statusCode, accepted.body).toBe(202)
   const reply = { header() { return this }, code() { return this } } as unknown as FastifyReply

@@ -5,15 +5,11 @@ node_modules/
 dist/
 *.tsbuildinfo
 
-# Local Mock database (fixed path: apps/mock-server/data/mock.sqlite)
-# data/.gitkeep is committed on purpose so the directory exists after checkout.
-# WAL/SHM 由 src/db/client.ts 的 `journal_mode = WAL` 产生；rollback journal 不会由本项目代码产生，
-# 但外部工具（sqlite3 CLI 等）可能生成，同样不应提交（可能包含数据页）。
-apps/mock-server/data/mock.sqlite
-apps/mock-server/data/mock.sqlite-journal
-apps/mock-server/data/mock.sqlite-wal
-apps/mock-server/data/mock.sqlite-shm
-apps/mock-server/data/avatars/
+# Server-generated avatar bytes stay local. `apps/server/data/.gitkeep` is tracked.
+apps/server/data/avatars/
+
+# Preserve and ignore local data left by the pre-promotion SQLite Server.
+apps/mock-server/data/
 
 # Local environment overrides
 .env.local

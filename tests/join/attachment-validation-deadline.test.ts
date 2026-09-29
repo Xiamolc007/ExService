@@ -1,10 +1,10 @@
-import { spawnSync } from 'node:child_process'
+﻿import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { expect,it } from 'vitest'
-const serverRequire=createRequire(new URL('../../apps/mock-server/package.json',import.meta.url))
+const serverRequire=createRequire(new URL('../../apps/server/package.json',import.meta.url))
 const loader=pathToFileURL(serverRequire.resolve('tsx')).href
-const validator=new URL('../../apps/mock-server/src/join/attachment-validation.ts',import.meta.url).href
+const validator=new URL('../../apps/server/src/join/attachment-validation.ts',import.meta.url).href
 
 it.each([
   ['many BOMs then non-SVG',"'\\uFEFF'.repeat(50000)+'<html/>'",'rejected'],

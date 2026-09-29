@@ -1,12 +1,13 @@
 import { createApp } from '@server/src/app.ts'
 import { createTestAuth } from '@tests/helpers/auth.ts'
+import { stopTestPostgres } from '@tests/helpers/postgres.ts'
 
-// Isolated process fixture: createTestAuth uses only in-memory SQLite and a temporary avatar directory.
-const fixture = createTestAuth()
+// Isolated process fixture: its PostgreSQL container and schema are owned by this process.
+const fixture = await createTestAuth()
 const app = createApp({ ...fixture })
 process.once('SIGTERM', () => {
   app.server.closeAllConnections()
-  void app.close().finally(() => { fixture.close(); process.exit(0) })
+  void app.close().finally(async () => { await fixture.close(); await stopTestPostgres(); process.exit(0) })
 })
 await app.listen({ host: '127.0.0.1', port: 0 })
 const address = app.server.address()

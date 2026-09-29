@@ -1,30 +1,30 @@
 openapi: 3.1.1
 info:
-  title: Backend Sandbox API
+  title: ExWebsite Server API
   version: 0.5.0
   description: |
     Frontend 与 Backend 之间的唯一 HTTP API Contract。
 
-    该 Contract 同时供本地 Fastify Mock Server、TypeScript 客户端以及未来的 PHP
-    生产实现使用。所有 schema 限定在 JSON Schema Draft-07 兼容子集内。
+    该 Contract 由本仓库唯一的 Fastify Server 和 TypeScript 客户端共同使用。
+    所有 schema 限定在 JSON Schema Draft-07 兼容子集内。
 servers:
   - url: /api
     description: 客户端 API base URL；Fastify 仍通过 Glue 的 prefix 显式注册该前缀。
 tags:
   - name: system
-    description: Mock Server 自身运行状态。
+    description: Server 自身运行状态。
   - name: authentication
     description: 本地账号、会话与 SSO 接收端能力。
 paths:
   /health:
     get:
       operationId: getHealth
-      summary: Read mock server liveness
+      summary: Read server liveness
       security: []
       tags: [system]
       responses:
         '200':
-          description: Mock server is running
+          description: Server is running
           content:
             application/json:
               schema:
@@ -35,7 +35,7 @@ paths:
     post:
       operationId: createCaptchaChallenge
       summary: Reserve an image captcha challenge for authentication
-      description: The local Mock Server returns a placeholder PNG and does not validate captcha submissions yet.
+      description: The Server returns a placeholder PNG during development and does not validate captcha submissions yet.
       security: []
       tags: [authentication]
       responses:
@@ -330,7 +330,7 @@ paths:
     get:
       operationId: downloadJoinApplicationAttachment
       summary: Download an application proof attachment
-      description: "Local public Mock review access only. Missing or mismatched application/attachment pairs return 404 JOIN_ATTACHMENT_NOT_FOUND. Always download; never preview. Two response slots are acquired before BLOB reads; capacity failure is 503 and Retry-After: 5. A 60 second response deadline terminates started connections without a second JSON response. All responses use no-store."
+      description: "Development review access only. Missing or mismatched application/attachment pairs return 404 JOIN_ATTACHMENT_NOT_FOUND. Always download; never preview. Two response slots are acquired before attachment reads; capacity failure is 503 and Retry-After: 5. A 60 second response deadline terminates started connections without a second JSON response. All responses use no-store."
       security: []
       tags:
         - authentication

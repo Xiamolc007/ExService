@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createApp, serviceHandlers } from '@workspace/mock-server'
-import { createTestAuth } from '@tests/helpers/auth'
+import { createApp, serviceHandlers } from '@workspace/server'
+import { createTestAuth, type TestAuth } from '@tests/helpers/auth'
 import Ajv, { type ValidateFunction } from 'ajv'
 import { afterEach, describe, expect, it } from 'vitest'
 import { parse as parseYaml } from 'yaml'
@@ -111,10 +111,10 @@ const validateHealthResponse = compileComponentSchema('HealthResponse')
 const validateErrorEnvelope = compileComponentSchema('ErrorEnvelope')
 
 const runningApps: Array<ReturnType<typeof createApp>> = []
-const authFixtures: Array<ReturnType<typeof createTestAuth>> = []
+const authFixtures: TestAuth[] = []
 
-function createTestApp() {
-  const fixture = createTestAuth()
+async function createTestApp() {
+  const fixture = await createTestAuth()
   authFixtures.push(fixture)
   const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices, authServices: fixture.authServices, profileServices: fixture.profileServices, logger: false })
   runningApps.push(app)
@@ -123,7 +123,7 @@ function createTestApp() {
 
 afterEach(async () => {
   await Promise.all(runningApps.splice(0).map((app) => app.close()))
-  authFixtures.splice(0).forEach((fixture) => fixture.close())
+  await Promise.all(authFixtures.splice(0).map((fixture) => fixture.close()))
 })
 
 describe('contract coverage', () => {
@@ -150,7 +150,7 @@ describe('contract coverage', () => {
 
 describe('GET /api/health over HTTP', () => {
   it('returns 200 with a JSON body that satisfies HealthResponse', async () => {
-    const app = createTestApp()
+    const app = await createTestApp()
 
     const response = await app.inject({ method: 'GET', url: '/api/health' })
 
@@ -163,7 +163,7 @@ describe('GET /api/health over HTTP', () => {
   })
 
   it('returns no fields beyond the ones declared by the contract', async () => {
-    const app = createTestApp()
+    const app = await createTestApp()
 
     const body = (await app.inject({ method: 'GET', url: '/api/health' })).json() as Record<string, unknown>
 
@@ -171,7 +171,7 @@ describe('GET /api/health over HTTP', () => {
   })
 
   it('registers the contract path under the explicit /api prefix', async () => {
-    const app = createTestApp()
+    const app = await createTestApp()
 
     // Contract 中路径写作 /health；缺少 prefix 时这里会得到 404。
     const unprefixed = await app.inject({ method: 'GET', url: '/health' })
@@ -223,7 +223,7 @@ describe('contract schema enforcement', () => {
 
 describe('undeclared routes', () => {
   it('returns the contract ErrorEnvelope', async () => {
-    const app = createTestApp()
+    const app = await createTestApp()
 
     const response = await app.inject({ method: 'GET', url: '/api/not-in-contract' })
 
@@ -233,7 +233,7 @@ describe('undeclared routes', () => {
   })
 
   it('does not leak internal details', async () => {
-    const app = createTestApp()
+    const app = await createTestApp()
 
     const body = (await app.inject({ method: 'GET', url: '/api/not-in-contract' })).json() as {
       error: { message: string; requestId: string }
@@ -241,6 +241,6 @@ describe('undeclared routes', () => {
 
     expect(body.error.requestId).toBeTruthy()
     expect(body.error.message).not.toContain(projectRoot)
-    expect(body.error.message).not.toMatch(/mock\.sqlite|node_modules|\bat\s+\S+\s+\(/i)
+    expect(body.error.message).not.toMatch(/postgres(?:ql)?:\/\/|DATABASE_URL|node_modules|\bat\s+\S+\s+\(/i)
   })
 })

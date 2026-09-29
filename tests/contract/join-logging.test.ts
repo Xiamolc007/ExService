@@ -1,13 +1,13 @@
-import { Writable } from 'node:stream'
+﻿import { Writable } from 'node:stream'
 import { afterEach, expect, it } from 'vitest'
-import { createApp } from '@workspace/mock-server'
-import { approvedInvitation, createTestAuth } from '@tests/helpers/auth'
+import { createApp } from '@workspace/server'
+import { approvedInvitation, createTestAuth, type TestAuth } from '@tests/helpers/auth'
 
-const fixtures: Array<ReturnType<typeof createTestAuth>> = []
+const fixtures: TestAuth[] = []
 const apps: Array<ReturnType<typeof createApp>> = []
 afterEach(async () => {
   await Promise.all(apps.splice(0).map(app => app.close()))
-  fixtures.splice(0).forEach(fixture => fixture.close())
+  await Promise.all(fixtures.splice(0).map(fixture => fixture.close()))
 })
 
 it('keeps secrets and original exception stacks out of real HTTP request and error logs', async () => {
@@ -16,7 +16,7 @@ it('keeps secrets and original exception stacks out of real HTTP request and err
   const hmac = '1a'.repeat(32)
   const stackMarker = 'PRIVATE_PROVIDER_STACK_FRAME_93821'
   let completionToken = ''
-  const fixture = createTestAuth({
+  const fixture = await createTestAuth({
     codeHmacKey: Buffer.from(hmac, 'hex'),
     randomInteger: () => Number(code),
     passwordHasher: {
@@ -43,8 +43,8 @@ it('keeps secrets and original exception stacks out of real HTTP request and err
   expect(completionToken).toHaveLength(43)
 
   // Exercise request logging with a real password-bearing successful login.
-  fixture.sqlite.prepare('INSERT INTO auth_users (id,email,nickname,password_hash,created_at) VALUES (?,?,?,?,?)')
-    .run('10000000-0000-4000-8000-000000000001', 'existing@example.com', 'Existing', 'fixture-hash', fixture.now())
+  await fixture.db.query('INSERT INTO auth_users (id,email,nickname,password_hash,created_at) VALUES ($1,$2,$3,$4,$5)',
+    ['10000000-0000-4000-8000-000000000001', 'existing@example.com', 'Existing', 'fixture-hash', fixture.now()])
   const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'existing@example.com', password } })
   expect(login.statusCode).toBe(200)
   const bad = await app.inject({ method: 'POST', url: '/api/auth/invitations/verify', payload: { email: approved.email, code } })

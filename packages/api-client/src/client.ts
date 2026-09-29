@@ -3,8 +3,8 @@ import type { paths } from '@api-client/src/generated/schema'
 
 export interface CreateApiClientOptions {
   /**
-   * API base URL。开发期通常是 `/api`（由 Vite 代理到 Mock Server）；
-   * 接入 PHP 时改为 PHP 的 API 前缀，业务调用点不变。
+   * API base URL。开发期通常是 `/api`，由 Vite 代理到本仓库的 Server。
+   * 调整部署地址时由应用配置该值，业务调用点不变。
    */
   baseUrl: string
 }

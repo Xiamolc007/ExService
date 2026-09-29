@@ -11,7 +11,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read mock server liveness */
+        /** Read server liveness */
         get: operations["getHealth"];
         put?: never;
         post?: never;
@@ -32,7 +32,7 @@ export interface paths {
         put?: never;
         /**
          * Reserve an image captcha challenge for authentication
-         * @description The local Mock Server returns a placeholder PNG and does not validate captcha submissions yet.
+         * @description The Server returns a placeholder PNG during development and does not validate captcha submissions yet.
          */
         post: operations["createCaptchaChallenge"];
         delete?: never;
@@ -175,7 +175,7 @@ export interface paths {
         };
         /**
          * Download an application proof attachment
-         * @description Local public Mock review access only. Missing or mismatched application/attachment pairs return 404 JOIN_ATTACHMENT_NOT_FOUND. Always download; never preview. Two response slots are acquired before BLOB reads; capacity failure is 503 and Retry-After: 5. A 60 second response deadline terminates started connections without a second JSON response. All responses use no-store.
+         * @description Development review access only. Missing or mismatched application/attachment pairs return 404 JOIN_ATTACHMENT_NOT_FOUND. Always download; never preview. Two response slots are acquired before attachment reads; capacity failure is 503 and Retry-After: 5. A 60 second response deadline terminates started connections without a second JSON response. All responses use no-store.
          */
         get: operations["downloadJoinApplicationAttachment"];
         put?: never;
@@ -831,7 +831,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Mock server is running */
+            /** @description Server is running */
             200: {
                 headers: {
                     [name: string]: unknown;

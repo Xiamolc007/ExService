@@ -2,12 +2,13 @@ extends:
   - recommended
 
 rules:
-  # 设计说明第 3 节明确排除登录、Token、用户、角色与权限，首版 Contract 中不存在
-  # security scheme 可供声明，因此该规则在本项目不适用。
+  # 首版 Contract 未包含认证，因此当时关闭了此规则。当前 Contract 已定义 bearerAuth，
+  # 并逐 operation 声明公开访问或所需认证；此处保留既有 lint 配置。
   security-defined: off
 
-  # 错误响应统一由 api/openapi.yaml 中的 `default` response（ErrorResponse -> ErrorEnvelope）表达。
-  # 额外声明一个 4xx response 会引入第二份错误定义，违反「单一 Contract 错误结构」的设计。
+  # 常规错误由 `default` ErrorResponse 表达；需要重试延迟的 operation 另以显式
+  # 429/503 引用 RetryableErrorResponse。两者共用 ErrorEnvelope，因此不要求
+  # 每个 operation 另行列出显式 4xx response。
   operation-4xx-response: off
 
   # 这是私有项目的内部 API Contract，不是对外发布的 API 描述，仓库也未确定许可证。
