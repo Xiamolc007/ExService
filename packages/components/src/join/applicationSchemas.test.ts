@@ -66,6 +66,7 @@ describe('完整申请规则', () => {
     expect(proofFilesSchema.safeParse([new File([new Uint8Array(10 * 1024 * 1024)], 'proof.zip')]).success).toBe(true)
     expect(proofFilesSchema.safeParse([new File([new Uint8Array(10 * 1024 * 1024 + 1)], 'proof.zip')]).success).toBe(false)
     expect(proofFilesSchema.safeParse([new File(['x'], 'proof.exe')]).success).toBe(false)
+    expect(proofFilesSchema.safeParse([new File(['x'], 'proof?.txt')]).success).toBe(false)
     expect(proofFilesSchema.safeParse([new File([], 'proof.txt')]).success).toBe(false)
     expect(proofFilesSchema.safeParse([{}]).success).toBe(false)
   })

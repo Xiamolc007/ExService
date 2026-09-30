@@ -42,7 +42,7 @@ export const proofFileSchema = z
     (file) =>
       Array.from(file.name).length >= 1 &&
       Array.from(file.name).length <= 255 &&
-      !/[\\/\u0000-\u001f\u007f-\u009f]/u.test(file.name) &&
+      !/[\\/\u0000-\u001f\u007f-\u009f"<>:|?*]/u.test(file.name) &&
       file.name !== "." &&
       file.name !== "..",
     "文件名无效，请重命名后选择",
