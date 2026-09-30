@@ -45,6 +45,20 @@ describe('FileAdapter writes', () => {
     expect(await readBack(fixture, 'a/b/c.bin')).toEqual(Buffer.from([1, 2, 3]))
   })
 
+  it('stores concurrent files under the same initially missing directories', async () => {
+    const { fixture, tmp } = fixtureWithRoot()
+    const keys = Array.from({ length: 16 }, (_, index) => `shared/nested/${index}.bin`)
+    const results = await Promise.allSettled(keys.map((key, index) =>
+      fixture.storage.service.upload(key, new Uint8Array([index, 255])),
+    ))
+
+    expect(results.map(result => result.status)).toEqual(Array(16).fill('fulfilled'))
+    for (const [index, key] of keys.entries()) {
+      expect(await readBack(fixture, key)).toEqual(Buffer.from([index, 255]))
+    }
+    expect(readdirSync(tmp)).toEqual([])
+  })
+
   it('overwrites the same key without keeping versions', async () => {
     const { fixture, uploads } = fixtureWithRoot()
     await fixture.storage.service.upload('same.bin', new Uint8Array([1]))

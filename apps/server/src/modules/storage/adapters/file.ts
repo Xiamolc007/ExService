@@ -94,6 +94,11 @@ export class FileAdapter implements StorageAdapter {
       await mkdir(directory)
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code
+      if (code === 'EEXIST') {
+        // 其他上传可能已创建同一父目录；仍要拒绝文件、符号链接和 junction。
+        const existing = await lstatOrUndefined(directory)
+        if (existing?.isDirectory() && !existing.isSymbolicLink()) return
+      }
       if (code === 'ENOTDIR' || code === 'EEXIST') throw new StorageError('STORAGE_CONFLICT')
       throw new StorageError('INTERNAL_ERROR')
     }
