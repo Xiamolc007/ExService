@@ -2,7 +2,7 @@
 
 本索引记录已接受决策及被取代的历史选择。数据库专属决策集中于 `.ai/databases/decisions/`；当前结构另见 `.ai/architectures/overview.md`。
 
-_最后更新：2026-09-29_
+_最后更新：2026-09-30_
 
 | 决策 | 模块 | 状态 |
 | --- | --- | --- |
@@ -25,5 +25,7 @@ _最后更新：2026-09-29_
 | `.ai/decisions/web/04-settings-state-separate-from-auth-context.md` | Web | 已实现。 |
 | `.ai/decisions/contract-tests/01-assert-raw-handler-output.md` | 测试 | 已接受。 |
 | `.ai/decisions/contract-tests/02-contract-as-sole-schema-source.md` | 测试 | 已接受。 |
+
+存储与 SDK 的运行约束集中于 `.ai/knowledge/storage/lifecycle-traps.md`，本索引不重复记录。
 
 过时决策保留当时理由，但其旧运行指令不适用于当前 Server。公网部署、共享头像和限流、真实邮件、人机验证、备份恢复与监控仍需后续独立设计。
