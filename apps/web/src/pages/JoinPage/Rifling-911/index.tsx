@@ -403,8 +403,11 @@ export function JoinPage() {
               />
               <p className={styles.successLead}>资料提交成功</p>
               <p>
-                申请资料已提交，接下来将等待安排远程语音面试。进行面试后，社区会确认申请结果，请留意后续通知。
+                申请资料已提交，接下来将等待安排远程语音面试。进行面试后，社区会确认申请结果，请留意申请邮箱与后续通知。
               </p>
+              <Button asChild variant="outline">
+                <Link to="/join/result">查询申请结果</Link>
+              </Button>
               <Button disabled>面试预约</Button>
             </section>
           ) : undefined}

@@ -323,6 +323,8 @@ it("submits a complete new payload only on confirmation and waits for server ack
     result.queryByRole("button", { name: "关闭" }),
   ).toBeNull();
   expect(result.getByText(/进行面试后，社区会确认申请结果/)).toBeTruthy();
+  expect(result.getByText(/请留意申请邮箱/)).toBeTruthy();
+  expect(result.getByRole("link", { name: "查询申请结果" }).getAttribute("href")).toBe("/join/result");
 });
 it("retains experienced values and the same File on a failed submit and successful retry", async () => {
   vi.spyOn(ExMessage, "info").mockReturnValue("info");
