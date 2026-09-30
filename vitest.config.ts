@@ -13,6 +13,11 @@ export default defineConfig({
       { find: '@web', replacement: resolve(repositoryRoot, 'apps/web') },
       { find: '@server', replacement: resolve(repositoryRoot, 'apps/server') },
       { find: '@api-client', replacement: resolve(repositoryRoot, 'packages/api-client') },
+      { find: '@sdk', replacement: resolve(repositoryRoot, 'packages/sdk') },
+      // COS 运行库只装在 packages/sdk 与 apps/server 下（同一版本、同一 store 条目）。
+      // 统一解析路径，测试才能用裸包名 mock 掉云 SDK。
+      { find: /^cos-nodejs-sdk-v5$/, replacement: resolve(repositoryRoot, 'packages/sdk/node_modules/cos-nodejs-sdk-v5') },
+      { find: /^cos-js-sdk-v5$/, replacement: resolve(repositoryRoot, 'packages/sdk/node_modules/cos-js-sdk-v5') },
       { find: '@components', replacement: resolve(repositoryRoot, 'packages/components') },
       { find: '@tests', replacement: resolve(repositoryRoot, 'tests') },
       { find: /^react$/, replacement: resolve(webNodeModules, 'react/index.js') },

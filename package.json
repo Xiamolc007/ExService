@@ -13,7 +13,7 @@
     "api:generate": "openapi-typescript api/openapi.yaml -o packages/api-client/src/generated/schema.d.ts",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
-    "build": "pnpm --filter @workspace/web build && pnpm --filter @workspace/server build",
+    "build": "pnpm --filter @workspace/sdk build && pnpm --filter @workspace/web build && pnpm --filter @workspace/server build",
     "db:migrate": "pnpm --filter @workspace/server db:migrate",
     "db:reset": "pnpm --filter @workspace/server db:reset",
     "sso:create": "pnpm --filter @workspace/server sso:create",

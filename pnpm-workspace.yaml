@@ -13,6 +13,9 @@ autoInstallPeers: false
 allowBuilds:
   '@parcel/watcher': true
   better-sqlite3: false
+  # cos-js-sdk-v5 的 postinstall 只在存在 patches/ 目录时执行 `npx patch-package`；
+  # 发行包不带该目录，脚本是无操作，因此显式禁止，不让依赖安装脚本联网。
+  cos-js-sdk-v5: false
   cpu-features: false
   esbuild: true
   protobufjs: true

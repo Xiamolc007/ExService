@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "paths": {
+      "@workspace/api-client": ["../api-client/src/index.ts"],
+      "@api-client/*": ["../api-client/*"]
+    }
+  },
+  "include": ["src"]
+}

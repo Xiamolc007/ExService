@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
+    "noEmit": true,
+    "declaration": false,
+    "paths": {
+      "@workspace/api-client": ["../api-client/src/index.ts"],
+      "@api-client/*": ["../api-client/*"]
+    }
+  },
+  "include": ["src"]
+}
