@@ -209,3 +209,41 @@ it('answers a download that never opens with the 408 envelope', async () => {
   expect(retried.status).toBe(200)
   expect(retried.body.toString()).toBe('later')
 }, 60000)
+
+it('releases a real read that opens after the download timed out', async () => {
+  const storage = fileStorageFixture()
+  storages.push(storage)
+  await storage.storage.service.upload('late.bin', new Uint8Array([1, 2, 3]))
+  let resume!: () => void
+  const pending = new Promise<void>(resolve => { resume = resolve })
+  let lateRead: StoredFileRead | undefined
+  let releases = 0
+  const adapter = {
+    async openRead(key: string): Promise<StoredFileRead> {
+      await pending
+      lateRead = await storage.storage.fileAdapter.openRead(key)
+      const read = lateRead
+      return { ...read, release: async () => { await read.release(); releases++ } }
+    },
+  } as unknown as FileAdapter
+  const { port } = await setup({ download: { deadlineMs: 200 }, fileAdapter: adapter })
+
+  try {
+    const connection = client(port, '/api/storage/files?key=late.bin')
+    connection.req.end()
+    const response = await connection.result
+    expect(response.status).toBe(408)
+    expect(JSON.parse(response.body.toString()).error.code).toBe('STORAGE_TIMEOUT')
+    expect(lateRead).toBeUndefined()
+
+    // 先确认超时响应已结束，再让真实文件句柄打开并返回。
+    resume()
+    await expect.poll(() => lateRead).toBeDefined()
+    await expect.poll(() => releases).toBe(1)
+    expect(lateRead!.stream.destroyed).toBe(true)
+    expect(releases).toBe(1)
+  } finally {
+    resume()
+    if (lateRead !== undefined && releases === 0) await lateRead.release()
+  }
+}, 60000)

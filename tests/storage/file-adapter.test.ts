@@ -111,6 +111,20 @@ describe('FileAdapter writes', () => {
 })
 
 describe('FileAdapter reads', () => {
+  it('releases an unread file without racing descriptor closes', async () => {
+    const { fixture } = fixtureWithRoot()
+    await fixture.storage.service.upload('unread.bin', new Uint8Array([1, 2, 3]))
+    const read = await fixture.storage.fileAdapter.openRead('unread.bin')
+    const errors: unknown[] = []
+    read.stream.on('error', error => errors.push(error))
+    const closed = new Promise<void>(resolve => { read.stream.once('close', resolve) })
+
+    await read.release()
+    await closed
+    expect(read.stream.destroyed).toBe(true)
+    expect(errors).toEqual([])
+  })
+
   it('returns the exact stored bytes and size', async () => {
     const { fixture } = fixtureWithRoot()
     const payload = new Uint8Array(300).map((_, index) => index % 251)

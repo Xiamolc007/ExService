@@ -1,5 +1,4 @@
 import { randomBytes } from 'node:crypto'
-import { createReadStream } from 'node:fs'
 import { lstat, mkdir, open, rename, rm } from 'node:fs/promises'
 import { dirname, resolve, sep } from 'node:path'
 import type { Readable } from 'node:stream'
@@ -150,7 +149,8 @@ export class FileAdapter implements StorageAdapter {
       const stats = await handle.stat()
       if (!stats.isFile()) throw new StorageError('STORAGE_CONFLICT')
       const fileHandle = handle
-      const stream = createReadStream(target, { fd: fileHandle.fd, autoClose: false })
+      // 流与句柄共享关闭状态，避免 destroy 与 FileHandle.close 重复关闭裸 fd。
+      const stream = fileHandle.createReadStream({ autoClose: false })
       return {
         stream,
         bytes: stats.size,

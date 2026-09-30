@@ -41,6 +41,11 @@ export async function getStoredFile(request: FastifyRequest, reply: FastifyReply
   void reply.header('Cache-Control', 'no-store')
   const key = assertStorageKey((request.query as { key?: unknown }).key)
   const read = await request.server.storageServices.fileAdapter.openRead(key)
+  // 等待打开期间可能已超时或断开；此时 close 已发生，不能再靠监听器回收。
+  if (reply.sent || reply.raw.writableEnded || reply.raw.destroyed) {
+    await read.release()
+    return reply
+  }
   void reply.header('Content-Length', String(read.bytes))
   void reply.header('Content-Disposition', `attachment; filename=${quotedStringFilename(lastKeySegment(key))}`)
   void reply.header('X-Content-Type-Options', 'nosniff')
