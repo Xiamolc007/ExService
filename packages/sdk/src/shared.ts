@@ -74,6 +74,14 @@ function assertBaseUrl(baseUrl: string, requireAbsolute: boolean): void {
   }
 }
 
+async function apiRequest<T>(pending: Promise<T>): Promise<T> {
+  try {
+    return await pending
+  } catch (cause) {
+    throw toStorageSdkError({ cause })
+  }
+}
+
 /**
  * 上传协调：归一化输入 → prepare → 按返回 medium 固定本次介质
  * → file multipart，或 COS PutObject 后 complete → 只返回 URL。
@@ -99,7 +107,7 @@ export function createStorageSdk(options: SdkOptions, transport: CosTransport, r
     const bytes = await toBytes(data)
     const contentType = resolveContentType(uploadOptions.contentType, data instanceof Uint8Array ? undefined : data.type)
 
-    const prepared = await client.POST('/storage/uploads/prepare', {
+    const prepared = await apiRequest(client.POST('/storage/uploads/prepare', {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       headers: await headers(),
       body: {
@@ -108,7 +116,7 @@ export function createStorageSdk(options: SdkOptions, transport: CosTransport, r
         contentType,
         ...(uploadOptions.medium === undefined ? {} : { medium: uploadOptions.medium }),
       },
-    })
+    }))
     if (prepared.error !== undefined || prepared.data === undefined) {
       throw toStorageSdkError({ error: prepared.error, status: prepared.response.status })
     }
@@ -130,11 +138,11 @@ export function createStorageSdk(options: SdkOptions, transport: CosTransport, r
       } catch (cause) {
         throw toStorageSdkError({ cause })
       }
-      const completed = await client.POST('/storage/uploads/complete', {
+      const completed = await apiRequest(client.POST('/storage/uploads/complete', {
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         headers: await headers(),
         body: { key: plan.key, uploadTicket: plan.uploadTicket },
-      })
+      }))
       if (completed.error !== undefined || completed.data === undefined) {
         throw toStorageSdkError({ error: completed.error, status: completed.response.status })
       }
@@ -149,14 +157,14 @@ export function createStorageSdk(options: SdkOptions, transport: CosTransport, r
     form.append('contentType', contentType)
     form.append('data', new Blob([new Uint8Array(bytes)], { type: contentType }), key.split('/').pop() ?? key)
 
-    const uploaded = await client.POST('/storage/uploads', {
+    const uploaded = await apiRequest(client.POST('/storage/uploads', {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       headers: await headers(),
       // 生成类型把 `data` 描述为 string（format: binary）；实际请求体是 FormData，
       // 由 openapi-fetch 原样透传并让运行时补齐带 boundary 的 Content-Type。
       body: form as unknown as { key: string; data: string },
       bodySerializer: value => value as unknown as string,
-    })
+    }))
     if (uploaded.error !== undefined || uploaded.data === undefined) {
       throw toStorageSdkError({ error: uploaded.error, status: uploaded.response.status })
     }

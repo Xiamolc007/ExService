@@ -194,6 +194,42 @@ describe('SDK cos branch', () => {
 })
 
 describe('SDK error mapping', () => {
+  const stages = [
+    { stage: 'prepare', path: '/api/storage/uploads/prepare', medium: 'file', requests: ['/api/storage/uploads/prepare'], puts: 0 },
+    { stage: 'upload', path: '/api/storage/uploads', medium: 'file', requests: ['/api/storage/uploads/prepare', '/api/storage/uploads'], puts: 0 },
+    { stage: 'complete', path: '/api/storage/uploads/complete', medium: 'cos', requests: ['/api/storage/uploads/prepare', '/api/storage/uploads/complete'], puts: 1 },
+  ]
+  const failures = [
+    { failure: 'network', cause: new TypeError('fetch failed'), code: 'NETWORK' },
+    { failure: 'timeout', cause: new DOMException('deadline expired', 'TimeoutError'), code: 'TIMEOUT' },
+    { failure: 'abort', cause: new DOMException('request aborted', 'AbortError'), code: 'TIMEOUT' },
+  ]
+
+  it.each(stages.flatMap(stage => failures.map(failure => ({ ...stage, ...failure }))))(
+    'maps $failure errors during $stage without retrying or continuing',
+    async ({ path, medium, requests, puts, cause, code }) => {
+      responder = url => {
+        if (url === path) throw cause
+        return {
+          status: 200,
+          body: medium === 'file'
+            ? { medium: 'file', maxBytes: 1024 }
+            : { medium: 'cos', maxBytes: 1024, bucket: 'exre-1250000000', region: 'ap-guangzhou',
+              key: 'a.bin', credentials: CREDENTIALS, uploadTicket: 'ticket-value' },
+        }
+      }
+
+      const error = await sdk().storage.upload('a.bin', new Uint8Array([1])).then(
+        () => { throw new Error('expected failure') },
+        (error: unknown) => error,
+      )
+      expect(error).toBeInstanceOf(StorageSdkError)
+      expect(error).toMatchObject({ code })
+      expect(calls.map(call => call.url)).toEqual(requests)
+      expect(putObject).toHaveBeenCalledTimes(puts)
+    },
+  )
+
   it('maps server codes, status and requestId onto StorageSdkError', async () => {
     responder = () => ({ status: 413, body: { error: { code: 'STORAGE_TOO_LARGE', message: '内容超过允许的大小。', requestId: 'req-1' } } })
     const error = await sdk().storage.upload('a.bin', new Uint8Array([1]))
