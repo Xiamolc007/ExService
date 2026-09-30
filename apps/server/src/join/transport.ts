@@ -1,7 +1,8 @@
 import type { IncomingMessage } from 'node:http'
-import { Transform, type Readable } from 'node:stream'
+import type { Readable, Transform } from 'node:stream'
 import type { FastifyInstance, FastifyRequest, FastifyReply, RouteOptions } from 'fastify'
 import { AuthError } from '@server/src/auth/errors.js'
+import { MultipartWireCounter, multipartBoundary, type MultipartWireErrors } from '@server/src/http/multipart-counter.js'
 import { normalizeJoinApplicationPayload } from '@server/src/join/form-validation.js'
 import type { JoinProofInput } from '@server/src/join/attachment-validation.js'
 
@@ -9,6 +10,13 @@ interface UploadLimits {
   wireBytes: number; jsonBytes: number; fileBytes: number; totalFileBytes: number
   proofs: number; parts: number; fieldNameBytes: number; headerPairs: number
   headerBytes: number; slots: number; deadlineMs: number
+}
+
+/** 受控 wire 计数器按 join 的错误分类抛错：413 超限、415 非 multipart、400 结构非法。 */
+const JOIN_WIRE_ERRORS: MultipartWireErrors = {
+  tooLarge: () => new AuthError('JOIN_UPLOAD_TOO_LARGE'),
+  malformed: () => new AuthError('BAD_REQUEST'),
+  unsupportedMediaType: () => new AuthError('JOIN_UNSUPPORTED_MEDIA_TYPE'),
 }
 interface DownloadLimits { slots: number; deadlineMs: number }
 interface UploadContext {
@@ -46,71 +54,6 @@ function appendHook<K extends 'onRequest' | 'preParsing' | 'preValidation' | 'on
   const previous = route[key]
   // Each stage keeps existing Glue/consumer hooks in their declared order.
   Object.assign(route, { [key]: [...(previous === undefined ? [] : Array.isArray(previous) ? previous : [previous]), hook] })
-}
-
-/** Enforces header budgets before busboy, whose header parser otherwise truncates excess headers. */
-class MultipartCounter extends Transform {
-  receivedEncodedLength = 0
-  private pending = Buffer.alloc(0)
-  private phase: 'preamble' | 'headers' | 'body' | 'suffix' | 'done' = 'preamble'
-  private readonly boundary: Buffer
-  private readonly firstBoundary: Buffer
-  constructor(boundary: string, private readonly limits: UploadLimits) {
-    super()
-    this.boundary = Buffer.from(`\r\n--${boundary}`)
-    this.firstBoundary = Buffer.from(`--${boundary}`)
-  }
-  override _transform(chunk: Buffer, _encoding: BufferEncoding, callback: (error?: Error | null, data?: Buffer) => void): void {
-    try {
-      this.receivedEncodedLength += chunk.length
-      if (this.receivedEncodedLength > this.limits.wireBytes) throw new AuthError('JOIN_UPLOAD_TOO_LARGE')
-      this.scan(chunk)
-      callback(null, chunk)
-    } catch (error) { callback(error as Error) }
-  }
-  private scan(chunk: Buffer): void {
-    this.pending = Buffer.concat([this.pending, chunk])
-    for (;;) {
-      if (this.phase === 'done') { this.pending = Buffer.alloc(0); return }
-      if (this.phase === 'preamble') {
-        const index = this.pending.indexOf(this.firstBoundary)
-        if (index < 0) { this.pending = this.pending.subarray(Math.max(0, this.pending.length - this.firstBoundary.length)); return }
-        this.pending = this.pending.subarray(index + this.firstBoundary.length); this.phase = 'suffix'
-      } else if (this.phase === 'suffix') {
-        if (this.pending.length < 2) return
-        if (this.pending.subarray(0, 2).equals(Buffer.from('--'))) { this.phase = 'done'; continue }
-        if (!this.pending.subarray(0, 2).equals(Buffer.from('\r\n'))) throw new AuthError('BAD_REQUEST')
-        this.pending = this.pending.subarray(2); this.phase = 'headers'
-      } else if (this.phase === 'headers') {
-        const end = this.pending.indexOf('\r\n\r\n')
-        if ((end < 0 ? this.pending.length : end + 4) > this.limits.headerBytes) throw new AuthError('JOIN_UPLOAD_TOO_LARGE')
-        if (end < 0) return
-        const lines = this.pending.subarray(0, end).toString('latin1').split('\r\n')
-        if (lines.length > this.limits.headerPairs) throw new AuthError('JOIN_UPLOAD_TOO_LARGE')
-        if (lines.some(line => !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+:/.test(line))) throw new AuthError('BAD_REQUEST')
-        this.pending = this.pending.subarray(end + 4); this.phase = 'body'
-      } else {
-        const index = this.pending.indexOf(this.boundary)
-        if (index < 0) { this.pending = this.pending.subarray(Math.max(0, this.pending.length - this.boundary.length - 2)); return }
-        // Only delimiter suffixes count; the same bytes can occur inside a file.
-        const suffix = this.pending.subarray(index + this.boundary.length, index + this.boundary.length + 2)
-        if (suffix.length < 2) { this.pending = this.pending.subarray(index); return }
-        if (!suffix.equals(Buffer.from('--')) && !suffix.equals(Buffer.from('\r\n'))) {
-          this.pending = this.pending.subarray(index + 2); continue
-        }
-        this.pending = this.pending.subarray(index + this.boundary.length); this.phase = 'suffix'
-      }
-    }
-  }
-}
-
-function multipartBoundary(request: FastifyRequest): string {
-  const contentType = request.headers['content-type']
-  if (typeof contentType !== 'string' || !/^multipart\/form-data(?:\s*;|$)/i.test(contentType)) throw new AuthError('JOIN_UNSUPPORTED_MEDIA_TYPE')
-  const match = /(?:^|;)\s*boundary=(?:"([^"\r\n]+)"|([^;\s]+))/i.exec(contentType)
-  const boundary = match?.[1] ?? match?.[2]
-  if (boundary === undefined || boundary.length > 200 || /[\r\n]/.test(boundary)) throw new AuthError('BAD_REQUEST')
-  return boundary
 }
 
 function destroyUpload(context: UploadContext): void {
@@ -187,7 +130,7 @@ export function registerJoinTransport(app: FastifyInstance): void {
       appendHook(route, 'onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
         void reply.header('Cache-Control', 'no-store')
         request.server.invitationServices.limit(request.ip)
-        const boundary = multipartBoundary(request)
+        const boundary = multipartBoundary(request.headers['content-type'], JOIN_WIRE_ERRORS)
         if (activeUploads >= limits.slots) throw new AuthError('JOIN_UPLOAD_BUSY', { retryAfterSeconds: 5 })
         const length = request.headers['content-length']
         if (length !== undefined && (!/^\d+$/.test(length) || Number(length) > limits.wireBytes)) throw new AuthError('JOIN_UPLOAD_TOO_LARGE')
@@ -213,7 +156,7 @@ export function registerJoinTransport(app: FastifyInstance): void {
         timer.unref()
         original.once('aborted', abort); reply.raw.once('close', close)
         uploads.set(request, context)
-        context.counter = new MultipartCounter(boundary, limits)
+        context.counter = new MultipartWireCounter(boundary, limits, JOIN_WIRE_ERRORS)
         context.counter.on('error', error => {
           context.failure ??= error instanceof AuthError ? error : new AuthError('BAD_REQUEST')
           if (!context.parsing && !reply.sent) void reply.send(context.failure)

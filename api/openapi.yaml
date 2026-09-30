@@ -15,6 +15,8 @@ tags:
     description: Server 自身运行状态。
   - name: authentication
     description: 本地账号、会话与 SSO 接收端能力。
+  - name: storage
+    description: 通用内容存储的上传、直传确认与本地公开读取。
 paths:
   /health:
     get:
@@ -764,6 +766,176 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         default:
           $ref: '#/components/responses/ErrorResponse'
+  /storage/uploads/prepare:
+    post:
+      operationId: prepareStorageUpload
+      summary: Resolve the upload plan for one storage key
+      description: Server selects the medium for this call from runtime configuration unless the caller pins medium. The file branch only returns the current byte ceiling. The cos branch validates configuration, key, declared size and media type before requesting scoped STS credentials and signing the upload ticket, and returns no partial credentials when any step fails. Credentials authorize exactly one key for PutObject. All responses use no-store.
+      security:
+        - bearerAuth: []
+      tags: [storage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrepareStorageUploadRequest'
+      responses:
+        '200':
+          description: Upload plan for the resolved medium
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrepareStorageUploadResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '502':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /storage/uploads:
+    post:
+      operationId: uploadStorageContent
+      summary: Upload content through the server and return its URL
+      description: Multipart with exactly one binary data part plus keyword text fields in any order. Repeated fields, unknown fields, more than one file, a missing data part, an invalid media type and a non-multipart request are rejected. An explicit contentType wins, otherwise the part media type is used, otherwise application/octet-stream. The filename never selects the stored path. Bearer authentication completes before any content is consumed. Byte and wire ceilings are enforced while parsing, not from the supplied Content-Length. Two failures answer 503 — exhausted upload slots (STORAGE_BUSY) carries Retry-After, a requested medium that is not enabled (STORAGE_UNAVAILABLE) does not. All responses use no-store.
+      security:
+        - bearerAuth: []
+      tags: [storage]
+      x-fastify-config:
+        storageUpload:
+          wireOverheadBytes: 65536
+          fieldBytes: 512
+          fields: 3
+          files: 1
+          fieldNameBytes: 32
+          headerPairs: 32
+          headerBytes: 16384
+          slots: 2
+          deadlineMs: 120000
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/StorageUploadRequest'
+            encoding:
+              data:
+                contentType: '*/*'
+      responses:
+        '200':
+          description: Stored content URL
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageUploadResult'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '408':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '415':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /storage/uploads/complete:
+    post:
+      operationId: completeStorageUpload
+      summary: Confirm a direct cos upload and issue its URL
+      description: Verifies the ticket length and structure, the fixed HMAC algorithm, the signature, the version and validity window, the current session user, the key against the current bucket and region, and the current size ceiling before querying the object. Never issues a request from a region or bucket taken from an unverified ticket. A size above the ceiling returns 413 and a different size than declared returns 409. The client cannot submit a bucket, download host, URL or existence flag. All responses use no-store.
+      security:
+        - bearerAuth: []
+      tags: [storage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteStorageUploadRequest'
+      responses:
+        '200':
+          description: Stored content URL
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageUploadResult'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '502':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /storage/files:
+    get:
+      operationId: getStoredFile
+      summary: Read one object from the local file medium
+      description: Public read of the local uploads root only. Directories are never returned as files. Range is unsupported in this version and a Range request still returns the full 200 body. Bytes are sent as application/octet-stream with attachment disposition and MIME sniffing disabled. Failures before the headers are flushed return the error envelope; a failure afterwards terminates the connection instead of appending JSON. The implicit HEAD route stays closed because the contract does not declare it.
+      security: []
+      tags: [storage]
+      x-fastify-config:
+        storageDownload:
+          deadlineMs: 120000
+      parameters:
+        - name: key
+          in: query
+          required: true
+          description: Relative storage path previously used for the upload.
+          schema:
+            $ref: '#/components/schemas/StorageKey'
+      responses:
+        '200':
+          description: Stored object bytes
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+            Content-Disposition:
+              $ref: '#/components/headers/ContentDisposition'
+            X-Content-Type-Options:
+              $ref: '#/components/headers/ContentTypeOptions'
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '408':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
 components:
   securitySchemes:
     bearerAuth:
@@ -782,6 +954,15 @@ components:
       schema:
         type: string
         pattern: '^[1-9][0-9]*$'
+    ContentDisposition:
+      description: Always attachment; the filename is the last validated key segment, encoded as a quoted-string.
+      schema:
+        type: string
+    ContentTypeOptions:
+      description: Disables MIME sniffing so stored bytes are never rendered inline.
+      schema:
+        type: string
+        const: nosniff
   responses:
     ErrorResponse:
       description: Safe application error response
@@ -1921,6 +2102,110 @@ components:
       required: [status]
       properties:
         status: {type: string, const: ok}
+    StorageKey:
+      type: string
+      minLength: 1
+      maxLength: 240
+      pattern: '^[a-z0-9](?:[a-z0-9._-]*[a-z0-9_-])?(?:/[a-z0-9](?:[a-z0-9._-]*[a-z0-9_-])?)*$'
+      description: 相对存储路径，以 `/` 分段；每段只含小写字母、数字、点、下划线与连字符，段首为字母或数字且段尾不得为点。服务端另外逐段拒绝 Windows 保留设备名，并核对解析路径仍位于 uploads 根目录内；不清洗、不自动小写、不二次 URL 解码。
+    StorageMedium:
+      type: string
+      enum: [file, cos]
+      description: 目标存储介质；缺省时取运行时配置 STORAGE_DEFAULT_ADAPTER，不回退。
+    StorageContentType:
+      type: string
+      minLength: 1
+      maxLength: 127
+      pattern: "^[A-Za-z0-9!#$%&'*+.^_`|~-]+/[A-Za-z0-9!#$%&'*+.^_`|~-]+$"
+      description: 无参数的 ASCII `type/subtype` 内容声明。服务端不据此验证真实文件格式，也不按后缀推断类型。
+    StorageByteSize:
+      type: integer
+      minimum: 0
+      maximum: 9007199254740991
+      description: 字节数；上界是 JS 安全整数，实际仍另受运行时 STORAGE_MAX_BYTES 限制。
+    StorageUnixSeconds:
+      type: integer
+      minimum: 0
+      maximum: 9007199254740991
+      description: Unix 秒时间戳；与 SafeTimestamp 取值域相同，仅单位与语义不同。
+    StorageUploadTicket:
+      type: string
+      minLength: 1
+      maxLength: 4096
+      description: 服务器用独立 HMAC 密钥签发的无状态上传凭据，绑定版本、用户、bucket、region、key、申报大小、内容类型与有效期。不写入日志，不缓存。
+    StorageUploadCredential:
+      type: object
+      additionalProperties: false
+      required: [tmpSecretId, tmpSecretKey, securityToken, startTime, expiredTime]
+      properties:
+        tmpSecretId: {type: string, minLength: 1, maxLength: 256}
+        tmpSecretKey: {type: string, minLength: 1, maxLength: 256}
+        securityToken: {type: string, minLength: 1, maxLength: 4096}
+        startTime: {$ref: '#/components/schemas/StorageUnixSeconds'}
+        expiredTime: {$ref: '#/components/schemas/StorageUnixSeconds'}
+    PrepareStorageUploadRequest:
+      type: object
+      additionalProperties: false
+      required: [key, size, contentType]
+      properties:
+        key: {$ref: '#/components/schemas/StorageKey'}
+        size: {$ref: '#/components/schemas/StorageByteSize'}
+        contentType: {$ref: '#/components/schemas/StorageContentType'}
+        medium: {$ref: '#/components/schemas/StorageMedium'}
+    StorageFileUploadPlan:
+      type: object
+      additionalProperties: false
+      required: [medium, maxBytes]
+      properties:
+        medium: {type: string, const: file}
+        maxBytes: {$ref: '#/components/schemas/StorageByteSize'}
+    StorageCosUploadPlan:
+      type: object
+      additionalProperties: false
+      required: [medium, maxBytes, bucket, region, key, credentials, uploadTicket]
+      properties:
+        medium: {type: string, const: cos}
+        maxBytes: {$ref: '#/components/schemas/StorageByteSize'}
+        bucket: {type: string, minLength: 1, maxLength: 128}
+        region: {type: string, minLength: 1, maxLength: 64}
+        key: {$ref: '#/components/schemas/StorageKey'}
+        credentials: {$ref: '#/components/schemas/StorageUploadCredential'}
+        uploadTicket: {$ref: '#/components/schemas/StorageUploadTicket'}
+    PrepareStorageUploadResponse:
+      description: 按 medium const 区分的封闭联合；file 分支不签发任何凭据。
+      oneOf:
+        - $ref: '#/components/schemas/StorageFileUploadPlan'
+        - $ref: '#/components/schemas/StorageCosUploadPlan'
+    StorageUploadRequest:
+      description: 仅用于 multipart。恰好一个二进制 data part，以及限定的 key、medium、contentType 文本字段；重复字段、未知字段、多文件与截断都被拒绝。data 的值是由解析器生成的占位标识，handler 必须核对可信解析上下文，伪造的 JSON 占位不能绕过真实解析。
+      type: object
+      additionalProperties: false
+      required: [key, data]
+      properties:
+        key: {$ref: '#/components/schemas/StorageKey'}
+        medium: {$ref: '#/components/schemas/StorageMedium'}
+        contentType: {$ref: '#/components/schemas/StorageContentType'}
+        data:
+          type: string
+          format: binary
+    CompleteStorageUploadRequest:
+      type: object
+      additionalProperties: false
+      required: [key, uploadTicket]
+      properties:
+        key: {$ref: '#/components/schemas/StorageKey'}
+        uploadTicket: {$ref: '#/components/schemas/StorageUploadTicket'}
+    StorageUploadResult:
+      type: object
+      additionalProperties: false
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+          minLength: 1
+          maxLength: 2048
+          description: 绝对 HTTP(S) 地址。本地 URL 由配置的公开 API 基址生成，在服务器可达期间有效；COS URL 是签发起一年的签名地址，不提供续签。
     ErrorEnvelope:
       type: object
       additionalProperties: false

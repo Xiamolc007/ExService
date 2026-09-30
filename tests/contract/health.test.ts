@@ -116,7 +116,7 @@ const authFixtures: TestAuth[] = []
 async function createTestApp() {
   const fixture = await createTestAuth()
   authFixtures.push(fixture)
-  const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices, authServices: fixture.authServices, profileServices: fixture.profileServices, logger: false })
+  const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices, authServices: fixture.authServices, profileServices: fixture.profileServices, storageServices: fixture.storageServices, logger: false })
   runningApps.push(app)
   return app
 }

@@ -4,7 +4,9 @@ import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyServerO
 import openapiGlue from 'fastify-openapi-glue'
 import multipart from '@fastify/multipart'
 import { registerJoinTransport } from '@server/src/join/transport.js'
-import { AuthError } from '@server/src/auth/errors.js'
+import { authenticateBearer } from '@server/src/auth/bearer.js'
+import { registerStorageTransport } from '@server/src/modules/storage/transport.js'
+import type { StorageServices } from '@server/src/modules/storage/factory.js'
 import type { JoinService } from '@server/src/join/service.js'
 import type { InvitationService } from '@server/src/invitations/service.js'
 import * as joinHandlers from '@server/src/handlers/join.js'
@@ -22,6 +24,12 @@ import {
 } from '@server/src/handlers/auth.js'
 import { getHealth } from '@server/src/handlers/health.js'
 import { getAvatarImage, updateCurrentUser, uploadCurrentUserAvatar } from '@server/src/handlers/profile.js'
+import {
+  completeStorageUpload,
+  getStoredFile,
+  prepareStorageUpload,
+  uploadStorageContent,
+} from '@server/src/modules/storage/handlers.js'
 
 /**
  * Fastify 路由前缀。Contract 的 `servers[0].url` 只描述客户端 base URL，
@@ -41,6 +49,11 @@ export interface CreateAppOptions {
   invitationServices: InvitationService
   authServices: AuthService
   profileServices: ProfileService
+  /**
+   * 存储模块由 `server.ts` 在监听前按环境变量组装后注入；
+   * 测试注入临时目录与 fake COS，不写开发数据。
+   */
+  storageServices: StorageServices
   /**
    * 测试中保持静默；`server.ts` 开启日志，以便用 requestId 关联日志与响应。
    */
@@ -68,6 +81,10 @@ export const serviceHandlers = {
   inspectSsoRequest,
   loginForSso,
   confirmSsoWithSession,
+  prepareStorageUpload,
+  uploadStorageContent,
+  completeStorageUpload,
+  getStoredFile,
 } as const
 
 /**
@@ -76,7 +93,7 @@ export const serviceHandlers = {
  * 路由、method、输入校验与响应 schema 全部来自 `api/openapi.yaml`：
  * 这里不手写任何 `app.get(...)`，也不从 Fastify schema 反向生成 OpenAPI。
  */
-export function createApp({ authServices, profileServices, joinServices, invitationServices, logger = false }: CreateAppOptions): FastifyInstance {
+export function createApp({ authServices, profileServices, joinServices, invitationServices, storageServices, logger = false }: CreateAppOptions): FastifyInstance {
   const app = Fastify({
     logger,
     bodyLimit: 4 * 1024 * 1024,
@@ -92,10 +109,12 @@ export function createApp({ authServices, profileServices, joinServices, invitat
   app.decorate('invitationServices', invitationServices)
   app.decorate('authServices', authServices)
   app.decorate('profileServices', profileServices)
+  app.decorate('storageServices', storageServices)
   app.decorateRequest('authSession', undefined)
   registerErrorHandlers(app)
   app.register(multipart)
   registerJoinTransport(app)
+  registerStorageTransport(app, { maxBytes: storageServices.config.maxBytes })
 
   app.addHook('preValidation', (request, _reply, done) => {
     if (typeof request.body === 'object' && request.body !== null && !Array.isArray(request.body)) {
@@ -115,15 +134,10 @@ export function createApp({ authServices, profileServices, joinServices, invitat
     prefix: API_PREFIX,
     serviceHandlers,
     securityHandlers: {
+      // 与 storage transport 的认证前移共用同一个函数，不另建认证协议。
+      // 上传场景中 Glue 在 preHandler 再复核一次，以处理上传期间会话过期或撤销。
       async bearerAuth(request: FastifyRequest) {
-        const authorization = request.headers.authorization
-        const match = typeof authorization === 'string'
-          ? /^Bearer ([A-Za-z0-9_-]{43})$/.exec(authorization)
-          : null
-        if (match?.[1] === undefined) {
-          throw new AuthError('SESSION_INVALID')
-        }
-        request.authSession = await authServices.authenticateToken(match[1])
+        await authenticateBearer(request, authServices)
       },
     },
   })

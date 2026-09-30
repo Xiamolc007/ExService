@@ -24,6 +24,7 @@ const injectFailure = (f: TestAuth, table: string, at = 1) => {
   }), mode))
 }
 
+
 it('persists both complete categories, normalized declared text and exact optional attachment bytes', async () => {
   const f = await setup(), input = experiencedJoinApplication('  EXPERIENCED@EXAMPLE.COM  ')
   input.nickname = '  😀  '; input.form.freeTime = '  周末  '; input.form.answers.leaveReason = '  自由填写\n第二行  '

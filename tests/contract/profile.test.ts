@@ -21,7 +21,7 @@ afterEach(async () => {
 async function setup(createUserId?: () => string) {
   const fixture = await createTestAuth(createUserId ? { createUserId } : {})
   fixtures.push(fixture)
-  const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices, authServices: fixture.authServices, profileServices: fixture.profileServices })
+  const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices, authServices: fixture.authServices, profileServices: fixture.profileServices, storageServices: fixture.storageServices })
   apps.push(app)
   return { fixture, app }
 }
@@ -285,7 +285,7 @@ describe('profile contract operations', () => {
     const blockedPath = `${fixture.avatarDirectory}/blocked`
     writeFileSync(blockedPath, 'not a directory')
     const profileServices = new ProfileService(fixture.db, blockedPath)
-    const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices, authServices: fixture.authServices, profileServices })
+    const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices, authServices: fixture.authServices, profileServices, storageServices: fixture.storageServices })
     apps.push(app)
     const response = await app.inject({ method: 'POST', url: '/api/auth/me/avatar',
       headers: { authorization }, payload: { mediaType: 'image/png', imageBase64: PNG } })

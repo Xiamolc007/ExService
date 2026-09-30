@@ -391,6 +391,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/storage/uploads/prepare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve the upload plan for one storage key
+         * @description Server selects the medium for this call from runtime configuration unless the caller pins medium. The file branch only returns the current byte ceiling. The cos branch validates configuration, key, declared size and media type before requesting scoped STS credentials and signing the upload ticket, and returns no partial credentials when any step fails. Credentials authorize exactly one key for PutObject. All responses use no-store.
+         */
+        post: operations["prepareStorageUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload content through the server and return its URL
+         * @description Multipart with exactly one binary data part plus keyword text fields in any order. Repeated fields, unknown fields, more than one file, a missing data part, an invalid media type and a non-multipart request are rejected. An explicit contentType wins, otherwise the part media type is used, otherwise application/octet-stream. The filename never selects the stored path. Bearer authentication completes before any content is consumed. Byte and wire ceilings are enforced while parsing, not from the supplied Content-Length. Two failures answer 503 — exhausted upload slots (STORAGE_BUSY) carries Retry-After, a requested medium that is not enabled (STORAGE_UNAVAILABLE) does not. All responses use no-store.
+         */
+        post: operations["uploadStorageContent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/uploads/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm a direct cos upload and issue its URL
+         * @description Verifies the ticket length and structure, the fixed HMAC algorithm, the signature, the version and validity window, the current session user, the key against the current bucket and region, and the current size ceiling before querying the object. Never issues a request from a region or bucket taken from an unverified ticket. A size above the ceiling returns 413 and a different size than declared returns 409. The client cannot submit a bucket, download host, URL or existence flag. All responses use no-store.
+         */
+        post: operations["completeStorageUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one object from the local file medium
+         * @description Public read of the local uploads root only. Directories are never returned as files. Range is unsupported in this version and a Range request still returns the full 200 body. Bytes are sent as application/octet-stream with attachment disposition and MIME sniffing disabled. Failures before the headers are flushed return the error envelope; a failure afterwards terminates the connection instead of appending JSON. The implicit HEAD route stays closed because the contract does not declare it.
+         */
+        get: operations["getStoredFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -784,6 +864,70 @@ export interface components {
             /** @constant */
             status: "ok";
         };
+        /** @description 相对存储路径，以 `/` 分段；每段只含小写字母、数字、点、下划线与连字符，段首为字母或数字且段尾不得为点。服务端另外逐段拒绝 Windows 保留设备名，并核对解析路径仍位于 uploads 根目录内；不清洗、不自动小写、不二次 URL 解码。 */
+        StorageKey: string;
+        /**
+         * @description 目标存储介质；缺省时取运行时配置 STORAGE_DEFAULT_ADAPTER，不回退。
+         * @enum {string}
+         */
+        StorageMedium: "file" | "cos";
+        /** @description 无参数的 ASCII `type/subtype` 内容声明。服务端不据此验证真实文件格式，也不按后缀推断类型。 */
+        StorageContentType: string;
+        /** @description 字节数；上界是 JS 安全整数，实际仍另受运行时 STORAGE_MAX_BYTES 限制。 */
+        StorageByteSize: number;
+        /** @description Unix 秒时间戳；与 SafeTimestamp 取值域相同，仅单位与语义不同。 */
+        StorageUnixSeconds: number;
+        /** @description 服务器用独立 HMAC 密钥签发的无状态上传凭据，绑定版本、用户、bucket、region、key、申报大小、内容类型与有效期。不写入日志，不缓存。 */
+        StorageUploadTicket: string;
+        StorageUploadCredential: {
+            tmpSecretId: string;
+            tmpSecretKey: string;
+            securityToken: string;
+            startTime: components["schemas"]["StorageUnixSeconds"];
+            expiredTime: components["schemas"]["StorageUnixSeconds"];
+        };
+        PrepareStorageUploadRequest: {
+            key: components["schemas"]["StorageKey"];
+            size: components["schemas"]["StorageByteSize"];
+            contentType: components["schemas"]["StorageContentType"];
+            medium?: components["schemas"]["StorageMedium"];
+        };
+        StorageFileUploadPlan: {
+            /** @constant */
+            medium: "file";
+            maxBytes: components["schemas"]["StorageByteSize"];
+        };
+        StorageCosUploadPlan: {
+            /** @constant */
+            medium: "cos";
+            maxBytes: components["schemas"]["StorageByteSize"];
+            bucket: string;
+            region: string;
+            key: components["schemas"]["StorageKey"];
+            credentials: components["schemas"]["StorageUploadCredential"];
+            uploadTicket: components["schemas"]["StorageUploadTicket"];
+        };
+        /** @description 按 medium const 区分的封闭联合；file 分支不签发任何凭据。 */
+        PrepareStorageUploadResponse: components["schemas"]["StorageFileUploadPlan"] | components["schemas"]["StorageCosUploadPlan"];
+        /** @description 仅用于 multipart。恰好一个二进制 data part，以及限定的 key、medium、contentType 文本字段；重复字段、未知字段、多文件与截断都被拒绝。data 的值是由解析器生成的占位标识，handler 必须核对可信解析上下文，伪造的 JSON 占位不能绕过真实解析。 */
+        StorageUploadRequest: {
+            key: components["schemas"]["StorageKey"];
+            medium?: components["schemas"]["StorageMedium"];
+            contentType?: components["schemas"]["StorageContentType"];
+            /** Format: binary */
+            data: string;
+        };
+        CompleteStorageUploadRequest: {
+            key: components["schemas"]["StorageKey"];
+            uploadTicket: components["schemas"]["StorageUploadTicket"];
+        };
+        StorageUploadResult: {
+            /**
+             * Format: uri
+             * @description 绝对 HTTP(S) 地址。本地 URL 由配置的公开 API 基址生成，在服务器可达期间有效；COS URL 是签发起一年的签名地址，不提供续签。
+             */
+            url: string;
+        };
         ErrorEnvelope: {
             error: {
                 code: string;
@@ -822,6 +966,10 @@ export interface components {
         CacheControl: "no-store";
         /** @description Whole seconds before a retry is allowed. */
         RetryAfter: string;
+        /** @description Always attachment; the filename is the last validated key segment, encoded as a quoted-string. */
+        ContentDisposition: string;
+        /** @description Disables MIME sniffing so stored bytes are never rendered inline. */
+        ContentTypeOptions: "nosniff";
     };
     pathItems: never;
 }
@@ -1474,6 +1622,133 @@ export interface operations {
             404: components["responses"]["ErrorResponse"];
             409: components["responses"]["ErrorResponse"];
             410: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    prepareStorageUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrepareStorageUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Upload plan for the resolved medium */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrepareStorageUploadResponse"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            502: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    uploadStorageContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["StorageUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Stored content URL */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageUploadResult"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            408: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            413: components["responses"]["ErrorResponse"];
+            415: components["responses"]["ErrorResponse"];
+            500: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    completeStorageUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompleteStorageUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Stored content URL */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageUploadResult"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            403: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            413: components["responses"]["ErrorResponse"];
+            502: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    getStoredFile: {
+        parameters: {
+            query: {
+                /** @description Relative storage path previously used for the upload. */
+                key: components["schemas"]["StorageKey"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stored object bytes */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Content-Disposition": components["headers"]["ContentDisposition"];
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            408: components["responses"]["ErrorResponse"];
             default: components["responses"]["ErrorResponse"];
         };
     };

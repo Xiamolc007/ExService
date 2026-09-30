@@ -7,6 +7,8 @@ import { ProfileService } from '@server/src/profile/service'
 import { InvitationService, type InvitationServiceDependencies } from '@server/src/invitations/service'
 import type { InvitationMail } from '@server/src/invitations/mail'
 import { JoinService } from '@server/src/join/service'
+import { createStorageModule } from '@server/src/modules/storage/factory'
+import { parseStorageConfig } from '@server/src/modules/storage/config'
 import { isolatedPostgres } from './postgres'
 
 export const testPasswordHasher: PasswordHasher = {
@@ -53,8 +55,11 @@ export async function createTestAuth(overrides: Partial<AuthServiceDependencies 
   const joinServices = new JoinService(invitationServices, createId)
   const avatarDirectory = mkdtempSync(resolve(tmpdir(), 'exwebsite-avatars-'))
   const profileServices = new ProfileService(db, avatarDirectory, 'http://127.0.0.1:8080/api/avatars')
+  // 存储模块默认只启用本地介质，并写入临时目录，不触碰开发 data。
+  const storageDirectory = mkdtempSync(resolve(tmpdir(), 'exwebsite-storage-'))
+  const storageServices = createStorageModule({ config: parseStorageConfig({}, { dataRoot: storageDirectory }) })
   return { db, connectionString: isolated.connectionString, schema: isolated.schema,
-    authServices, invitationServices, joinServices, profileServices, avatarDirectory, deliveries, now,
+    authServices, invitationServices, joinServices, profileServices, storageServices, avatarDirectory, deliveries, now,
     async seedUser(input: { email: string; nickname: string; password: string }) {
       const id = createUserId(), hash = await passwordHasher.hash(input.password)
       await db.query('INSERT INTO auth_users (id, email, nickname, password_hash, created_at) VALUES ($1, $2, $3, $4, $5)',
@@ -62,7 +67,11 @@ export async function createTestAuth(overrides: Partial<AuthServiceDependencies 
       return id
     },
     advance(milliseconds: number) { currentTime += milliseconds },
-    async close() { await isolated.close(); rmSync(avatarDirectory, { recursive: true, force: true }) },
+    async close() {
+      await isolated.close()
+      rmSync(avatarDirectory, { recursive: true, force: true })
+      rmSync(storageDirectory, { recursive: true, force: true })
+    },
   }
 }
 
