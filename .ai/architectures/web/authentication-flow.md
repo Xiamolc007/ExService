@@ -38,11 +38,11 @@ apps/web
 
 `/join/rifling-911` 是说明与申请入口展示页，两类入口各挂载独立 `CompleteJoinApplicationModal`。共享组件从 Zod 推导含 File 的 UI 草稿，以 RHF 管理完整字段、当前步骤校验、确认摘要及文件选择；前进只校验当前步，最终校验全部，后退保留值和文件。关闭弹窗时，页面按申请类别在内存中分别保存草稿和步骤，重新打开时恢复；附件保留原 File 对象，不写浏览器存储。提交成功清除对应类别的草稿，刷新或页面卸载释放全部草稿；提交在途保护关闭和重复提交，失败保留草稿。
 
-报名表单的字段与提交状态由 ExUI `ExForm` 内部的 React Hook Form 实例持有，接入约束见 `.ai/rules/frontend-forms.md`。分步校验使用原字段路径的独立 Zod schema，复用完整提交 schema 的规则；未填写的后续字段不能阻止当前步骤继续，最终提交仍校验完整申请。可选预设字段的“其它”仅控制输入区域展开，提交值始终是实际答案字符串，不向 HTTP Contract 增加界面状态字段。
+报名表单的字段与提交状态由 ExUI `ExForm` 内部的 React Hook Form 实例持有，接入约束见 `.ai/rules/frontend-forms.md`。分步校验使用原字段路径的独立 Zod schema，复用完整提交 schema 的规则；未填写的后续字段不能阻止当前步骤继续，最终提交仍校验完整申请。可选预设字段的“其它”仅控制输入区域展开，提交值始终是实际答案字符串，不向 HTTP Contract 增加界面状态字段。证明附件的文件名在选择时由共享 Zod schema 校验；非法名称先在表单中提示，Server 仍独立校验上传文件，不以客户端校验作为信任边界。
 
 Hero 图片来自 `apps/web/public/images/heros/join/rifling-911/`。构建时按文件名排序收集支持的图片格式；多张图片时点击背景循环切换，也支持聚焦背景后按 Enter 或空格，不显示独立切换按钮。画面上的申请按钮与结果查询链接独立响应，不触发切图；单张图片作为静态背景。图片切换尊重减少动态效果偏好。
 
-`apps/web/src/join/client.ts` 将草稿映射为生成 DTO，通过生成 Client 的 bodySerializer 一次组装 JSON Blob 与 proofs File 的 FormData。共享组件不复制 HTTP DTO、不调用 API；应用侧不持久化申请草稿。成功显示来自事务完成的确认，不建立账号。审核和账号创建的职责及字段归属见 `.ai/databases/data-model.md`。
+`apps/web/src/join/client.ts` 将草稿映射为生成 DTO，通过生成 Client 的 bodySerializer 一次组装 JSON Blob 与 proofs File 的 FormData。共享组件不复制 HTTP DTO、不调用 API；应用侧不持久化申请草稿。成功显示来自事务完成的确认，不建立账号。成功态提醒申请人留意申请邮箱，并提供固定的 `/join/result` 查询入口；“面试预约”仍为禁用占位。提交成功不表示审核通过，也不表示通知邮件已投递。审核和账号创建的职责及字段归属见 `.ai/databases/data-model.md`。
 
 `/join/result` 只在用户提交邮箱时请求，不自动查询或轮询，不把邮箱/结果写入 URL 或浏览器持久存储。编辑邮箱立即清空显示并增加请求代次；新请求及卸载也使旧代次失效，迟到结果不能覆盖新邮箱。状态与下一步必须匹配 Contract；导航使用固定站内路由，不夹带验证码或凭证。
 
