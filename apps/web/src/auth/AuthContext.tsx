@@ -53,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (currentGeneration !== generation.current) {
         return
       }
+      if (readToken(window.localStorage) !== token) return
       if (data !== undefined) {
         setState({
           status: 'authenticated',

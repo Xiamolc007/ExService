@@ -8,6 +8,60 @@ const fixtures: TestAuth[] = []
 afterEach(async () => { await Promise.all(fixtures.splice(0).map((fixture) => fixture.close())) })
 
 describe('AuthService session and SSO boundaries', () => {
+  it('rejects disabled users for password, bearer and CLI SSO login', async () => {
+    const fixture = await createTestAuth()
+    fixtures.push(fixture)
+    const userId = await register(fixture, 'disabled@example.com')
+    const login = await fixture.authServices.login({ email: 'disabled@example.com', password: 'valid password' })
+    await fixture.db.query('UPDATE auth_users SET disabled_at = $1 WHERE id = $2', [fixture.now(), userId])
+    await expect(fixture.authServices.authenticateToken(login.token)).rejects.toMatchObject({ code: 'SESSION_INVALID' })
+    await expect(fixture.authServices.login({ email: 'disabled@example.com', password: 'valid password' }))
+      .rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' })
+    const sso = await fixture.authServices.createSsoRequest()
+    await expect(fixture.authServices.loginForSso({ ssoRequestId: sso.ssoRequestId,
+      email: 'disabled@example.com', password: 'valid password' }))
+      .rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' })
+  })
+
+  it('keeps bound revoked sessions until delivery completes and stores a target snapshot', async () => {
+    const fixture = await createTestAuth()
+    fixtures.push(fixture)
+    const userId = await register(fixture, 'bound@example.com')
+    const login = await fixture.authServices.login({ email: 'bound@example.com', password: 'valid password' })
+    const session = await fixture.authServices.authenticateToken(login.token)
+    await fixture.db.query(`INSERT INTO auth_oidc_bindings
+      (client_id, hydra_sid, session_id, user_id, created_at, revoked_at)
+      VALUES ('ex-outline', 'sid-one', $1, $2, $3, NULL)`, [session.id, userId, fixture.now()])
+    await fixture.authServices.logout(session)
+    await fixture.authServices.createSsoRequest()
+    const sessions = await fixture.db.query<{ id: string; revoked_at: number }>(
+      'SELECT id, revoked_at FROM auth_sessions WHERE id = $1', [session.id])
+    expect(sessions.rows[0]).toMatchObject({ id: session.id, revoked_at: fixture.now() })
+    const outbox = await fixture.db.query<{ kind: string; target_bindings: string; completed_at: number | null }>(
+      'SELECT kind, target_bindings, completed_at FROM auth_identity_outbox WHERE session_id = $1', [session.id])
+    expect(outbox.rows).toHaveLength(1)
+    expect(outbox.rows[0]).toMatchObject({ kind: 'session', completed_at: null })
+    expect(JSON.parse(outbox.rows[0]!.target_bindings)).toEqual([{ clientId: 'ex-outline', hydraSid: 'sid-one' }])
+  })
+  it('does not couple distinct browser revocations to a caller request id', async () => {
+    const fixture = await createTestAuth()
+    fixtures.push(fixture)
+    const userId = await register(fixture, 'two-devices@example.com')
+    const one = await fixture.authServices.login({ email: 'two-devices@example.com', password: 'valid password' })
+    const two = await fixture.authServices.login({ email: 'two-devices@example.com', password: 'valid password' })
+    const sessions = await Promise.all([one, two].map(login => fixture.authServices.authenticateToken(login.token)))
+    for (const [index, session] of sessions.entries()) {
+      await fixture.db.query(`INSERT INTO auth_oidc_bindings
+        (client_id, hydra_sid, session_id, user_id, created_at) VALUES ('ex-outline', $1, $2, $3, $4)`,
+      [`sid-${index}`, session.id, userId, fixture.now()])
+    }
+    const requestId = '11111111-1111-4111-8111-111111111111'
+    await fixture.authServices.revokeLinkedSession('ex-outline', 'sid-0', userId, requestId)
+    await expect(fixture.authServices.revokeLinkedSession('ex-outline', 'sid-1', userId, requestId))
+      .resolves.toEqual({ revoked: true })
+    const outbox = await fixture.db.query<{ count: string }>('SELECT count(*) AS count FROM auth_identity_outbox')
+    expect(outbox.rows[0]?.count).toBe('2')
+  })
   it('expires a session exactly seven days after it is issued', async () => {
     const fixture = await createTestAuth()
     fixtures.push(fixture)
@@ -152,7 +206,7 @@ async function waitForBlockedQuery(db: AppDatabase, table: string) {
 
 
 async function register(fixture: TestAuth, email: string) {
-  await fixture.seedUser({
+  return fixture.seedUser({
     email, nickname: email.split('@')[0] ?? 'User', password: 'valid password',
   })
 }

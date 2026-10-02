@@ -391,6 +391,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/oidc/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Inspect an approved Hydra login or consent challenge */
+        post: operations["inspectOidcRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oidc/login/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept a Hydra login challenge with the current Website session */
+        post: operations["acceptOidcLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oidc/consent/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept preapproved OIDC scopes for the current Website session */
+        post: operations["acceptOidcConsent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oidc/logout/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke the linked browser session and accept its Hydra logout challenge */
+        post: operations["acceptOidcLogout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/identity/session/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check one client-bound Hydra session against the Website session */
+        post: operations["checkLinkedSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/identity/session/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke one client-bound Website browser session */
+        post: operations["revokeLinkedSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/identity/user/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Inspect an active Website account during controlled bootstrap */
+        post: operations["inspectIdentityUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/storage/uploads/prepare": {
         parameters: {
             query?: never;
@@ -475,6 +594,65 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        OidcChallenge: string;
+        OidcInspectRequest: {
+            /** @enum {string} */
+            phase: "login" | "consent";
+            challenge: components["schemas"]["OidcChallenge"];
+        };
+        OidcInspectResponse: {
+            clientName: string;
+            scopes: string[];
+        };
+        OidcChallengeRequest: {
+            challenge: components["schemas"]["OidcChallenge"];
+        };
+        OidcRedirectResponse: {
+            redirectUrl: string;
+        };
+        LinkedSessionRef: {
+            hydraSid: string;
+            subject: components["schemas"]["Uuid"];
+        };
+        LinkedSessionRevokeRequest: {
+            hydraSid: string;
+            subject: components["schemas"]["Uuid"];
+            requestId: components["schemas"]["Uuid"];
+        };
+        LinkedSessionRevokeResponse: {
+            /** @constant */
+            revoked: true;
+        };
+        SessionCheckResult: components["schemas"]["ActiveLinkedSession"] | components["schemas"]["InactiveLinkedSession"];
+        ActiveLinkedSession: {
+            /** @constant */
+            active: true;
+            sessionId: components["schemas"]["Uuid"];
+            userId: components["schemas"]["Uuid"];
+            expiresAt: components["schemas"]["SafeTimestamp"];
+            profile: {
+                nickname: components["schemas"]["Nickname"];
+                email: components["schemas"]["Email"];
+                avatarUrl: string | null;
+                version: number;
+            };
+        };
+        InactiveLinkedSession: {
+            /** @constant */
+            active: false;
+            /** @enum {string} */
+            reason: "unknown" | "revoked" | "expired" | "disabled";
+        };
+        IdentityUserRef: {
+            userId: components["schemas"]["Uuid"];
+        };
+        IdentityUserInfo: {
+            id: components["schemas"]["Uuid"];
+            nickname: components["schemas"]["Nickname"];
+            email: components["schemas"]["Email"];
+            avatarUrl: string | null;
+            profileVersion: number;
+        };
         SafeTimestamp: number;
         OpaqueIdentifier: string;
         /** @description 服务端先 trim 再转为小写；按大小写不敏感处理。 */
@@ -1622,6 +1800,216 @@ export interface operations {
             404: components["responses"]["ErrorResponse"];
             409: components["responses"]["ErrorResponse"];
             410: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    inspectOidcRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OidcInspectRequest"];
+            };
+        };
+        responses: {
+            /** @description Approved client display information */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OidcInspectResponse"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            403: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    acceptOidcLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OidcChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description Browser redirect to Hydra */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OidcRedirectResponse"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            403: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    acceptOidcConsent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OidcChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description Browser redirect to Hydra */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OidcRedirectResponse"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            403: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    acceptOidcLogout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OidcChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description Browser redirect to Hydra */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OidcRedirectResponse"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            403: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    checkLinkedSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkedSessionRef"];
+            };
+        };
+        responses: {
+            /** @description Current linked session state */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionCheckResult"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    revokeLinkedSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkedSessionRevokeRequest"];
+            };
+        };
+        responses: {
+            /** @description Session group is no longer valid */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkedSessionRevokeResponse"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    inspectIdentityUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdentityUserRef"];
+            };
+        };
+        responses: {
+            /** @description Active account profile */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityUserInfo"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
             default: components["responses"]["ErrorResponse"];
         };
     };

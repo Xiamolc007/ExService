@@ -11,6 +11,9 @@ import { JoinPage } from '@web/src/pages/JoinPage/Rifling-911'
 import { CAEPJoinPage } from '@web/src/pages/JoinPage/CAEP'
 import { JoinResultPage } from '@web/src/pages/JoinResultPage'
 import { JoinReviewPage } from '@web/src/pages/JoinReviewPage'
+import { IdentityStatusPage } from '@web/src/pages/IdentityPage/IdentityStatusPage'
+import { SignedOutPage } from '@web/src/pages/IdentityPage/SignedOutPage'
+import { OidcPage } from '@web/src/pages/IdentityPage/OidcPage'
 
 /**
  * 路由表：认证和 SSO 页面使用独立布局，其余页面共用站点顶栏。
@@ -24,6 +27,11 @@ export function App() {
         <Route path="/register" element={<InvitationRegistrationPage />} />
         <Route path="/sso/success" element={<SsoSuccess />} />
         <Route path="/sso/*" element={<NotFound />} />
+        <Route path="/identity/status" element={<IdentityStatusPage />} />
+        <Route path="/identity/signed-out" element={<SignedOutPage />} />
+        <Route path="/identity/login" element={<OidcPage phase="login" />} />
+        <Route path="/identity/consent" element={<OidcPage phase="consent" />} />
+        <Route path="/identity/logout" element={<OidcPage phase="logout" />} />
         <Route element={<RootLayout />}>
           <Route path="/" element={<Home />} />
           <Route path="/communities/rifling-911" element={<JoinPage />} />

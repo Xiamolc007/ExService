@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { migrate } from 'drizzle-orm/node-postgres/migrator'
 import { createVerifiedPool, type DatabaseOptions } from '@server/src/db/client.js'
-import { APPLICATION_TABLES, assertDatabaseReady } from '@server/src/db/schema-check.js'
+import { APPLICATION_TABLES, BASELINE_APPLICATION_TABLES, assertDatabaseReady } from '@server/src/db/schema-check.js'
 
 const MIGRATIONS_FOLDER = resolve(dirname(fileURLToPath(import.meta.url)), '../../drizzle')
 const SAFE_IDENTIFIER = /^[a-z_][a-z0-9_]*$/
@@ -28,13 +28,18 @@ export async function runMigrations(options: MigrationOptions = {}): Promise<voi
         (row.relkind === 'S' && row.relname === '__drizzle_migrations_id_seq'))))
     if (unknown.length) throw new Error('目标 schema 包含非本应用数据表；拒绝迁移。')
     const appTables = [...found].filter(table => APPLICATION_TABLES.includes(table as typeof APPLICATION_TABLES[number]))
-    if (appTables.length !== 0 && appTables.length !== APPLICATION_TABLES.length) {
+    if (appTables.length !== 0 && appTables.length !== BASELINE_APPLICATION_TABLES.length &&
+        appTables.length !== APPLICATION_TABLES.length) {
+      throw new Error('Server schema 部分迁移；请人工核查，不自动修复。')
+    }
+    if (appTables.length === BASELINE_APPLICATION_TABLES.length &&
+        BASELINE_APPLICATION_TABLES.some(table => !found.has(table))) {
       throw new Error('Server schema 部分迁移；请人工核查，不自动修复。')
     }
     const journal = await pool.query(`SELECT 1 FROM pg_catalog.pg_tables
       WHERE schemaname = $1 AND tablename = '__drizzle_migrations'`, [migrationsSchema])
     if ((appTables.length === 0 && journal.rows.length !== 0) ||
-        (appTables.length === APPLICATION_TABLES.length && journal.rows.length !== 1)) {
+        (appTables.length !== 0 && journal.rows.length !== 1)) {
       throw new Error('Server schema 与 migration 记录不一致；请人工核查，不自动修复。')
     }
     if (migrationsSchema !== schema) {

@@ -25,9 +25,9 @@ import { AuthArea, type AuthAreaProps } from '@components/src/AuthArea'
 import { Logo } from '@components/src/Logo'
 import styles from '@components/src/SiteHeader.module.scss'
 
-/** 站点导航项；尚未建立的页面路由由 `apps/web/src/App.tsx` 的兜底页处理。 */
+/** 站点导航项；文档服务由同源 gateway 的 `/docs/` 路径承载。 */
 const NAV_ITEMS = [
-  { to: '/document', label: 'Document' },
+  { to: '/docs/', label: 'Document' },
   { to: '/gallery', label: 'Gallery' },
   { to: '/about', label: 'About Us' },
   { to: '/join/rifling-911', label: 'Join' },
@@ -89,7 +89,7 @@ export function SiteHeader({ auth, mobileMenuButtonRef, glassAtTop = false }: Si
               {NAV_ITEMS.filter(({ to }) => to !== '/join/rifling-911').map(({ to, label }) => (
                 <NavigationMenuItem key={to}>
                   <NavigationMenuLink asChild className={navigationMenuTriggerStyle()}>
-                    <Link to={to}>{label}</Link>
+                    {to === '/docs/' ? <a href={to}>{label}</a> : <Link to={to}>{label}</Link>}
                   </NavigationMenuLink>
                 </NavigationMenuItem>
               ))}
@@ -109,7 +109,8 @@ export function SiteHeader({ auth, mobileMenuButtonRef, glassAtTop = false }: Si
 
         <div className={styles.mobileNav}>
           <SelectField value={selectedNavigation} onValueChange={(value) => {
-            if ([...NAV_ITEMS, ...COMMUNITY_ITEMS].some(({ to }) => to === value)) navigate(value)
+            if (value === '/docs/') window.location.assign(value)
+            else if ([...NAV_ITEMS, ...COMMUNITY_ITEMS].some(({ to }) => to === value)) navigate(value)
           }}>
             <SelectTrigger className={styles.mobileNavTrigger} aria-label="打开导航菜单">
               <Menu aria-hidden="true" />

@@ -87,6 +87,13 @@ describe('SiteHeader Join menu', () => {
   })
 })
 
+it('links the desktop Document entry to the gateway docs path with a native anchor', () => {
+  renderHeader({ status: 'anonymous' })
+  const link = screen.getByRole('link', { name: 'Document' })
+  expect(link.tagName).toBe('A')
+  expect(link.getAttribute('href')).toBe('/docs/')
+})
+
 describe('SiteHeader mobile navigation', () => {
   it('opens a Select with the existing navigation targets and navigates within the router', async () => {
     const originalScrollIntoView = Element.prototype.scrollIntoView
@@ -99,10 +106,27 @@ describe('SiteHeader mobile navigation', () => {
       expect(screen.getByRole('option', { name: 'Rifling 911' })).toBeTruthy()
       expect(screen.getByRole('option', { name: 'CAEP' })).toBeTruthy()
       expect(screen.getByRole('option', { name: 'Gallery' })).toBeTruthy()
+      expect(screen.getByRole('option', { name: 'Document' })).toBeTruthy()
       expect(screen.getByRole('option', { name: 'Join' })).toBeTruthy()
       expect(screen.queryByRole('option', { name: '登录' })).toBeNull()
       await userEvent.click(screen.getByRole('option', { name: 'CAEP' }))
       expect(screen.getByTestId('path').textContent).toBe('/communities/caep')
+    } finally {
+      if (originalScrollIntoView) Element.prototype.scrollIntoView = originalScrollIntoView
+      else Reflect.deleteProperty(Element.prototype, 'scrollIntoView')
+    }
+  })
+
+  it('leaves the Website router when selecting Document on mobile', async () => {
+    const originalScrollIntoView = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = vi.fn()
+    try {
+      renderHeader({ status: 'anonymous' })
+      const trigger = screen.getByRole('combobox', { name: '打开导航菜单' })
+      trigger.focus()
+      await userEvent.keyboard('[Space]')
+      await userEvent.click(screen.getByRole('option', { name: 'Document' }))
+      expect(screen.getByTestId('path').textContent).toBe('/')
     } finally {
       if (originalScrollIntoView) Element.prototype.scrollIntoView = originalScrollIntoView
       else Reflect.deleteProperty(Element.prototype, 'scrollIntoView')

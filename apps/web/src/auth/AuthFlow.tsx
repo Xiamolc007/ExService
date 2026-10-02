@@ -17,6 +17,7 @@ export interface AuthFlowProps {
   ssoRequestId?: string
   onJoin?: () => void
   onFinished?: () => void
+  onSessionCreated?: (token: string) => void
   footer?: ReactNode
 }
 
@@ -26,6 +27,7 @@ export function AuthFlow({
   ssoRequestId,
   onJoin,
   onFinished,
+  onSessionCreated,
   footer,
 }: AuthFlowProps) {
   const navigate = useNavigate()
@@ -149,10 +151,40 @@ export function AuthFlow({
         authForm.current?.setServerErrors(mapError(result.error.error.code, result.error.error.message))
         return
       }
+      let oldToken: string | null
       try {
+        oldToken = readToken(window.localStorage)
+      } catch {
+        authForm.current?.setServerErrors({ form: '浏览器无法读取登录信息，请检查存储设置后重试' })
+        return
+      }
+      if (oldToken !== null && oldToken !== result.data.token) {
+        try {
+          const revoked = await api.POST('/auth/logout', {
+            headers: { Authorization: `Bearer ${oldToken}` },
+          })
+          if (current !== generation.current) return
+          if (revoked.error !== undefined && revoked.error.error.code !== 'SESSION_INVALID') {
+            authForm.current?.setServerErrors({ form: '旧账号退出失败，请重试登录' })
+            return
+          }
+        } catch {
+          if (current === generation.current) authForm.current?.setServerErrors({ form: '旧账号退出失败，请重试登录' })
+          return
+        }
+      }
+      try {
+        if (readToken(window.localStorage) !== oldToken) {
+          authForm.current?.setServerErrors({ form: '登录状态已在其他页面更改，请重试' })
+          return
+        }
         writeToken(window.localStorage, result.data.token)
       } catch {
         authForm.current?.setServerErrors({ form: '浏览器无法保存登录信息，请检查存储设置后重试' })
+        return
+      }
+      if (onSessionCreated) {
+        onSessionCreated(result.data.token)
         return
       }
       onFinished?.()

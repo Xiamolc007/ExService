@@ -1,4 +1,5 @@
 import { dirname, resolve } from 'node:path'
+import { createHash, timingSafeEqual } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyServerOptions } from 'fastify'
 import openapiGlue from 'fastify-openapi-glue'
@@ -23,6 +24,10 @@ import {
   logout,
 } from '@server/src/handlers/auth.js'
 import { getHealth } from '@server/src/handlers/health.js'
+import { acceptOidcConsent, acceptOidcLogin, acceptOidcLogout, checkLinkedSession,
+  inspectIdentityUser, inspectOidcRequest, revokeLinkedSession } from '@server/src/handlers/identity.js'
+import { AuthError } from '@server/src/auth/errors.js'
+import type { OidcService } from '@server/src/identity/oidc.js'
 import { getAvatarImage, updateCurrentUser, uploadCurrentUserAvatar } from '@server/src/handlers/profile.js'
 import {
   completeStorageUpload,
@@ -45,6 +50,8 @@ export const API_PREFIX = '/api'
 export const OPENAPI_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../../../api/openapi.yaml')
 
 export interface CreateAppOptions {
+  identityKeys?: { clients: Record<string, string>; bootstrapKey?: string }
+  oidcServices?: OidcService
   joinServices: JoinService
   invitationServices: InvitationService
   authServices: AuthService
@@ -81,6 +88,13 @@ export const serviceHandlers = {
   inspectSsoRequest,
   loginForSso,
   confirmSsoWithSession,
+  checkLinkedSession,
+  revokeLinkedSession,
+  inspectIdentityUser,
+  inspectOidcRequest,
+  acceptOidcLogin,
+  acceptOidcConsent,
+  acceptOidcLogout,
   prepareStorageUpload,
   uploadStorageContent,
   completeStorageUpload,
@@ -93,7 +107,8 @@ export const serviceHandlers = {
  * 路由、method、输入校验与响应 schema 全部来自 `api/openapi.yaml`：
  * 这里不手写任何 `app.get(...)`，也不从 Fastify schema 反向生成 OpenAPI。
  */
-export function createApp({ authServices, profileServices, joinServices, invitationServices, storageServices, logger = false }: CreateAppOptions): FastifyInstance {
+export function createApp({ authServices, profileServices, joinServices, invitationServices, storageServices,
+  identityKeys, oidcServices, logger = false }: CreateAppOptions): FastifyInstance {
   const app = Fastify({
     logger,
     bodyLimit: 4 * 1024 * 1024,
@@ -110,7 +125,9 @@ export function createApp({ authServices, profileServices, joinServices, invitat
   app.decorate('authServices', authServices)
   app.decorate('profileServices', profileServices)
   app.decorate('storageServices', storageServices)
+  app.decorate('oidcServices', oidcServices)
   app.decorateRequest('authSession', undefined)
+  app.decorateRequest('identityClientId', undefined)
   registerErrorHandlers(app)
   app.register(multipart)
   registerJoinTransport(app)
@@ -139,8 +156,25 @@ export function createApp({ authServices, profileServices, joinServices, invitat
       async bearerAuth(request: FastifyRequest) {
         await authenticateBearer(request, authServices)
       },
+      async integrationKey(request: FastifyRequest) {
+        const supplied = request.headers['x-integration-key']
+        if (typeof supplied !== 'string') throw new AuthError('IDENTITY_UNAUTHORIZED')
+        const client = Object.entries(identityKeys?.clients ?? {}).find(([, key]) => safeKeyEqual(key, supplied))
+        if (!client) throw new AuthError('IDENTITY_UNAUTHORIZED')
+        request.identityClientId = client[0]
+      },
+      async bootstrapKey(request: FastifyRequest) {
+        const supplied = request.headers['x-bootstrap-key']
+        if (typeof supplied !== 'string' || !identityKeys?.bootstrapKey ||
+          !safeKeyEqual(identityKeys.bootstrapKey, supplied)) throw new AuthError('IDENTITY_UNAUTHORIZED')
+      },
     },
   })
 
   return app
+}
+
+function safeKeyEqual(expected: string, actual: string): boolean {
+  const hash = (value: string) => createHash('sha256').update(value).digest()
+  return timingSafeEqual(hash(expected), hash(actual))
 }

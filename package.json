@@ -17,7 +17,9 @@
     "db:migrate": "pnpm --filter @workspace/server db:migrate",
     "db:reset": "pnpm --filter @workspace/server db:reset",
     "sso:create": "pnpm --filter @workspace/server sso:create",
-    "sso:inspect": "pnpm --filter @workspace/server sso:inspect"
+    "sso:inspect": "pnpm --filter @workspace/server sso:inspect",
+    "auth:disable": "pnpm --filter @workspace/server auth:disable",
+    "auth:enable": "pnpm --filter @workspace/server auth:enable"
   },
   "devDependencies": {
     "@redocly/cli": "^2.53.2",

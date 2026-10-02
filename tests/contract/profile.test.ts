@@ -35,6 +35,21 @@ async function session(fixture: TestAuth) {
 }
 
 describe('profile contract operations', () => {
+  it('increments the identity profile version only for nickname and avatar changes', async () => {
+    const { fixture } = await setup()
+    const userId = await fixture.seedUser({ email: 'version@example.com', nickname: 'Before', password: 'valid password' })
+    const version = async () => (await fixture.db.query<{ profile_version: number }>(
+      'SELECT profile_version FROM auth_users WHERE id = $1', [userId])).rows[0]!.profile_version
+    expect(await version()).toBe(0)
+    await fixture.profileServices.update(userId, { qq: '1234' })
+    expect(await version()).toBe(0)
+    await fixture.profileServices.update(userId, { nickname: 'After' })
+    expect(await version()).toBe(1)
+    await fixture.profileServices.upload(userId, { mediaType: 'image/png', imageBase64: PNG }, async () => undefined)
+    expect(await version()).toBe(2)
+    await fixture.profileServices.update(userId, { avatar: null })
+    expect(await version()).toBe(3)
+  })
   it.each([[1024, 512], [512, 1024], [64, 64]])(
     'normalizes a %i by %i direct upload to 512 square WebP', async (width, height) => {
       const { fixture, app } = await setup()

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 
@@ -18,8 +18,9 @@ Object.defineProperty(document, 'elementFromPoint', { configurable: true, value:
 
 import { AuthFlow } from '@web/src/auth/AuthFlow'
 import { AuthPage } from '@web/src/pages/AuthPage'
+import { AUTH_TOKEN_KEY } from '@web/src/auth/storage'
 
-afterEach(() => { cleanup(); post.mockReset() })
+afterEach(() => { cleanup(); post.mockReset(); window.localStorage.clear() })
 
 describe('AuthFlow captcha stage', () => {
   it('removes the legal footer from the actual login page after continuing', async () => {
@@ -76,5 +77,54 @@ describe('AuthFlow captcha stage', () => {
     expect(post).toHaveBeenCalledWith('/auth/sso/login', {
       body: { ssoRequestId, email: 'member@example.com', password: 'password-one' },
     })
+  })
+
+  it.each(['server rejection', 'network failure'])('keeps the existing session when account-switch logout has a %s', async failure => {
+    const user = userEvent.setup()
+    window.localStorage.setItem(AUTH_TOKEN_KEY, 'old-token')
+    post.mockImplementation((path: string) => path === '/auth/login'
+      ? Promise.resolve({ data: { token: 'new-token' } })
+      : failure === 'network failure'
+        ? Promise.reject(new Error('offline'))
+        : Promise.resolve({ error: { error: { code: 'SERVICE_UNAVAILABLE', message: 'Could not revoke' } } }))
+    render(<MemoryRouter><AuthFlow presentation="page" /></MemoryRouter>)
+    await user.type(screen.getByLabelText('邮箱'), 'member@example.com')
+    await user.type(screen.getByLabelText('密码', { exact: true }), 'password-one')
+    await user.click(screen.getByRole('button', { name: '继续' }))
+    await user.click(screen.getByRole('button', { name: '登录' }))
+    expect(post).toHaveBeenCalledWith('/auth/logout', { headers: { Authorization: 'Bearer old-token' } })
+    expect(window.localStorage.getItem(AUTH_TOKEN_KEY)).toBe('old-token')
+    expect(await screen.findByText(/旧账号退出失败/)).toBeTruthy()
+  })
+
+  it('stores a new account token only after the old session has been revoked', async () => {
+    const user = userEvent.setup()
+    window.localStorage.setItem(AUTH_TOKEN_KEY, 'old-token')
+    let completeLogout: ((value: unknown) => void) | undefined
+    post.mockImplementation((path: string) => path === '/auth/login'
+      ? Promise.resolve({ data: { token: 'new-token' } })
+      : new Promise(resolve => { completeLogout = resolve }))
+    render(<MemoryRouter><AuthFlow presentation="page" /></MemoryRouter>)
+    await user.type(screen.getByLabelText('邮箱'), 'member@example.com')
+    await user.type(screen.getByLabelText('密码', { exact: true }), 'password-one')
+    await user.click(screen.getByRole('button', { name: '继续' }))
+    await user.click(screen.getByRole('button', { name: '登录' }))
+    await waitFor(() => expect(completeLogout).toBeDefined())
+    expect(window.localStorage.getItem(AUTH_TOKEN_KEY)).toBe('old-token')
+    completeLogout?.({ data: { status: 'ok' } })
+    await waitFor(() => expect(window.localStorage.getItem(AUTH_TOKEN_KEY)).toBe('new-token'))
+  })
+
+  it('keeps a successful Website login in its OIDC challenge flow', async () => {
+    const user = userEvent.setup()
+    const onSessionCreated = vi.fn()
+    post.mockResolvedValue({ data: { token: 'new-token' } })
+    render(<MemoryRouter><AuthFlow presentation="page" onSessionCreated={onSessionCreated} /></MemoryRouter>)
+    await user.type(screen.getByLabelText('邮箱'), 'member@example.com')
+    await user.type(screen.getByLabelText('密码', { exact: true }), 'password-one')
+    await user.click(screen.getByRole('button', { name: '继续' }))
+    await user.click(screen.getByRole('button', { name: '登录' }))
+    expect(onSessionCreated).toHaveBeenCalledWith('new-token')
+    expect(window.localStorage.getItem(AUTH_TOKEN_KEY)).toBe('new-token')
   })
 })

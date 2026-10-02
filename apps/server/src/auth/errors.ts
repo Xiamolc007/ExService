@@ -3,6 +3,12 @@ export type AuthErrorCode =
   | 'EMAIL_IN_USE'
   | 'INVALID_CREDENTIALS'
   | 'SESSION_INVALID'
+  | 'IDENTITY_UNAUTHORIZED'
+  | 'IDENTITY_NOT_FOUND'
+  | 'IDENTITY_UPSTREAM_UNAVAILABLE'
+  | 'IDENTITY_CHALLENGE_INVALID'
+  | 'IDENTITY_CLIENT_FORBIDDEN'
+  | 'IDENTITY_RESTART_REQUIRED'
   | 'CODE_RESEND_TOO_SOON'
   | 'SSO_REQUEST_NOT_FOUND'
   | 'SSO_REQUEST_EXPIRED'
@@ -36,6 +42,12 @@ const AUTH_ERROR_DETAILS: Record<AuthErrorCode, { statusCode: number; message: s
   EMAIL_IN_USE: { statusCode: 409, message: '该邮箱已注册' },
   INVALID_CREDENTIALS: { statusCode: 401, message: '邮箱或密码错误' },
   SESSION_INVALID: { statusCode: 401, message: '登录状态已失效，请重新登录' },
+  IDENTITY_UNAUTHORIZED: { statusCode: 401, message: 'Identity client authentication failed.' },
+  IDENTITY_NOT_FOUND: { statusCode: 404, message: 'Identity account not found.' },
+  IDENTITY_UPSTREAM_UNAVAILABLE: { statusCode: 503, message: 'Identity service is unavailable.' },
+  IDENTITY_CHALLENGE_INVALID: { statusCode: 400, message: 'Identity challenge is invalid or expired.' },
+  IDENTITY_CLIENT_FORBIDDEN: { statusCode: 403, message: 'Identity client is not approved.' },
+  IDENTITY_RESTART_REQUIRED: { statusCode: 409, message: 'Restart the identity authorization flow.' },
   CODE_RESEND_TOO_SOON: { statusCode: 429, message: '验证码发送过于频繁，请稍后重试' },
   SSO_REQUEST_NOT_FOUND: { statusCode: 404, message: '登录请求不存在，请从发起应用重新登录' },
   SSO_REQUEST_EXPIRED: { statusCode: 410, message: '登录请求已过期，请从发起应用重新登录' },
