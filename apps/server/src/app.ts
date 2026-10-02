@@ -30,6 +30,7 @@ import {
   prepareStorageUpload,
   uploadStorageContent,
 } from '@server/src/modules/storage/handlers.js'
+import { registerHttpFoundation } from '@server/src/http/cors.js'
 
 /**
  * Fastify 路由前缀。Contract 的 `servers[0].url` 只描述客户端 base URL，
@@ -58,6 +59,7 @@ export interface CreateAppOptions {
    * 测试中保持静默；`server.ts` 开启日志，以便用 requestId 关联日志与响应。
    */
   logger?: FastifyServerOptions['logger']
+  corsAllowedOrigins?: ReadonlySet<string>
 }
 
 /**
@@ -93,9 +95,10 @@ export const serviceHandlers = {
  * 路由、method、输入校验与响应 schema 全部来自 `api/openapi.yaml`：
  * 这里不手写任何 `app.get(...)`，也不从 Fastify schema 反向生成 OpenAPI。
  */
-export function createApp({ authServices, profileServices, joinServices, invitationServices, storageServices, logger = false }: CreateAppOptions): FastifyInstance {
+export function createApp({ authServices, profileServices, joinServices, invitationServices, storageServices, logger = false, corsAllowedOrigins = new Set() }: CreateAppOptions): FastifyInstance {
   const app = Fastify({
     logger,
+    requestIdHeader: false,
     bodyLimit: 4 * 1024 * 1024,
     ajv: {
       customOptions: {
@@ -104,6 +107,8 @@ export function createApp({ authServices, profileServices, joinServices, invitat
       },
     },
   })
+
+  registerHttpFoundation(app, { origins: corsAllowedOrigins, contractPath: OPENAPI_PATH })
 
   app.decorate('joinServices', joinServices)
   app.decorate('invitationServices', invitationServices)

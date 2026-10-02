@@ -940,6 +940,7 @@ export interface components {
         /** @description Safe application error response */
         ErrorResponse: {
             headers: {
+                "X-Request-Id": components["headers"]["RequestId"];
                 "Cache-Control": components["headers"]["CacheControl"];
                 [name: string]: unknown;
             };
@@ -950,6 +951,7 @@ export interface components {
         /** @description Safe application error response with a retry delay */
         RetryableErrorResponse: {
             headers: {
+                "X-Request-Id": components["headers"]["RequestId"];
                 "Cache-Control": components["headers"]["CacheControl"];
                 "Retry-After": components["headers"]["RetryAfter"];
                 [name: string]: unknown;
@@ -962,6 +964,8 @@ export interface components {
     parameters: never;
     requestBodies: never;
     headers: {
+        /** @description Server-generated request identifier. */
+        RequestId: string;
         /** @description Authentication responses are not cacheable. */
         CacheControl: "no-store";
         /** @description Whole seconds before a retry is allowed. */
@@ -987,6 +991,7 @@ export interface operations {
             /** @description Server is running */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -1008,6 +1013,7 @@ export interface operations {
             /** @description Image challenge placeholder */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1034,6 +1040,7 @@ export interface operations {
             /** @description Successful operation; not cacheable. */
             202: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1068,6 +1075,7 @@ export interface operations {
             /** @description Successful operation; not cacheable. */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1096,6 +1104,7 @@ export interface operations {
             /** @description Successful operation */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1121,6 +1130,7 @@ export interface operations {
             /** @description Successful operation */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1151,6 +1161,7 @@ export interface operations {
             /** @description Successful operation */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1183,6 +1194,7 @@ export interface operations {
             /** @description Successful operation */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1214,6 +1226,7 @@ export interface operations {
             /** @description Successful operation */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1243,6 +1256,7 @@ export interface operations {
             /** @description Original attachment bytes. */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     /** @description attachment; safe ASCII filename fallback and UTF-8 filename*. */
                     "Content-Disposition": string;
@@ -1275,6 +1289,7 @@ export interface operations {
             /** @description Successful operation */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1305,6 +1320,7 @@ export interface operations {
             /** @description Successful operation */
             202: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1333,6 +1349,7 @@ export interface operations {
             /** @description Successful operation */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1361,6 +1378,7 @@ export interface operations {
             /** @description Successful operation */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1392,6 +1410,7 @@ export interface operations {
             /** @description Session created */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1417,6 +1436,7 @@ export interface operations {
             /** @description Authenticated user */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1444,6 +1464,7 @@ export interface operations {
             /** @description Updated user snapshot */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1472,6 +1493,7 @@ export interface operations {
             /** @description Updated user snapshot */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1499,6 +1521,7 @@ export interface operations {
             /** @description WebP avatar bytes */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1522,6 +1545,7 @@ export interface operations {
             /** @description Session revoked */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1549,6 +1573,7 @@ export interface operations {
             /** @description SSO request state */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1578,6 +1603,7 @@ export interface operations {
             /** @description SSO request completed */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1610,6 +1636,7 @@ export interface operations {
             /** @description SSO request completed */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1641,6 +1668,7 @@ export interface operations {
             /** @description Upload plan for the resolved medium */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1671,6 +1699,7 @@ export interface operations {
             /** @description Stored content URL */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1705,6 +1734,7 @@ export interface operations {
             /** @description Stored content URL */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     [name: string]: unknown;
                 };
@@ -1737,6 +1767,7 @@ export interface operations {
             /** @description Stored object bytes */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     "Cache-Control": components["headers"]["CacheControl"];
                     "Content-Disposition": components["headers"]["ContentDisposition"];
                     "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];

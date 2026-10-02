@@ -27,6 +27,9 @@ paths:
       responses:
         '200':
           description: Server is running
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
           content:
             application/json:
               schema:
@@ -44,6 +47,8 @@ paths:
         '200':
           description: Image challenge placeholder
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: '#/components/headers/CacheControl'
           content:
@@ -88,6 +93,8 @@ paths:
         "202":
           description: Successful operation; not cacheable.
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: "#/components/headers/CacheControl"
           content:
@@ -130,6 +137,8 @@ paths:
         "200":
           description: Successful operation; not cacheable.
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: "#/components/headers/CacheControl"
           content:
@@ -153,6 +162,8 @@ paths:
         "200":
           description: Successful operation
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: "#/components/headers/CacheControl"
           content:
@@ -195,6 +206,8 @@ paths:
         "200":
           description: Successful operation
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: "#/components/headers/CacheControl"
           content:
@@ -224,6 +237,8 @@ paths:
         "200":
           description: Successful operation
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: "#/components/headers/CacheControl"
           content:
@@ -263,6 +278,8 @@ paths:
         "200":
           description: Successful operation
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: "#/components/headers/CacheControl"
           content:
@@ -300,6 +317,8 @@ paths:
         "200":
           description: Successful operation
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: "#/components/headers/CacheControl"
           content:
@@ -355,6 +374,8 @@ paths:
         "200":
           description: Original attachment bytes.
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: "#/components/headers/CacheControl"
             Content-Disposition:
@@ -392,6 +413,8 @@ paths:
         "200":
           description: Successful operation
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: "#/components/headers/CacheControl"
           content:
@@ -425,6 +448,8 @@ paths:
         "202":
           description: Successful operation
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: "#/components/headers/CacheControl"
           content:
@@ -454,6 +479,8 @@ paths:
         "200":
           description: Successful operation
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: "#/components/headers/CacheControl"
           content:
@@ -483,6 +510,8 @@ paths:
         "200":
           description: Successful operation
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: "#/components/headers/CacheControl"
           content:
@@ -523,6 +552,8 @@ paths:
         '200':
           description: Session created
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: '#/components/headers/CacheControl'
           content:
@@ -548,6 +579,8 @@ paths:
         '200':
           description: Authenticated user
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: '#/components/headers/CacheControl'
           content:
@@ -574,6 +607,8 @@ paths:
         '200':
           description: Updated user snapshot
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: '#/components/headers/CacheControl'
           content:
@@ -603,6 +638,8 @@ paths:
         '200':
           description: Updated user snapshot
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: '#/components/headers/CacheControl'
           content:
@@ -633,6 +670,8 @@ paths:
         '200':
           description: WebP avatar bytes
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: '#/components/headers/CacheControl'
           content:
@@ -655,6 +694,8 @@ paths:
         '200':
           description: Session revoked
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: '#/components/headers/CacheControl'
           content:
@@ -681,6 +722,8 @@ paths:
         '200':
           description: SSO request state
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: '#/components/headers/CacheControl'
           content:
@@ -711,6 +754,8 @@ paths:
         '200':
           description: SSO request completed
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: '#/components/headers/CacheControl'
           content:
@@ -748,6 +793,8 @@ paths:
         '200':
           description: SSO request completed
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: '#/components/headers/CacheControl'
           content:
@@ -784,6 +831,8 @@ paths:
         '200':
           description: Upload plan for the resolved medium
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: '#/components/headers/CacheControl'
           content:
@@ -832,6 +881,8 @@ paths:
         '200':
           description: Stored content URL
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: '#/components/headers/CacheControl'
           content:
@@ -874,6 +925,8 @@ paths:
         '200':
           description: Stored content URL
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: '#/components/headers/CacheControl'
           content:
@@ -917,6 +970,8 @@ paths:
         '200':
           description: Stored object bytes
           headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: '#/components/headers/CacheControl'
             Content-Disposition:
@@ -943,6 +998,12 @@ components:
       scheme: bearer
       bearerFormat: opaque
   headers:
+    RequestId:
+      description: Server-generated request identifier.
+      required: true
+      schema:
+        type: string
+        minLength: 1
     CacheControl:
       description: Authentication responses are not cacheable.
       schema:
@@ -967,6 +1028,8 @@ components:
     ErrorResponse:
       description: Safe application error response
       headers:
+        X-Request-Id:
+          $ref: '#/components/headers/RequestId'
         Cache-Control:
           $ref: '#/components/headers/CacheControl'
       content:
@@ -976,6 +1039,8 @@ components:
     RetryableErrorResponse:
       description: Safe application error response with a retry delay
       headers:
+        X-Request-Id:
+          $ref: '#/components/headers/RequestId'
         Cache-Control:
           $ref: '#/components/headers/CacheControl'
         Retry-After:
