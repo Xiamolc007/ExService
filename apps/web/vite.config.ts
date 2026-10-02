@@ -14,7 +14,8 @@ const communityConfig = JSON.parse(
  * 与 `apps/server/src/server.ts` 的监听地址保持一致，并显式使用 127.0.0.1，
  * 避免在 Windows 上因 `localhost` 解析到 IPv6 而代理不到只绑定 IPv4 的服务。
  */
-const SERVER_ORIGIN = 'http://127.0.0.1:8080'
+const SERVER_ORIGIN = `http://127.0.0.1:${process.env.INTEGRATION_SERVER_PORT ?? '8080'}`
+const INTEGRATION_WEB_PORT = Number(process.env.INTEGRATION_WEB_PORT ?? '8081')
 
 export default defineConfig({
   plugins: [react()],
@@ -33,9 +34,13 @@ export default defineConfig({
     },
   },
   server: {
-    host: '127.0.0.1',
-    port: 8081,
+    host: process.env.WEBSITE_INTEGRATION_ENABLED === 'true' ? '0.0.0.0' : '127.0.0.1',
+    port: INTEGRATION_WEB_PORT,
     strictPort: true,
+    allowedHosts: process.env.WEBSITE_INTEGRATION_ENABLED === 'true' ? ['exwebsite.test'] : undefined,
+    hmr: process.env.WEBSITE_INTEGRATION_ENABLED === 'true'
+      ? { protocol: 'ws', host: 'exwebsite.test', clientPort: 8090 }
+      : undefined,
     // Vite 注入的开发脚本早于 HTML meta，响应头必须先保护邀请 URL。
     headers: { 'Referrer-Policy': 'no-referrer' },
     proxy: {

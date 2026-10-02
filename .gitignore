@@ -35,3 +35,5 @@ Thumbs.db
 playwright
 .playwright-cli
 output
+vendor/exui/
+.local/docs-integration/
