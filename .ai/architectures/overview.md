@@ -2,7 +2,7 @@
 
 本文件说明 ExWebsite 当前开发拓扑。HTTP 形状以 `api/openapi.yaml` 为准；Server 请求与数据库生命周期见 `.ai/architectures/mock-server/request-lifecycle.md`，数据规则见 `.ai/databases/data-model.md`。
 
-_最后更新：2026-09-29_
+_最后更新：2026-10-01_
 
 ## 系统结构
 
@@ -15,7 +15,9 @@ api/openapi.yaml ──api:generate──▶ packages/api-client ──▶ apps/
                                     └──头像文件──▶ apps/server/data/avatars/
 ```
 
-`apps/server/` 是本仓库唯一 Server。Contract 不依赖实现；Fastify 只注册带 `operationId` 的 operation，前端只经共享 Client 发请求。当前为单实例开发拓扑，公网部署能力仍需后续设计。
+上图是 Website 业务请求链；`apps/server/` 是唯一 Website Fastify Server。Contract 不依赖实现；Fastify 只注册带 `operationId` 的 operation，Website 前端只经共享 Client 发请求。当前仍是本地开发拓扑，公网部署能力需后续设计。
+
+本地文档集成增加 gateway、Hydra 与独立的 Outline 服务：同域 `/docs` 归 Outline，Website 的 `/api` 仍归 Fastify，Hydra 使用单独 issuer 主机名。Outline 是 `apps/outline/` Git submodule，保留自己的 Yarn、数据库与文件存储；它不成为 Website pnpm workspace 包，Website Fastify 也不接管文档 API。完整容器与宿主机开发模式共用入口契约，详见 `.ai/architectures/docs-integration/integration-boundaries.md`。
 
 ## 模块边界
 
@@ -26,6 +28,7 @@ api/openapi.yaml ──api:generate──▶ packages/api-client ──▶ apps/
 | `packages/components/` | 基于 ExUI 的应用级共享 UI。 |
 | `apps/web/` | Vite/React 前端、路由、主题和 Client 接入。 |
 | `apps/server/` | Contract 路由、业务服务、受控 PostgreSQL 访问。 |
+| `apps/outline/` | 独立文档服务，负责文档数据、权限、公共阅读及协作。 |
 | `tests/contract/` | 对真实 Fastify app 的 HTTP 行为与原始 handler 输出做验证。 |
 
 ## 依赖与构建

@@ -2,7 +2,7 @@
 
 Contract Test 对真实 Fastify app 的 HTTP 行为、Glue 映射和原始 handler 输出分别断言；数据库行为测试使用独立 PostgreSQL 容器。单条断言的失败模式见 `.ai/knowledge/mock-server/serialization-masks-handler-regressions.md` 与 `.ai/knowledge/contract-tests/contract-parsing-constraints.md`。
 
-_最后更新：2026-09-29_
+_最后更新：2026-10-01_
 
 ## 隔离夹具
 
@@ -21,3 +21,7 @@ _最后更新：2026-09-29_
 | 日志与传输 | 真实日志流不泄密；multipart 字节、摘要、容量与断开连接回收。 |
 
 schema 直接来自 `api/openapi.yaml`，测试不复制 DTO。跨多步业务测试覆盖申请、审核、验证码、完善、登录、资料与头像；PostgreSQL 专项测试覆盖空库迁移、重复迁移、错误目标拒绝、半迁移、未知对象重置拒绝、约束、事务回滚及双连接竞争。自动测试证明隔离容器中的行为；本机迁移与真实服务冒烟另行验证。
+
+## 文档集成的测试边界
+
+根 `vitest.config.ts` 只包含 Website 自有测试路径，并显式排除 `apps/outline/`、`vendor/` 和 `output/`；Outline 使用自己的 Yarn 测试项目。根命令 `integration:test:outline` 通过 `scripts/docs-integration/test-outline.mjs` 仅接受一条 `server/` 或 `plugins/` 测试文件路径及一个以上原样例名。它为每个指定例分别创建临时 PostgreSQL、Redis 与附件目录，执行完整 Outline migration，使用仅保留操作系统和包缓存变量的环境白名单及隔离的身份配置；测试要求恰好一个指定用例通过，未处理错误会使运行失败。不要用 Outline 默认测试环境或本机开发库替代该入口。自动测试与真实浏览器、socket、两种运行模式的验收分开报告。

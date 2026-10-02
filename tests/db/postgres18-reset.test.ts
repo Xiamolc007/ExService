@@ -1,4 +1,6 @@
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
+import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { openDatabase } from '@server/src/db/client'
 import { runMigrations } from '@server/src/db/migration-runner'
@@ -32,8 +34,17 @@ it('migrates and safely resets only a temporary PostgreSQL 18 exre database', as
     expect((await db.query('SELECT * FROM auth_users')).rows).toEqual([])
     expect((await db.query<{ code: string }>('SELECT code FROM community_groups')).rows)
       .toEqual([{ code: 'admin' }])
-    const journal = await db.query('SELECT * FROM drizzle.__drizzle_migrations ORDER BY id')
-    expect(journal.rows).toHaveLength(1)
+    const migrations = JSON.parse(readFileSync(
+      new URL('../../apps/server/drizzle/meta/_journal.json', import.meta.url), 'utf8')) as {
+      entries: Array<{ tag: string; when: number }>
+    }
+    const journal = await db.query<{ hash: string; created_at: number }>(
+      'SELECT hash, created_at FROM drizzle.__drizzle_migrations ORDER BY id')
+    expect(journal.rows).toEqual(migrations.entries.map(entry => ({
+      hash: createHash('sha256').update(readFileSync(
+        new URL(`../../apps/server/drizzle/${entry.tag}.sql`, import.meta.url), 'utf8')).digest('hex'),
+      created_at: entry.when,
+    })))
 
     await db.query(`INSERT INTO auth_users (id,email,nickname,password_hash,created_at)
       VALUES ('user-2','keep@example.com','Keep','hash',2)`)

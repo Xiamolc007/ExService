@@ -15,6 +15,8 @@ tags:
     description: Server 自身运行状态。
   - name: authentication
     description: 本地账号、会话与 SSO 接收端能力。
+  - name: identity
+    description: Hydra 登录确认与受控服务间会话核验。
   - name: storage
     description: 通用内容存储的上传、直传确认与本地公开读取。
 paths:
@@ -813,6 +815,180 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         default:
           $ref: '#/components/responses/ErrorResponse'
+  /auth/oidc/inspect:
+    post:
+      operationId: inspectOidcRequest
+      summary: Inspect an approved Hydra login or consent challenge
+      security: []
+      tags: [identity]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/OidcInspectRequest'}
+      responses:
+        '200':
+          description: Approved client display information
+          headers:
+            Cache-Control: {$ref: '#/components/headers/CacheControl'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OidcInspectResponse'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+        default: {$ref: '#/components/responses/ErrorResponse'}
+  /auth/oidc/login/accept:
+    post:
+      operationId: acceptOidcLogin
+      summary: Accept a Hydra login challenge with the current Website session
+      security:
+        - bearerAuth: []
+      tags: [identity]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/OidcChallengeRequest'}
+      responses:
+        '200':
+          description: Browser redirect to Hydra
+          headers:
+            Cache-Control: {$ref: '#/components/headers/CacheControl'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OidcRedirectResponse'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+        default: {$ref: '#/components/responses/ErrorResponse'}
+  /auth/oidc/consent/accept:
+    post:
+      operationId: acceptOidcConsent
+      summary: Accept preapproved OIDC scopes for the current Website session
+      security:
+        - bearerAuth: []
+      tags: [identity]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/OidcChallengeRequest'}
+      responses:
+        '200':
+          description: Browser redirect to Hydra
+          headers:
+            Cache-Control: {$ref: '#/components/headers/CacheControl'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OidcRedirectResponse'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+        default: {$ref: '#/components/responses/ErrorResponse'}
+  /auth/oidc/logout/accept:
+    post:
+      operationId: acceptOidcLogout
+      summary: Revoke the linked browser session and accept its Hydra logout challenge
+      security:
+        - bearerAuth: []
+      tags: [identity]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/OidcChallengeRequest'}
+      responses:
+        '200':
+          description: Browser redirect to Hydra
+          headers:
+            Cache-Control: {$ref: '#/components/headers/CacheControl'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OidcRedirectResponse'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+        default: {$ref: '#/components/responses/ErrorResponse'}
+  /internal/identity/session/check:
+    post:
+      operationId: checkLinkedSession
+      summary: Check one client-bound Hydra session against the Website session
+      security:
+        - integrationKey: []
+      tags: [identity]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LinkedSessionRef'}
+      responses:
+        '200':
+          description: Current linked session state
+          headers:
+            Cache-Control: {$ref: '#/components/headers/CacheControl'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SessionCheckResult'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+        default: {$ref: '#/components/responses/ErrorResponse'}
+  /internal/identity/session/revoke:
+    post:
+      operationId: revokeLinkedSession
+      summary: Revoke one client-bound Website browser session
+      security:
+        - integrationKey: []
+      tags: [identity]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LinkedSessionRevokeRequest'}
+      responses:
+        '200':
+          description: Session group is no longer valid
+          headers:
+            Cache-Control: {$ref: '#/components/headers/CacheControl'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LinkedSessionRevokeResponse'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+        default: {$ref: '#/components/responses/ErrorResponse'}
+  /internal/identity/user/inspect:
+    post:
+      operationId: inspectIdentityUser
+      summary: Inspect an active Website account during controlled bootstrap
+      security:
+        - bootstrapKey: []
+      tags: [identity]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/IdentityUserRef'}
+      responses:
+        '200':
+          description: Active account profile
+          headers:
+            Cache-Control: {$ref: '#/components/headers/CacheControl'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IdentityUserInfo'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+        default: {$ref: '#/components/responses/ErrorResponse'}
   /storage/uploads/prepare:
     post:
       operationId: prepareStorageUpload
@@ -997,6 +1173,14 @@ components:
       type: http
       scheme: bearer
       bearerFormat: opaque
+    integrationKey:
+      type: apiKey
+      in: header
+      name: X-Integration-Key
+    bootstrapKey:
+      type: apiKey
+      in: header
+      name: X-Bootstrap-Key
   headers:
     RequestId:
       description: Server-generated request identifier.
@@ -1050,6 +1234,105 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
   schemas:
+    OidcChallenge:
+      type: string
+      minLength: 1
+      maxLength: 8192
+      pattern: '^\S+$'
+    OidcInspectRequest:
+      type: object
+      additionalProperties: false
+      required: [phase, challenge]
+      properties:
+        phase: {type: string, enum: [login, consent]}
+        challenge: {$ref: '#/components/schemas/OidcChallenge'}
+    OidcInspectResponse:
+      type: object
+      additionalProperties: false
+      required: [clientName, scopes]
+      properties:
+        clientName: {type: string}
+        scopes:
+          type: array
+          items: {type: string}
+    OidcChallengeRequest:
+      type: object
+      additionalProperties: false
+      required: [challenge]
+      properties:
+        challenge: {$ref: '#/components/schemas/OidcChallenge'}
+    OidcRedirectResponse:
+      type: object
+      additionalProperties: false
+      required: [redirectUrl]
+      properties:
+        redirectUrl: {type: string, minLength: 1}
+    LinkedSessionRef:
+      type: object
+      additionalProperties: false
+      required: [hydraSid, subject]
+      properties:
+        hydraSid: {type: string, minLength: 1, maxLength: 255}
+        subject: {$ref: '#/components/schemas/Uuid'}
+    LinkedSessionRevokeRequest:
+      type: object
+      additionalProperties: false
+      required: [hydraSid, subject, requestId]
+      properties:
+        hydraSid: {type: string, minLength: 1, maxLength: 255}
+        subject: {$ref: '#/components/schemas/Uuid'}
+        requestId: {$ref: '#/components/schemas/Uuid'}
+    LinkedSessionRevokeResponse:
+      type: object
+      additionalProperties: false
+      required: [revoked]
+      properties:
+        revoked: {type: boolean, const: true}
+    SessionCheckResult:
+      oneOf:
+        - $ref: '#/components/schemas/ActiveLinkedSession'
+        - $ref: '#/components/schemas/InactiveLinkedSession'
+    ActiveLinkedSession:
+      type: object
+      additionalProperties: false
+      required: [active, sessionId, userId, expiresAt, profile]
+      properties:
+        active: {type: boolean, const: true}
+        sessionId: {$ref: '#/components/schemas/Uuid'}
+        userId: {$ref: '#/components/schemas/Uuid'}
+        expiresAt: {$ref: '#/components/schemas/SafeTimestamp'}
+        profile:
+          type: object
+          additionalProperties: false
+          required: [nickname, email, avatarUrl, version]
+          properties:
+            nickname: {$ref: '#/components/schemas/Nickname'}
+            email: {$ref: '#/components/schemas/Email'}
+            avatarUrl: {type: [string, 'null']}
+            version: {type: integer, minimum: 0}
+    InactiveLinkedSession:
+      type: object
+      additionalProperties: false
+      required: [active, reason]
+      properties:
+        active: {type: boolean, const: false}
+        reason: {type: string, enum: [unknown, revoked, expired, disabled]}
+    IdentityUserRef:
+      type: object
+      additionalProperties: false
+      required: [userId]
+      properties:
+        userId: {$ref: '#/components/schemas/Uuid'}
+    IdentityUserInfo:
+      type: object
+      additionalProperties: false
+      required: [id, nickname, email, avatarUrl, profileVersion]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        nickname: {$ref: '#/components/schemas/Nickname'}
+        email: {$ref: '#/components/schemas/Email'}
+        avatarUrl: {type: [string, 'null']}
+        profileVersion: {type: integer, minimum: 0}
     SafeTimestamp:
       type: integer
       minimum: 0

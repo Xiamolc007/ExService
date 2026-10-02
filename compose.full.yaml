@@ -1,0 +1,77 @@
+services:
+  gateway:
+    depends_on:
+      - web
+      - server
+      - outline
+      - hydra
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+      additional_contexts:
+        exui: ${EXUI_BUILD_CONTEXT:?configure first}
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+      additional_contexts:
+        exui: ${EXUI_BUILD_CONTEXT:?configure first}
+    environment:
+      WEBSITE_INTEGRATION_ENABLED: 'true'
+      DATABASE_URL: postgres://exre:${EXRE_PASSWORD:?configure first}@postgres:5432/exre
+      AUTH_CODE_HMAC_KEY: ${AUTH_CODE_HMAC_KEY:?configure first}
+      SERVER_PUBLIC_WEB_BASE_URL: http://exwebsite.test:8090
+      SERVER_PUBLIC_AVATAR_BASE_URL: http://exwebsite.test:8090/api/avatars
+      SERVER_AVATAR_DIRECTORY: /var/lib/exwebsite/avatars
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8080
+      OUTLINE_INTEGRATION_KEY: ${OUTLINE_INTEGRATION_KEY:?configure first}
+      IDENTITY_BOOTSTRAP_KEY: ${IDENTITY_BOOTSTRAP_KEY:?configure first}
+      IDENTITY_DELIVERY_KEY: ${IDENTITY_DELIVERY_KEY:?configure first}
+      IDENTITY_FLOW_KEY: ${IDENTITY_FLOW_KEY:?configure first}
+      HYDRA_ADMIN_URL: http://hydra:4445
+      OUTLINE_INTERNAL_URL: http://outline:3000
+    volumes:
+      - ./.local/docs-integration/data/avatars:/var/lib/exwebsite/avatars
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  outline:
+    build:
+      context: .
+      dockerfile: apps/outline/Dockerfile.integration
+      additional_contexts:
+        exui: ${EXUI_BUILD_CONTEXT:?configure first}
+    command: [node, build/server/index.js, --no-migrate]
+    environment:
+      NODE_ENV: production
+      WEBSITE_INTEGRATION_ENABLED: 'true'
+      URL: http://exwebsite.test:8090/docs
+      PORT: 3000
+      SECRET_KEY: ${OUTLINE_SECRET_KEY:?configure first}
+      UTILS_SECRET: ${OUTLINE_UTILS_SECRET:?configure first}
+      DATABASE_URL: postgres://outline:${OUTLINE_PASSWORD:?configure first}@postgres:5432/outline
+      PGSSLMODE: disable
+      REDIS_URL: redis://redis:6379
+      FILE_STORAGE: local
+      FILE_STORAGE_LOCAL_ROOT_DIR: /var/lib/outline/data
+      FORCE_HTTPS: 'false'
+      OUTLINE_INTEGRATION_KEY: ${OUTLINE_INTEGRATION_KEY:?configure first}
+      IDENTITY_DELIVERY_KEY: ${IDENTITY_DELIVERY_KEY:?configure first}
+      OUTLINE_OIDC_CLIENT_SECRET: ${OUTLINE_OIDC_CLIENT_SECRET:?configure first}
+      OUTLINE_OIDC_CLIENT_ID: ex-outline
+      HYDRA_PUBLIC_URL: http://identity.exwebsite.test:8090/
+      WEBSITE_INTERNAL_URL: http://server:8080
+    volumes:
+      - ./.local/docs-integration/data/outline:/var/lib/outline/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started

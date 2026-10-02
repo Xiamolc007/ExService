@@ -2,7 +2,7 @@
 
 本文件说明共享认证 UI、应用流程和浏览器存储之间的边界。HTTP operation 与字段形状以 `api/openapi.yaml` 和生成 Client 类型为准。
 
-_最后更新：2026-09-29_
+_最后更新：2026-10-02_
 
 ## 责任分层
 
@@ -38,11 +38,11 @@ apps/web
 
 `/join/rifling-911` 是说明与申请入口展示页，两类入口各挂载独立 `CompleteJoinApplicationModal`。共享组件从 Zod 推导含 File 的 UI 草稿，以 RHF 管理完整字段、当前步骤校验、确认摘要及文件选择；前进只校验当前步，最终校验全部，后退保留值和文件。关闭弹窗时，页面按申请类别在内存中分别保存草稿和步骤，重新打开时恢复；附件保留原 File 对象，不写浏览器存储。提交成功清除对应类别的草稿，刷新或页面卸载释放全部草稿；提交在途保护关闭和重复提交，失败保留草稿。
 
-报名表单的字段与提交状态由 ExUI `ExForm` 内部的 React Hook Form 实例持有，接入约束见 `.ai/rules/frontend-forms.md`。分步校验使用原字段路径的独立 Zod schema，复用完整提交 schema 的规则；未填写的后续字段不能阻止当前步骤继续，最终提交仍校验完整申请。可选预设字段的“其它”仅控制输入区域展开，提交值始终是实际答案字符串，不向 HTTP Contract 增加界面状态字段。
+报名表单的字段与提交状态由 ExUI `ExForm` 内部的 React Hook Form 实例持有，接入约束见 `.ai/rules/frontend-forms.md`。分步校验使用原字段路径的独立 Zod schema，复用完整提交 schema 的规则；未填写的后续字段不能阻止当前步骤继续，最终提交仍校验完整申请。可选预设字段的“其它”仅控制输入区域展开，提交值始终是实际答案字符串，不向 HTTP Contract 增加界面状态字段。证明附件的文件名在选择时由共享 Zod schema 校验；非法名称先在表单中提示，Server 仍独立校验上传文件，不以客户端校验作为信任边界。
 
 Hero 图片来自 `apps/web/public/images/heros/join/rifling-911/`。构建时按文件名排序收集支持的图片格式；多张图片时点击背景循环切换，也支持聚焦背景后按 Enter 或空格，不显示独立切换按钮。画面上的申请按钮与结果查询链接独立响应，不触发切图；单张图片作为静态背景。图片切换尊重减少动态效果偏好。
 
-`apps/web/src/join/client.ts` 将草稿映射为生成 DTO，通过生成 Client 的 bodySerializer 一次组装 JSON Blob 与 proofs File 的 FormData。共享组件不复制 HTTP DTO、不调用 API；应用侧不持久化申请草稿。成功显示来自事务完成的确认，不建立账号。审核和账号创建的职责及字段归属见 `.ai/databases/data-model.md`。
+`apps/web/src/join/client.ts` 将草稿映射为生成 DTO，通过生成 Client 的 bodySerializer 一次组装 JSON Blob 与 proofs File 的 FormData。共享组件不复制 HTTP DTO、不调用 API；应用侧不持久化申请草稿。成功显示来自事务完成的确认，不建立账号。成功态提醒申请人留意申请邮箱，并提供固定的 `/join/result` 查询入口；“面试预约”仍为禁用占位。提交成功不表示审核通过，也不表示通知邮件已投递。审核和账号创建的职责及字段归属见 `.ai/databases/data-model.md`。
 
 `/join/result` 只在用户提交邮箱时请求，不自动查询或轮询，不把邮箱/结果写入 URL 或浏览器持久存储。编辑邮箱立即清空显示并增加请求代次；新请求及卸载也使旧代次失效，迟到结果不能覆盖新邮箱。状态与下一步必须匹配 Contract；导航使用固定站内路由，不夹带验证码或凭证。
 
@@ -62,9 +62,17 @@ Hero 图片来自 `apps/web/public/images/heros/join/rifling-911/`。构建时�
 
 ## 本站会话
 
-普通登录成功后先把 token 写入 `localStorage` 的 `exwebsite.auth.token`，成功写入后才整页导航。`AuthProvider` 在启动与其他标签页 storage 事件后调用 `/auth/me` 恢复身份；浏览器存储本身不作为身份依据。
+普通登录成功后，若浏览器仍保存另一账号的 token，先撤销旧会话；明确的 `SESSION_INVALID` 表示旧会话已无效，可继续登录，其他撤销失败保留旧 token 并提供重试。写入前再次核对浏览器 token 未被其他页面替换，再把新 token 写入 `localStorage` 的 `exwebsite.auth.token`；成功写入后才整页导航或继续当前 OIDC challenge。`AuthProvider` 在启动与其他标签页 storage 事件后调用 `/auth/me` 恢复身份；浏览器存储本身不作为身份依据，旧 token 的迟到资料与错误不能覆盖后来保存的新会话。
 
 明确的 `SESSION_INVALID` 只删除仍与本次请求匹配的 token，避免迟到响应清掉较新的登录；资料页读取或修改收到此错误时同步更新顶栏认证状态。临时网络错误保留 token 并显示可重试状态，资料读取失败也结束等待并允许重试。主动退出成功或退出请求收到会话失效后清除匹配 token 并刷新。
+
+## 文档身份页面
+
+`apps/web/src/App.tsx` 注册 `/identity/login`、`/identity/consent`、`/identity/logout`、`/identity/status` 和 `/identity/signed-out`。挑战页面通过生成的 API Client 检查或接受 Hydra challenge；已有有效本站 Bearer 可直接完成登录与授权，缺少会话时经现有登录 UI。挑战与当前 token 不匹配时重新开始，避免迟到响应将旧身份带入新会话。
+
+生成 Client 经 ExAxios 直接返回成功数据，失败抛出 `ExAxiosError`，身份页面按其状态码和错误码决定重试、重新开始或拒绝无效入口。身份路由中的会话失效由当前页面继续处理；共享请求层同步浏览器会话后不把该路由跳到普通 `/login`，以保留 challenge 和退出确认流程。
+
+`/identity/status` 仅向同源父窗口返回 nonce 和粗粒度状态，不传递 token 或资料，供 Outline 的匿名页面决定是否尝试自动接入。`/identity/signed-out` 重新验证当前 token，只删除已确认无效且仍匹配的 token；迟到的 Outline 退出跳转不能清除后来登录的新账号。服务端撤销仍是会话有效性的依据。跨服务边界见 `.ai/architectures/docs-integration/integration-boundaries.md`。
 
 ## 用户设置
 

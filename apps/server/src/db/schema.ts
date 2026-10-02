@@ -14,14 +14,20 @@ export const authUsers = pgTable(
     qq: text('qq'),
     fivemId: text('fivem_id'),
     avatarKey: text('avatar_key'),
+    disabledAt: bigint('disabled_at', { mode: 'number' }),
+    profileVersion: integer('profile_version').notNull().default(0),
   },
-  (table) => [uniqueIndex('auth_users_avatar_key_unique').on(table.avatarKey)],
+  (table) => [
+    uniqueIndex('auth_users_avatar_key_unique').on(table.avatarKey),
+    check('auth_users_profile_version_check', sql`${table.profileVersion} >= 0`),
+  ],
 )
 
 export const authSessions = pgTable(
   'auth_sessions',
   {
     tokenHash: text('token_hash').primaryKey(),
+    id: text('id').notNull().default(sql`gen_random_uuid()::text`),
     userId: text('user_id').notNull().references(() => authUsers.id),
     createdAt: bigint('created_at', { mode: 'number' }).notNull(),
     expiresAt: bigint('expires_at', { mode: 'number' }).notNull(),
@@ -30,8 +36,59 @@ export const authSessions = pgTable(
   (table) => [
     index('auth_sessions_user_id_idx').on(table.userId),
     index('auth_sessions_expires_at_idx').on(table.expiresAt),
+    uniqueIndex('auth_sessions_id_unique').on(table.id),
+    uniqueIndex('auth_sessions_id_user_id_unique').on(table.id, table.userId),
   ],
 )
+
+export const authOidcFlows = pgTable('auth_oidc_flows', {
+  phase: text('phase').notNull(),
+  challengeHash: text('challenge_hash').notNull(),
+  sessionId: text('session_id').notNull().references(() => authSessions.id, { onDelete: 'restrict' }),
+  clientId: text('client_id').notNull(),
+  hydraSid: text('hydra_sid'),
+  state: text('state').notNull(),
+  expiresAt: bigint('expires_at', { mode: 'number' }).notNull(),
+  encryptedRedirect: text('encrypted_redirect'),
+}, table => [
+  primaryKey({ columns: [table.phase, table.challengeHash] }),
+  check('auth_oidc_flows_phase_check', sql`${table.phase} in ('login', 'consent')`),
+  check('auth_oidc_flows_state_check', sql`${table.state} in ('processing', 'completed', 'restart_required')`),
+  index('auth_oidc_flows_expires_at_idx').on(table.expiresAt),
+])
+
+export const authOidcBindings = pgTable('auth_oidc_bindings', {
+  clientId: text('client_id').notNull(),
+  hydraSid: text('hydra_sid').notNull(),
+  sessionId: text('session_id').notNull(),
+  userId: text('user_id').notNull(),
+  createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+  revokedAt: bigint('revoked_at', { mode: 'number' }),
+}, table => [
+  primaryKey({ columns: [table.clientId, table.hydraSid] }),
+  foreignKey({ columns: [table.sessionId, table.userId],
+    foreignColumns: [authSessions.id, authSessions.userId],
+    name: 'auth_oidc_bindings_session_owner_fk' }).onDelete('restrict'),
+  index('auth_oidc_bindings_session_idx').on(table.sessionId),
+  index('auth_oidc_bindings_user_idx').on(table.userId),
+])
+
+export const authIdentityOutbox = pgTable('auth_identity_outbox', {
+  eventId: text('event_id').primaryKey(),
+  kind: text('kind').notNull(),
+  sessionId: text('session_id').references(() => authSessions.id, { onDelete: 'restrict' }),
+  userId: text('user_id').notNull().references(() => authUsers.id, { onDelete: 'restrict' }),
+  targetBindings: text('target_bindings').notNull(),
+  createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+  attempts: integer('attempts').notNull().default(0),
+  nextAttemptAt: bigint('next_attempt_at', { mode: 'number' }).notNull(),
+  deliveredTargets: text('delivered_targets').notNull(),
+  completedAt: bigint('completed_at', { mode: 'number' }),
+}, table => [
+  check('auth_identity_outbox_kind_check', sql`${table.kind} in ('session', 'user')`),
+  check('auth_identity_outbox_attempts_check', sql`${table.attempts} >= 0`),
+  index('auth_identity_outbox_due_idx').on(table.completedAt, table.nextAttemptAt),
+])
 
 export const authSsoRequests = pgTable(
   'auth_sso_requests',

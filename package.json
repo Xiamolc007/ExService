@@ -17,7 +17,17 @@
     "db:migrate": "pnpm --filter @workspace/server db:migrate",
     "db:reset": "pnpm --filter @workspace/server db:reset",
     "sso:create": "pnpm --filter @workspace/server sso:create",
-    "sso:inspect": "pnpm --filter @workspace/server sso:inspect"
+    "sso:inspect": "pnpm --filter @workspace/server sso:inspect",
+    "auth:disable": "pnpm --filter @workspace/server auth:disable",
+    "auth:enable": "pnpm --filter @workspace/server auth:enable",
+    "integration:configure": "node scripts/docs-integration/command.mjs configure",
+    "integration:init": "node scripts/docs-integration/command.mjs init",
+    "integration:migrate": "node scripts/docs-integration/command.mjs migrate",
+    "integration:up": "node scripts/docs-integration/command.mjs up",
+    "integration:dev": "node scripts/docs-integration/command.mjs dev",
+    "integration:down": "node scripts/docs-integration/command.mjs down",
+    "integration:bootstrap": "node scripts/docs-integration/command.mjs bootstrap",
+    "integration:test:outline": "node scripts/docs-integration/test-outline.mjs"
   },
   "devDependencies": {
     "@redocly/cli": "^2.53.2",

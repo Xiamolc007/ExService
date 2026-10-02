@@ -30,6 +30,15 @@ export default defineConfig({
   test: {
     environment: 'node',
     testTimeout: 60_000,
-    exclude: [...configDefaults.exclude, '**/dist/**'],
+    // Outline has its own test runner and disposable database workflow.
+    include: [
+      'tests/**/*.test.{ts,tsx}',
+      'apps/web/src/**/*.test.{ts,tsx}',
+      'apps/server/src/**/*.test.{ts,tsx}',
+      'packages/api-client/src/**/*.test.{ts,tsx}',
+      'packages/components/src/**/*.test.{ts,tsx}',
+      'packages/sdk/src/**/*.test.{ts,tsx}',
+    ],
+    exclude: [...configDefaults.exclude, '**/dist/**', 'apps/outline/**', 'vendor/**', 'output/**'],
   },
 })

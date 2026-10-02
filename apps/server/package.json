@@ -16,7 +16,9 @@
     "db:reset": "node --env-file-if-exists=.env.local --import tsx src/db/reset.ts",
     "db:generate": "drizzle-kit generate",
     "sso:create": "node --env-file-if-exists=.env.local --import tsx src/cli/sso-create.ts",
-    "sso:inspect": "node --env-file-if-exists=.env.local --import tsx src/cli/sso-inspect.ts"
+    "sso:inspect": "node --env-file-if-exists=.env.local --import tsx src/cli/sso-inspect.ts",
+    "auth:disable": "node --env-file-if-exists=.env.local --import tsx src/cli/auth-disable.ts",
+    "auth:enable": "node --env-file-if-exists=.env.local --import tsx src/cli/auth-enable.ts"
   },
   "dependencies": {
     "@fastify/multipart": "10.1.2",

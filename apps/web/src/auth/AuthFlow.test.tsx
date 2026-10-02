@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { ExAxiosError } from '@workspace/sdk/http/browser'
@@ -19,8 +19,9 @@ Object.defineProperty(document, 'elementFromPoint', { configurable: true, value:
 
 import { AuthFlow } from '@web/src/auth/AuthFlow'
 import { AuthPage } from '@web/src/pages/AuthPage'
+import { AUTH_TOKEN_KEY } from '@web/src/auth/storage'
 
-afterEach(() => { cleanup(); post.mockReset() })
+afterEach(() => { cleanup(); post.mockReset(); window.localStorage.clear() })
 
 describe('AuthFlow captcha stage', () => {
   it('removes the legal footer from the actual login page after continuing', async () => {
@@ -79,5 +80,91 @@ describe('AuthFlow captcha stage', () => {
       body: { ssoRequestId, email: 'member@example.com', password: 'password-one' },
       alert: false,
     })
+  })
+
+  it.each(['server rejection', 'network failure'])('keeps the existing session when account-switch logout has a %s', async failure => {
+    const user = userEvent.setup()
+    window.localStorage.setItem(AUTH_TOKEN_KEY, 'old-token')
+    post.mockImplementation((path: string) => path === '/auth/login'
+      ? Promise.resolve({ token: 'new-token' })
+      : failure === 'network failure'
+        ? Promise.reject(new Error('offline'))
+        : Promise.reject(new ExAxiosError('http', 'SERVICE_UNAVAILABLE', 'Could not revoke', { status: 503 })))
+    render(<MemoryRouter><AuthFlow presentation="page" /></MemoryRouter>)
+    await user.type(screen.getByLabelText('邮箱'), 'member@example.com')
+    await user.type(screen.getByLabelText('密码', { exact: true }), 'password-one')
+    await user.click(screen.getByRole('button', { name: '继续' }))
+    await user.click(screen.getByRole('button', { name: '登录' }))
+    expect(post).toHaveBeenCalledWith('/auth/logout', { headers: { Authorization: 'Bearer old-token' }, alert: false })
+    expect(window.localStorage.getItem(AUTH_TOKEN_KEY)).toBe('old-token')
+    expect(await screen.findByText(/旧账号退出失败/)).toBeTruthy()
+  })
+
+  it('stores a new account token only after the old session has been revoked', async () => {
+    const user = userEvent.setup()
+    window.localStorage.setItem(AUTH_TOKEN_KEY, 'old-token')
+    let completeLogout: ((value: unknown) => void) | undefined
+    post.mockImplementation((path: string) => path === '/auth/login'
+      ? Promise.resolve({ token: 'new-token' })
+      : new Promise(resolve => { completeLogout = resolve }))
+    render(<MemoryRouter><AuthFlow presentation="page" /></MemoryRouter>)
+    await user.type(screen.getByLabelText('邮箱'), 'member@example.com')
+    await user.type(screen.getByLabelText('密码', { exact: true }), 'password-one')
+    await user.click(screen.getByRole('button', { name: '继续' }))
+    await user.click(screen.getByRole('button', { name: '登录' }))
+    await waitFor(() => expect(completeLogout).toBeDefined())
+    expect(window.localStorage.getItem(AUTH_TOKEN_KEY)).toBe('old-token')
+    completeLogout?.({ status: 'ok' })
+    await waitFor(() => expect(window.localStorage.getItem(AUTH_TOKEN_KEY)).toBe('new-token'))
+  })
+
+  it('keeps a successful Website login in its OIDC challenge flow', async () => {
+    const user = userEvent.setup()
+    const onSessionCreated = vi.fn()
+    post.mockResolvedValue({ token: 'new-token' })
+    render(<MemoryRouter><AuthFlow presentation="page" onSessionCreated={onSessionCreated} /></MemoryRouter>)
+    await user.type(screen.getByLabelText('邮箱'), 'member@example.com')
+    await user.type(screen.getByLabelText('密码', { exact: true }), 'password-one')
+    await user.click(screen.getByRole('button', { name: '继续' }))
+    await user.click(screen.getByRole('button', { name: '登录' }))
+    expect(onSessionCreated).toHaveBeenCalledWith('new-token')
+    expect(window.localStorage.getItem(AUTH_TOKEN_KEY)).toBe('new-token')
+  })
+
+  it.each([false, true])('accepts a new login after the old session expires (transport cleared it: %s)', async cleared => {
+    const user = userEvent.setup()
+    const onSessionCreated = vi.fn()
+    window.localStorage.setItem(AUTH_TOKEN_KEY, 'old-token')
+    post.mockImplementation(async (path: string) => {
+      if (path === '/auth/login') return { token: 'new-token' }
+      if (cleared) window.localStorage.removeItem(AUTH_TOKEN_KEY)
+      throw new ExAxiosError('http', 'SESSION_INVALID', 'Invalid session', { status: 401 })
+    })
+    render(<MemoryRouter><AuthFlow presentation="page" onSessionCreated={onSessionCreated} /></MemoryRouter>)
+    await user.type(screen.getByLabelText('邮箱'), 'member@example.com')
+    await user.type(screen.getByLabelText('密码', { exact: true }), 'password-one')
+    await user.click(screen.getByRole('button', { name: '继续' }))
+    await user.click(screen.getByRole('button', { name: '登录' }))
+    expect(onSessionCreated).toHaveBeenCalledWith('new-token')
+    expect(window.localStorage.getItem(AUTH_TOKEN_KEY)).toBe('new-token')
+  })
+
+  it('preserves a replacement session arriving while the old account is being revoked', async () => {
+    const user = userEvent.setup()
+    const onSessionCreated = vi.fn()
+    window.localStorage.setItem(AUTH_TOKEN_KEY, 'old-token')
+    post.mockImplementation(async (path: string) => {
+      if (path === '/auth/login') return { token: 'new-token' }
+      window.localStorage.setItem(AUTH_TOKEN_KEY, 'replacement-token')
+      return { status: 'ok' }
+    })
+    render(<MemoryRouter><AuthFlow presentation="page" onSessionCreated={onSessionCreated} /></MemoryRouter>)
+    await user.type(screen.getByLabelText('邮箱'), 'member@example.com')
+    await user.type(screen.getByLabelText('密码', { exact: true }), 'password-one')
+    await user.click(screen.getByRole('button', { name: '继续' }))
+    await user.click(screen.getByRole('button', { name: '登录' }))
+    expect(await screen.findByText(/登录状态已在其他页面更改/)).toBeTruthy()
+    expect(window.localStorage.getItem(AUTH_TOKEN_KEY)).toBe('replacement-token')
+    expect(onSessionCreated).not.toHaveBeenCalled()
   })
 })

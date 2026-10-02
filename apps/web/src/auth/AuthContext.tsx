@@ -52,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (currentGeneration !== generation.current) {
         return
       }
+      if (readToken(window.localStorage) !== token) return
       setState({
           status: 'authenticated',
           nickname: data.nickname,
@@ -61,6 +62,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     } catch (error) {
       if (currentGeneration === generation.current) {
+        const latestToken = readToken(window.localStorage)
+        if (latestToken !== null && latestToken !== token) return
         if (error instanceof ExAxiosError && error.code === 'SESSION_INVALID') setState({ status: 'anonymous' })
         else setState({ status: 'unavailable', message: '暂时无法连接认证服务' })
       }

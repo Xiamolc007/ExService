@@ -18,6 +18,7 @@ export interface AuthFlowProps {
   ssoRequestId?: string
   onJoin?: () => void
   onFinished?: () => void
+  onSessionCreated?: (token: string) => void
   footer?: ReactNode
 }
 
@@ -27,6 +28,7 @@ export function AuthFlow({
   ssoRequestId,
   onJoin,
   onFinished,
+  onSessionCreated,
   footer,
 }: AuthFlowProps) {
   const navigate = useNavigate()
@@ -117,10 +119,41 @@ export function AuthFlow({
         body: { email: draft.email, password: draft.password }, alert: false,
       })
       if (current !== generation.current) return
+      let oldToken: string | null
       try {
+        oldToken = readToken(window.localStorage)
+      } catch {
+        authForm.current?.setServerErrors({ form: '浏览器无法读取登录信息，请检查存储设置后重试' })
+        return
+      }
+      if (oldToken !== null && oldToken !== result.token) {
+        try {
+          await api.POST('/auth/logout', {
+            headers: { Authorization: `Bearer ${oldToken}` }, alert: false,
+          })
+          if (current !== generation.current) return
+        } catch (error) {
+          if (current !== generation.current) return
+          if (!(error instanceof ExAxiosError && error.code === 'SESSION_INVALID')) {
+            authForm.current?.setServerErrors({ form: '旧账号退出失败，请重试登录' })
+            return
+          }
+          // ExAxios may already have removed this expired token; never accept a replacement token.
+          if (readToken(window.localStorage) === null) oldToken = null
+        }
+      }
+      try {
+        if (readToken(window.localStorage) !== oldToken) {
+          authForm.current?.setServerErrors({ form: '登录状态已在其他页面更改，请重试' })
+          return
+        }
         writeToken(window.localStorage, result.token)
       } catch {
         authForm.current?.setServerErrors({ form: '浏览器无法保存登录信息，请检查存储设置后重试' })
+        return
+      }
+      if (onSessionCreated) {
+        onSessionCreated(result.token)
         return
       }
       onFinished?.()

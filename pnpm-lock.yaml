@@ -109,8 +109,8 @@ importers:
   apps/web:
     dependencies:
       '@exre/exui':
-        specifier: ^0.6.0
-        version: 0.6.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        specifier: link:../../vendor/exui/packages/components
+        version: link:../../vendor/exui/packages/components
       '@hookform/resolvers':
         specifier: 5.9.1
         version: 5.9.1(ajv@8.20.0)(react-hook-form@7.88.0(react@19.3.0))(zod@4.6.5)
@@ -182,8 +182,8 @@ importers:
   packages/components:
     dependencies:
       '@exre/exui':
-        specifier: ^0.6.0
-        version: 0.6.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        specifier: link:../../vendor/exui/packages/components
+        version: link:../../vendor/exui/packages/components
       '@hookform/resolvers':
         specifier: ^5.9.1
         version: 5.9.1(ajv@8.20.0)(react-hook-form@7.88.0(react@19.3.0))(zod@4.6.5)

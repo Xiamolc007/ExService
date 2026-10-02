@@ -4,6 +4,7 @@ import * as schemaTables from '@server/src/db/schema.js'
 
 const tableDefinitions = [
   schemaTables.authUsers, schemaTables.authSessions, schemaTables.authSsoRequests,
+  schemaTables.authOidcFlows, schemaTables.authOidcBindings, schemaTables.authIdentityOutbox,
   schemaTables.communityGroups, schemaTables.communityGroupMemberships,
   schemaTables.joinApplications, schemaTables.joinApplicationEmailRegistry,
   schemaTables.joinApplicationForms, schemaTables.joinApplicationAttachments,
@@ -19,7 +20,10 @@ export const APPLICATION_TABLES = [
   'community_group_memberships', 'join_applications', 'join_application_email_registry',
   'join_application_forms', 'join_application_attachments', 'join_invitations',
   'join_email_controls', 'join_delivery_attempts',
+  'auth_oidc_flows', 'auth_oidc_bindings', 'auth_identity_outbox',
 ] as const
+
+export const BASELINE_APPLICATION_TABLES = APPLICATION_TABLES.slice(0, 12)
 
 const expectedIndexes = tableDefinitions.flatMap(table => [
   ...table.indexes.map(index => index.config.name)
@@ -115,6 +119,35 @@ export const BASELINE_INDEX_SIGNATURES = new Map<string, string>([
   ["join_invitations.join_invitations_pkey", "UNIQUE btree (id)"],
 ])
 
+export const APPLICATION_CONSTRAINT_DEFINITIONS = new Map<string, string>([
+  ...BASELINE_CONSTRAINT_DEFINITIONS,
+  ['auth_identity_outbox.auth_identity_outbox_pkey', 'PRIMARY KEY (event_id)'],
+  ['auth_identity_outbox.auth_identity_outbox_kind_check', "CHECK (kind = ANY (ARRAY['session'::text, 'user'::text]))"],
+  ['auth_identity_outbox.auth_identity_outbox_attempts_check', 'CHECK (attempts >= 0)'],
+  ['auth_identity_outbox.auth_identity_outbox_session_id_auth_sessions_id_fk', 'FOREIGN KEY (session_id) REFERENCES auth_sessions(id) ON DELETE RESTRICT'],
+  ['auth_identity_outbox.auth_identity_outbox_user_id_auth_users_id_fk', 'FOREIGN KEY (user_id) REFERENCES auth_users(id) ON DELETE RESTRICT'],
+  ['auth_oidc_bindings.auth_oidc_bindings_client_id_hydra_sid_pk', 'PRIMARY KEY (client_id, hydra_sid)'],
+  ['auth_oidc_bindings.auth_oidc_bindings_session_owner_fk', 'FOREIGN KEY (session_id, user_id) REFERENCES auth_sessions(id, user_id) ON DELETE RESTRICT'],
+  ['auth_oidc_flows.auth_oidc_flows_phase_challenge_hash_pk', 'PRIMARY KEY (phase, challenge_hash)'],
+  ['auth_oidc_flows.auth_oidc_flows_phase_check', "CHECK (phase = ANY (ARRAY['login'::text, 'consent'::text]))"],
+  ['auth_oidc_flows.auth_oidc_flows_state_check', "CHECK (state = ANY (ARRAY['processing'::text, 'completed'::text, 'restart_required'::text]))"],
+  ['auth_oidc_flows.auth_oidc_flows_session_id_auth_sessions_id_fk', 'FOREIGN KEY (session_id) REFERENCES auth_sessions(id) ON DELETE RESTRICT'],
+  ['auth_users.auth_users_profile_version_check', 'CHECK (profile_version >= 0)'],
+])
+
+export const APPLICATION_INDEX_SIGNATURES = new Map<string, string>([
+  ...BASELINE_INDEX_SIGNATURES,
+  ['auth_identity_outbox.auth_identity_outbox_pkey', 'UNIQUE btree (event_id)'],
+  ['auth_identity_outbox.auth_identity_outbox_due_idx', 'btree (completed_at, next_attempt_at)'],
+  ['auth_oidc_bindings.auth_oidc_bindings_client_id_hydra_sid_pk', 'UNIQUE btree (client_id, hydra_sid)'],
+  ['auth_oidc_bindings.auth_oidc_bindings_session_idx', 'btree (session_id)'],
+  ['auth_oidc_bindings.auth_oidc_bindings_user_idx', 'btree (user_id)'],
+  ['auth_oidc_flows.auth_oidc_flows_phase_challenge_hash_pk', 'UNIQUE btree (phase, challenge_hash)'],
+  ['auth_oidc_flows.auth_oidc_flows_expires_at_idx', 'btree (expires_at)'],
+  ['auth_sessions.auth_sessions_id_unique', 'UNIQUE btree (id)'],
+  ['auth_sessions.auth_sessions_id_user_id_unique', 'UNIQUE btree (id, user_id)'],
+])
+
 export function indexSignature(definition: string): string {
   const match = /^CREATE (UNIQUE )?INDEX \S+ ON \S+ USING (.+)$/.exec(definition)
   return match ? `${match[1] ?? ''}${match[2]}` : definition
@@ -165,7 +198,7 @@ export async function assertDatabaseReady(db: SqlExecutor, schema = 'public', mi
   const missingIndexes = expectedIndexes.filter(index => !actualIndexes.has(index))
   if (missingIndexes.length) throw new Error(`Server 索引缺失（${missingIndexes.join(', ')}）；请运行 pnpm db:migrate。`)
   const changedIndexes = indexes.rows.filter(row => {
-    const expected = BASELINE_INDEX_SIGNATURES.get(`${row.tablename}.${row.indexname}`)
+    const expected = APPLICATION_INDEX_SIGNATURES.get(`${row.tablename}.${row.indexname}`)
     return expected !== undefined && (
       indexSignature(row.indexdef) !== expected || !row.indisvalid || !row.indisready || !row.indislive
     )
@@ -183,7 +216,7 @@ export async function assertDatabaseReady(db: SqlExecutor, schema = 'public', mi
   const missingConstraints = expectedConstraints.filter(name => !actualConstraints.has(name))
   if (missingConstraints.length) throw new Error(`Server 约束缺失（${missingConstraints.join(', ')}）；请运行 pnpm db:migrate。`)
   const changedConstraints = constraints.rows.filter(row => {
-    const expected = BASELINE_CONSTRAINT_DEFINITIONS.get(`${row.table_name}.${row.conname}`)
+    const expected = APPLICATION_CONSTRAINT_DEFINITIONS.get(`${row.table_name}.${row.conname}`)
     return expected !== undefined && row.definition !== expected
   })
   if (changedConstraints.length) {

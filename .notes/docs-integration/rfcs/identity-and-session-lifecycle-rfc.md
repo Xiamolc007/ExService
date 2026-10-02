@@ -1,6 +1,6 @@
 # RFC：Hydra 统一身份与浏览器会话生命周期
 
-状态：待评审；源规格已确认，本文契约为拟新增能力，未实现或运行验证。
+状态：架构预审已通过，实施中；实现审查与运行验收尚未完成。
 
 日期：2026-09-30。来源：`.notes/docs-integration/specs/2026-09-30-docs-integration-design.md`。环境依赖 `.notes/docs-integration/rfcs/environment-and-subpath-rfc.md`；文档权限依赖 `.notes/docs-integration/rfcs/outline-public-access-rfc.md`。Outline 文件使用接入后的 Website 根路径。
 
@@ -10,7 +10,7 @@ Website 保留密码、账号、资料与会话事实，Hydra 负责标准 OIDC�
 
 为本站会话增加非凭据的稳定 ID，以此关联 Hydra sid 和 Outline 本地会话。Outline 每次受保护请求同步核验 Website；实时连接使用通知加最长 4 秒租约，满足已批准的最多 5 秒撤销目标。关闭替代登录/token 旁路。现有账号权限和 Outline 文档权限互不自动映射。
 
-## 已核实事实和协议基线
+## 实施前源码事实与协议基线
 
 - `apps/server/src/db/schema.ts`：`auth_sessions` 主键为 tokenHash，没有独立会话 ID；`auth_users` 没有停用字段。
 - `api/openapi.yaml`：已有 login、logout、本人资料和 CLI SSO 接收 operation；没有本 RFC 的 OIDC 或服务间核验 operation。
@@ -38,7 +38,7 @@ OIDC Token 验证遵循 [OIDC Core ID Token Validation](https://openid.net/specs
 | Hydra remember | login=false、consent=false，每次协议登录都经过 Website 当前会话核验；已有 Website 登录无须重新输入密码 |
 | JWKS | 验签键缓存可复用，未知 kid 刷新；不缓存账号/会话仍有效的结论 |
 
-另一测试客户端单独登记 client ID、secret 和精确回调，仅验证通用接入；不开放动态客户端注册或通配回调。Hydra admin 内网可达，不将其 SDK 或管理 secret 放到浏览器。
+另一测试客户端固定为 `ex-oidc-probe`，使用独立随机 secret、精确回调 `http://127.0.0.1:18765/callback` 和同源退出回调 `http://127.0.0.1:18765/signed-out`；同样仅允许 authorization_code、client_secret_basic 和 openid/profile/email，不取得 Website 内部核验密钥，仅验证通用接入。通过显式 bootstrap 受控登记，不开放动态客户端注册或通配回调。Hydra admin 内网可达，不将其 SDK 或管理 secret 放到浏览器。
 
 ## 数据模型与迁移
 
@@ -50,11 +50,19 @@ OIDC Token 验证遵循 [OIDC Core ID Token Validation](https://openid.net/specs
 | Website `auth_sessions` | `id` UUID，unique/not null | 保留 tokenHash 原主键和 Bearer API；迁移为既有行生成唯一 ID，不外发摘要 |
 | Website `auth_oidc_flows` | phase、challengeHash、sessionId、clientId、hydraSid、state、expiresAt、encryptedRedirect | phase+challengeHash 唯一；10 分钟内有效且不超过本站会话到期；状态 processing/completed/restart_required |
 | Website `auth_oidc_bindings` | clientId、hydraSid、sessionId、userId、createdAt、revokedAt | clientId+hydraSid 唯一；sessionId FK 指向本站会话 id；复合关联保证 userId 与会话拥有者一致 |
-| Website `auth_identity_outbox` | eventId、kind、sessionId/userId、createdAt、attempts、nextAttemptAt、deliveredTargets | 与撤销同事务写入；eventId 幂等；分别记录 Hydra 与 Outline 投递结果 |
+| Website `auth_identity_outbox` | eventId、kind、sessionId/userId、targetBindings、createdAt、attempts、nextAttemptAt、deliveredTargets、completedAt | 与撤销同事务写入；targetBindings 固化 clientId/hydraSid 快照；eventId 幂等；逐个 sid 和目标记录投递结果，全部完成才写 completedAt |
 | Outline `ExternalIdentity` | issuer、subject、userId、profileVersion | issuer+subject 唯一，userId 唯一；不按邮箱回填或自动迁移 issuer；版本仅递增 |
 | Outline `ExternalSession` | id、userId、websiteSessionId、hydraSid、clientId、expiresAt、revokedAt、encryptedAccessToken | id 随机 UUID；签名 JWT 携带此 id；有效期不超过 Website 会话，token 清理后置空 |
 
 Website OIDC tables 只保存身份关联和恢复状态，不保存用户密码副本。flow challenge 只存摘要，返回跳转为短期加密字段供同会话重试；过期清理不得删除撤销未送达 outbox。Outline access token 只用于 userinfo 和主动撤销，按本机密钥加密保存至撤销或到期，不出现在日志、URL、前端存储。
+
+### 撤销记录保留与清理
+
+现有 `apps/server/src/auth/service.ts` 的 `cleanup()` 会立即删除已撤销或到期的 `auth_sessions`，不能直接沿用。新增绑定采用限制删除的外键，禁止级联删除会话、绑定或未完成 outbox。撤销事务同时保存所有受影响绑定的 clientId/hydraSid 快照，worker 依据快照重试，不依赖之后仍存在的有效登录状态。
+
+会话到期时，清理器先在事务内将仍未撤销的绑定标记失效并幂等写入同类 outbox；没有绑定的旧会话仍可按原到期规则清理。具有关联的会话和绑定保留为无效 tombstone，直到该会话所有撤销事件的 Hydra 逐 sid 清理与 Outline 投递均完成。完成后至少保留 24 小时供退出重试；待重试事件不受该保留期限制，不能因超过时间而删除。
+
+清理在事务中按“过期 flow → 已完成且超过保留期的 outbox → 无待投递事件的已撤销绑定 → 无 flow/绑定引用的已撤销或到期会话”执行，并在删除前重新检查依赖，避免与新 binding/outbox 写入竞争。outbox 创建时锁定会话，binding 建立使用同一会话锁并复核有效性；已失效会话不能再增加有效绑定。停用的用户级事件必须保存全部受影响会话的目标快照。测试覆盖清理与撤销并发、投递失败后的 SSO 请求、进程重启重试，以及已完成记录的有序删除。
 
 sessionId/subject/hydraSid 是关联标识，不是凭据。服务请求仍需独立的客户端密钥。Outline 本地 JWT 验签后必须找到有效 ExternalSession，不能缺字段时降级成旧 jwtSecret-only 会话。
 
@@ -79,7 +87,7 @@ sessionId/subject/hydraSid 是关联标识，不是凭据。服务请求仍需�
 
 integrationKey 使用 Header `X-Integration-Key`（OpenAPI apiKey），按调用方配置映射 clientId；request body 不接受任意 clientId。bootstrapKey 使用单独 Header `X-Bootstrap-Key`，运行应用不持有它。gateway 拒绝公开 `/api/internal/`；服务端独立验证密钥，不能把网络位置当认证。
 
-浏览器操作收到无效会话为 401；challenge 不合法/超时为 400，已处理但无法恢复跳转为 409；非法客户端/scope 为 403；Hydra/DB 不可达为 503。沿用统一 error envelope 和固定安全文案。全部身份响应 Cache-Control=no-store。传入 challenge 长度上限 1024；inspect 不回显 subject、sid 或 request_url。
+浏览器操作收到无效会话为 401；challenge 不合法/超时为 400，已处理但无法恢复跳转为 409；非法客户端/scope 为 403；Hydra/DB 不可达为 503。沿用统一 error envelope 和固定安全文案。全部身份响应 Cache-Control=no-store。传入 challenge 长度上限 8192，入口只接受单个非空且无空白的 challenge 参数；gateway 与完整模式的 Website 静态服务器请求行缓冲区单块至少 16 KB，容纳 challenge 与路径。inspect 不回显 subject、sid 或 request_url。
 
 `login`、`logout`、`/auth/me` 保持现有响应形状。logout 增加同事务标记会话/绑定撤销和 outbox。已有 CLI SSO 不改变语义；也必须像普通密码登录一样拒绝已停用账号。不新增绕过 Contract 的 Fastify 路由。
 
@@ -111,7 +119,7 @@ sequenceDiagram
 
 Website login accept 读取 Hydra login request，校验 client、scope 和固定回调；用已验证 Website 会话建立 flow，再发送 subject，remember=false。若 Hydra skip 的 subject 与当前 Website 用户不同，拒绝旧 flow 并要求重新发起，不把旧账号接受到新会话。
 
-consent accept 根据 Hydra 返回的 login_challenge 查找同一 session flow，复核 bearer、subject 和 sid，再先建立唯一 binding，后调用 Hydra 接受授权。ID Token 声明 nickname/name、email、picture 和额外 `ex_session_id`，userinfo 返回同一 subject；不通过 claims 授予文档角色。email_verified 只在 Website 存在验证事实时给 true，不能为了通过 Outline 校验伪造；专用 provisioner 不依赖邮箱合并。
+consent accept 根据 `(Website sessionId, clientId, Hydra login_session_id)` 关联 completed 且未过期的 login flow；Hydra 返回的内部 login_challenge 与浏览器签名 challenge 不是同一标识，仍校验其非空与格式，并复核 bearer、subject、批准 client/scope/redirect 和 sid，再先建立唯一 binding，后调用 Hydra 接受授权。同 sid 并发授权仅允许同一会话同一客户端。ID Token 声明 nickname/name、email、picture 和额外 `ex_session_id`，userinfo 返回同一 subject；不通过 claims 授予文档角色。email_verified 只在 Website 存在验证事实时给 true，不能为了通过 Outline 校验伪造；专用 provisioner 不依赖邮箱合并。
 
 接受 challenge 是外部调用，不能与 PostgreSQL 形成原子事务。flow 用唯一约束及行锁保证每次只处理一次；保存 completed 的加密 redirect 后同会话重试返回相同结果。若 Hydra 接受成功但响应/本地记录丢失，标记 restart_required、撤销已记录 sid、返回 409 并重新发起授权；不猜测 verifier 或重复创号。进行中的 call 超时后先阻止旧 flow 再重启。
 
@@ -141,7 +149,7 @@ Outline 增加单一 SessionGuard，HTTP auth middleware、私有文件、事件
 
 每次入站写操作、出站私有事件和协作数据发送前都检查截止时间。250ms watchdog 负责主动关闭过期连接；事件循环恢复后必须先检查再处理积压消息。这样租约兜底预算为 4 秒加主动关闭调度余量，小于批准的 5 秒；真实运行须实测，不以定时器配置值代替证据。
 
-失效通知携带 sessionId 或 userId 和 eventId。收到后递增本地校验 generation、标记 revoked 并关闭匹配连接；失效前发起的迟到 check 响应不得恢复租约。用户停用可按 userId，普通退出必须按 sessionId。扩展 `AuthenticationExtension` 的 scope，并覆盖 `server/services/websockets.ts` 的 Socket.IO 房间；不要只修编辑通道。
+失效接收器支持 sessionId 或 userId 和 eventId。收到后递增本地校验 generation、标记 revoked 并关闭匹配连接；失效前发起的迟到 check 响应不得恢复租约。普通退出按 sessionId 投递；用户停用虽是用户级权威撤销，也按事务中快照的旧 sessionId 逐目标投递，禁止将延迟停用通知按 userId 广播到恢复后的新会话。扩展 `AuthenticationExtension` 的 scope，并覆盖 `server/services/websockets.ts` 的 Socket.IO 房间；不要只修编辑通道。
 
 协作 mutation 在应用到共享文档之前检查租约，拒绝后不能广播或进入待持久化缓冲。撤销前已被合法接受的更改可以完成落盘；不能把 PersistenceExtension 的 debounce flush 当成用户新写入，也不能因关闭连接丢弃已确认变更。测试同时观察服务端文档状态、广播和持久化结果。
 
@@ -155,9 +163,15 @@ Outline 增加单一 SessionGuard，HTTP auth middleware、私有文件、事件
 
 Outline 内部接收器拟定 POST `/internal/identity/revoke`（外部前缀后为 `/docs/internal/...`，gateway 必须拒绝），以独立反向密钥 Header `X-Identity-Delivery-Key` 鉴权，body 为 eventId 与恰好一个 sessionId/userId，返回 `{accepted:true}`。此路由由 Outline 自身 Koa schema 定义，不加入 Website OpenAPI。
 
-本地停用 CLI 拟定 `pnpm auth:disable -- --user-id <id>`：核对数据库身份，在事务内写 disabledAt、撤销全部 auth_sessions/bindings、写用户级 outbox。恢复账号使用独立 `auth:enable` 清空 disabledAt，旧会话继续保持 revoked，必须重新登录。不新增公开管理入口。
+本地停用 CLI 拟定 `pnpm auth:disable -- --user-id <id>`：核对数据库身份，在事务内写 disabledAt、撤销全部 auth_sessions/bindings、写用户级 outbox。恢复账号使用独立 `auth:enable` 清空 disabledAt，旧会话继续保持 revoked，必须重新登录。不新增公开管理入口。普通登录、CLI SSO 完成及现有会话 SSO 确认在创建会话或绑定前，同停用事务按用户行、会话行的顺序加锁，并重新核验 disabledAt；没有绑定的旧 Website 会话也必须撤销。
+
+用户级 outbox 在停用事务中固化每个受影响绑定的 clientId、hydraSid、Website sessionId 和独立稳定 deliveryEventId；worker 按该快照清理 Hydra sid，并向 Outline 投递 `{eventId:deliveryEventId,sessionId}`。失败重试使用同一 eventId；账号恢复和新登录不扩充旧事件的目标。遗留目标缺失 sessionId 时保持待处理并报告错误，不回退为 userId 广播。待处理用户级事件同样阻止相关旧绑定 tombstone 提前清理，事件完成后再保留至少 24 小时；无绑定会话无需发送 Outline 通知。通知失败时仍由权威 check 和实时租约满足撤销预算，最终验收必须覆盖多设备、并发登录/绑定、恢复后的延迟投递和故障重试。
+
+上述用户行锁使用 PostgreSQL `FOR NO KEY UPDATE`，足以串行停用、恢复与登录完成，又与 outbox 外键校验所需的 `KEY SHARE` 兼容；不能使用与外键锁冲突的 `FOR UPDATE`，否则普通退出先持会话锁再插入 outbox 时，可能与停用的用户行锁、会话行锁形成死锁。回归必须覆盖停用与退出/过期清理并发。
 
 协议 logout challenge 的 sid 只能在与当前 bearer 绑定一致时接受，不能让一个浏览器代另一个退出。若 Website Bearer 已不存在，仍可通过有效 Outline 会话发起内部撤销；否则只显示已退出或需重试，不按可猜测 sid 撤销。
+
+普通 Website 退出调用既有 `logout`，Outline 退出调用 `revokeLinkedSession`；两者均以权威撤销和后台按 sid 清理完成，不在撤销后再调用需要有效 Bearer 的 `acceptOidcLogout`。后者仅供 Hydra 发起的协议 logout challenge 使用：请求进入时验证仍有效的 Bearer 和匹配绑定，在该 operation 内先提交会话组撤销，再用本次已验证的 challenge 接受 Hydra logout；提交后不再次要求这个 Bearer 有效。接受动作与同一 sid 的 outbox 清理串行处理，防止后台删除使在途 challenge 失效；接受调用仍受 1 秒超时约束，失败后释放清理任务，不恢复会话。响应丢失或 Hydra 失败后的浏览器重试可能得到 401，此时进入已退出收尾页，后台继续清理，不使用旧凭据恢复协议授权。Hydra Cookie 收尾不作为 Website 权威撤销的前置条件。
 
 Hydra 自身 access token 在清理失败时可能短期仍可读取其 userinfo 快照；它不是 Website/Outline 的业务凭据，任何业务入口必须 SessionGuard。此窗口最长为设定的 60 秒 token 生命周期；本期不提供 token 直接调用业务 API。若后续应用要使用 bearer 访问资源，必须额外实施实时绑定核验，不能只验证签名。完整退出验收还须确认 Hydra sid 已清理；仅入队不能标记跨服务退出全部完成。部分失败时业务访问已失效，但协议清理保留待重试状态并在验收报告明确记录。
 
@@ -177,6 +191,8 @@ Hydra 自身 access token 在清理失败时可能短期仍可读取其 userinfo
 ## 验证、落地与回滚
 
 覆盖源规格 E05–E07、E11–E16，并与权限用例组合。必须包含：双设备同账号只退出一个；切换账号、旧 callback、重放 state、错误 aud/iss/nonce/kid、同邮箱不同 sub、并发首次登录、丢 outbox 消息、迟到 active 响应、断网、token 清理失败、服务器重启，以及协作截止后的入站/出站消息。
+
+另用所选 Hydra v2.3.0 实测同一浏览器退出后再次登录、残留 Hydra Cookie 与 remember=false 的组合，以及协议 logout 接受与后台 sid 清理的并发和超时；不能仅凭管理 API 的 schema 认定浏览器收尾正确。
 
 Website Contract 测试验证新 operation 双向登记、原始返回值及 HTTP shape；数据库用隔离 PostgreSQL。Outline 定向测试 session guard、JWT、provisioner、普通 socket 与协作租约。真实浏览器记录撤销提交与最后允许操作时间，5 秒约束不能只由 fake timers 证明。第二客户端完成标准 OIDC 并证明未经绑定核验不能访问 Website 业务。
 

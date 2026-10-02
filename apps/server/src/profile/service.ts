@@ -20,6 +20,14 @@ const FORMATS = {
 export const AVATAR_DIRECTORY = resolve(dirname(fileURLToPath(import.meta.url)), '../../data/avatars')
 export const PUBLIC_AVATAR_BASE_URL = 'http://127.0.0.1:8080/api/avatars'
 
+export function avatarDirectory(configured: string | undefined): string {
+  if (configured === undefined || configured === '') return AVATAR_DIRECTORY
+  if (!configured.startsWith('/') && !/^[A-Za-z]:[\\/]/.test(configured)) {
+    throw new Error('SERVER_AVATAR_DIRECTORY 必须是绝对路径。')
+  }
+  return resolve(configured)
+}
+
 export function publicAvatarBaseUrl(configured: string | undefined): string {
   if (configured === undefined || configured === '') return PUBLIC_AVATAR_BASE_URL
   const url = new URL(configured)
@@ -98,6 +106,10 @@ export class ProfileService {
       if (input.avatar === null) {
         assignments.push('avatar_key = NULL')
       }
+      if ((input.nickname !== undefined && input.nickname.trim() !== row.nickname) ||
+          (input.avatar === null && row.avatar_key !== null)) {
+        assignments.push('profile_version = profile_version + 1')
+      }
       if (assignments.length > 0) {
         const update = await tx.query(`UPDATE auth_users SET ${assignments.join(', ')} WHERE id = $${values.length + 1}`,
           [...values, userId])
@@ -157,7 +169,7 @@ export class ProfileService {
       const result = await this.db.transaction(async tx => {
         const row = await this.readUser(userId, tx, true)
         await assertSessionCurrent(tx)
-        const update = await tx.query('UPDATE auth_users SET avatar_key = $1 WHERE id = $2', [avatarId, userId])
+        const update = await tx.query('UPDATE auth_users SET avatar_key = $1, profile_version = profile_version + 1 WHERE id = $2', [avatarId, userId])
         if (update.rowCount !== 1) throw new ProfileError(404)
         return { previousAvatar: row.avatar_key, snapshot: this.toSnapshot(await this.readUser(userId, tx)) }
       })

@@ -1,7 +1,7 @@
 import { createVerifiedPool, assertDatabaseUrl, type DatabaseOptions } from '@server/src/db/client.js'
 import { runMigrations } from '@server/src/db/migration-runner.js'
 import {
-  APPLICATION_TABLES, BASELINE_CONSTRAINT_DEFINITIONS, BASELINE_INDEX_SIGNATURES, indexSignature,
+  APPLICATION_TABLES, APPLICATION_CONSTRAINT_DEFINITIONS, APPLICATION_INDEX_SIGNATURES, indexSignature,
 } from '@server/src/db/schema-check.js'
 import { getTableConfig } from 'drizzle-orm/pg-core'
 import type { PoolClient } from 'pg'
@@ -9,14 +9,16 @@ import * as schemaTables from '@server/src/db/schema.js'
 
 const SAFE_IDENTIFIER = /^[a-z_][a-z0-9_]*$/
 const DROP_ORDER = [
+  'auth_identity_outbox', 'auth_oidc_bindings', 'auth_oidc_flows',
   'join_delivery_attempts', 'join_email_controls', 'join_invitations',
   'join_application_attachments', 'join_application_forms', 'join_application_email_registry',
   'join_applications', 'community_group_memberships', 'auth_sso_requests',
   'auth_sessions', 'community_groups', 'auth_users',
 ] as const
-const APPLICATION_INDEXES = new Set([...BASELINE_INDEX_SIGNATURES.keys()].map(name => name.split('.')[1]))
+const APPLICATION_INDEXES = new Set([...APPLICATION_INDEX_SIGNATURES.keys()].map(name => name.split('.')[1]))
 const BASELINE_NOT_NULL_COLUMNS = new Set([
   schemaTables.authUsers, schemaTables.authSessions, schemaTables.authSsoRequests,
+  schemaTables.authOidcFlows, schemaTables.authOidcBindings, schemaTables.authIdentityOutbox,
   schemaTables.communityGroups, schemaTables.communityGroupMemberships,
   schemaTables.joinApplications, schemaTables.joinApplicationEmailRegistry,
   schemaTables.joinApplicationForms, schemaTables.joinApplicationAttachments,
@@ -116,7 +118,7 @@ export async function resetDatabase(options: DatabaseOptions, confirmation: stri
         return row.conname !== '__drizzle_migrations_pkey' || row.definition !== 'PRIMARY KEY (id)'
       }
       const key = `${row.table_name}.${row.conname}`
-      return BASELINE_CONSTRAINT_DEFINITIONS.get(key) !== row.definition
+      return APPLICATION_CONSTRAINT_DEFINITIONS.get(key) !== row.definition
     })) {
       throw new Error('目标数据表含非本应用约束；拒绝重置。')
     }
@@ -137,7 +139,7 @@ export async function resetDatabase(options: DatabaseOptions, confirmation: stri
     if (indexes.rows.some(row => {
       const expected = row.tablename === '__drizzle_migrations'
         ? (row.indexname === '__drizzle_migrations_pkey' ? 'UNIQUE btree (id)' : undefined)
-        : BASELINE_INDEX_SIGNATURES.get(`${row.tablename}.${row.indexname}`)
+        : APPLICATION_INDEX_SIGNATURES.get(`${row.tablename}.${row.indexname}`)
       return expected === undefined || indexSignature(row.indexdef) !== expected ||
         !row.indisvalid || !row.indisready || !row.indislive
     })) {
@@ -188,6 +190,13 @@ export async function resetDatabase(options: DatabaseOptions, confirmation: stri
     if (defaults.rows.some(row => {
       if (row.table_name === '__drizzle_migrations' && row.column_name === 'id') {
         return !expectedJournalDefaults.has(row.expression)
+      }
+      if (row.table_name === 'auth_sessions' && row.column_name === 'id') {
+        return !['gen_random_uuid()::text', '(gen_random_uuid())::text'].includes(row.expression)
+      }
+      if ((row.table_name === 'auth_users' && row.column_name === 'profile_version') ||
+          (row.table_name === 'auth_identity_outbox' && row.column_name === 'attempts')) {
+        return row.expression !== '0'
       }
       return row.expression !== '0' || !(
         (row.table_name === 'join_applications' && row.column_name === 'form_version') ||

@@ -9,9 +9,11 @@ export function createAuthServices(options: {
   db: AppDatabase
   codeHmacKey: Buffer
   publicWebBaseUrl?: string
+  publicAvatarBaseUrl?: string
 }) {
   const passwordHasher = new ScryptPasswordHasher()
-  const authServices = new AuthService({ db: options.db, passwordHasher })
+  const authServices = new AuthService({ db: options.db, passwordHasher,
+    publicAvatarBaseUrl: options.publicAvatarBaseUrl })
   const invitationServices = new InvitationService({ ...options, passwordHasher })
   const joinServices = new JoinService(invitationServices)
   return { authServices, invitationServices, joinServices }

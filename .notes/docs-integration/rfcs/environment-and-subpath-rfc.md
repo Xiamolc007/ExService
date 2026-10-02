@@ -1,8 +1,8 @@
 # RFC：本地集成环境、Outline 子仓库与 /docs 子路径
 
-状态：待评审；方案源规格已获用户确认，未执行实现或运行验收。
+状态：架构预审已通过，实施中；实现审查与运行验收尚未完成。
 
-日期：2026-09-30。来源：`.notes/docs-integration/specs/2026-09-30-docs-integration-design.md`。本文使用 Website 根目录路径，`apps/outline/` 是拟接入位置，目前 Outline 仍是独立 checkout。
+日期：2026-09-30。来源：`.notes/docs-integration/specs/2026-09-30-docs-integration-design.md`。本文使用 Website 根目录路径，Outline 接入位置为 `apps/outline/`。
 
 ## 决策与边界
 
@@ -10,7 +10,7 @@
 
 本 RFC 可独立验收构建、路径与持久化；统一登录依赖 `.notes/docs-integration/rfcs/identity-and-session-lifecycle-rfc.md`，最终公开目录依赖 `.notes/docs-integration/rfcs/outline-public-access-rfc.md`。环境完成不代表业务集成完成。仅本地开发，不提供公网部署承诺。
 
-## 当前事实
+## 实施前源码基线
 
 - Website 使用 pnpm 11.9.0，`pnpm-workspace.yaml` 当前包含 `apps/*`；Website Server 使用独立 `exre` PostgreSQL。
 - Outline 使用 Yarn 4.11.0，现有 remote 为 `git@github.com:caep-dev/ex-outline.git`。实施前复核 remote 和可取得的提交，不将未提交修改当成 submodule 引用。
@@ -51,7 +51,7 @@ Compose 使用 `additional_contexts`，最低支持该能力的 Compose 2.17；�
 
 Outline runtime 如保留 portal 依赖，必须保留解析所需的 ExUI 产物及包元数据，不能只复制悬空 symlink。Website 静态前端打包后不挂源码；Server 只带运行所需产物。构建探针在最终镜像内验证各运行入口和依赖解析。
 
-开发模式先执行 ExUI tokens/组件构建，再运行其 `watch`；消费者对解析后的 ExUI dist 路径开放文件访问并触发 reload。只消费 Outline 已在使用的 tokens/style 入口，不借此引入 React 19 组件或升级 Outline React。Website 延续 React dedupe，避免外部源码链接产生重复 React。
+开发模式由 `scripts/docs-integration/watch-exui.mjs` 监听 ExUI tokens/components 的 src/scripts，规范化原生事件的相对或绝对文件名，忽略生成的 `packages/tokens/src/style.css`，顺序执行原包同一 pnpm build。适配器先构建 tokens/组件再等待源码变化，仅管理自身启动的子进程，不修改外部 ExUI checkout。消费者对解析后的 ExUI dist 路径开放文件访问并触发 reload。只消费 Outline 已在使用的 tokens/style 入口，不借此引入 React 19 组件或升级 Outline React。Website 延续 React dedupe，避免外部源码链接产生重复 React。
 
 ## 网络与两个运行模式
 
@@ -88,7 +88,7 @@ HTTP 与 WebSocket 在代理边界统一剥前缀，避免一套服务端 route 
 
 SW 注册 `/docs/static/sw.js`，scope 为 `/docs/`，响应明确允许该 scope。仅 precache 静态资源，关闭当前 API/附件运行时缓存；升级时删除 Outline 旧缓存，不删除 Website cache。普通事件连接、编辑协作与 HMR 均使用独立的公共路径配置。
 
-Cookies（包括原 accessToken、OAuth state、lastSignedIn）集中设置/清理到 `/docs`；最终会话 Cookie 按身份 RFC 改名为 exdocs_access，前后端读取方式同步改造。登录回调固定 `/docs/auth/oidc.callback`。禁止从不可信转发头计算公开域名，gateway 覆盖转发头并限制 Host。
+Cookies（包括原 accessToken、OAuth state、lastSignedIn）集中设置/清理到 `/docs`；最终会话 Cookie 按身份 RFC 改名为 exdocs_access，前后端读取方式同步改造。HTTP 集成环境的可读 CSRF Cookie `csrfToken` 同样使用 `/docs`。唯一例外是 HTTPS 的 `__Host-csrfToken`：浏览器前缀规则要求它具有 `Secure`、无 `Domain` 且 `Path=/`，继续保留其 host-only 防护，不能改为 `/docs` 而导致浏览器拒收；代理必须可信地传递 HTTPS 状态。集成会话 Cookie 的非安全方法要求 Origin 精确匹配公开站点及签名双提交，四个匿名只读 public RPC 精确豁免；同源本地附件 XHR 上传也必须提交 CSRF token，跨域对象存储请求不得携带该 token。登录回调固定 `/docs/auth/oidc.callback`。禁止从不可信转发头计算公开域名，gateway 覆盖转发头并限制 Host。
 
 统一入口还必须拒绝 `/docs/internal/*`，供 Website 向 Outline 投递撤销的接收器仅走内网。Identity Host 允许 discovery、JWKS、授权、token、userinfo、revocation、logout 的已登记协议路径；其余路径拒绝。这不是把任意客户端请求转发到 Hydra admin 的通用代理。
 
@@ -102,11 +102,14 @@ Cookies（包括原 accessToken、OAuth state、lastSignedIn）集中设置/清�
 | `pnpm integration:init` | 显式启动基础设施、创建本集成独立数据库/角色、应用三方 migration；不接入或重置旧本机库 |
 | `pnpm integration:bootstrap -- --admin-user-id <id>` | 按另两份 RFC 创建 Hydra 客户端和唯一文档工作区 |
 | `pnpm integration:up` | 以完整模式启动；结构未初始化时失败并提示 init |
-| `pnpm integration:dev` | 基础服务加宿主机应用与 ExUI watch；以统一入口访问 |
+| `pnpm integration:dev` | 基础服务加宿主机应用与仓库内 ExUI integration watcher；以统一入口访问 |
 | `pnpm integration:migrate` | 显式执行各服务 migration；打印目标身份，不打印秘密 |
 | `pnpm integration:down` | 停止当前模式，不删除 volumes 或本地文件 |
+| `pnpm integration:test:outline <server-test-file> "<case-name>" ...` | 每个明确用例创建独立 PostgreSQL/Redis 容器，显式 migration 后执行；不读取既有测试库连接 |
 
 模式锁记录进程/Compose 项目身份；启动另一模式时检查实际存活情况，避免 stale lock 永久阻塞。初始化不调用 Website `db:reset`；其回环和数据库身份限制不为容器方便而放宽。
+
+Outline 服务端 SQL 测试不能直接沿用 `.env.test` 中的本机连接。隔离测试入口仅接受一个明确的 `server/**/*.test.ts` 或 `plugins/**/*.test.ts` 文件和一个或多个字面用例名；每个用例分别创建新 PostgreSQL 与 Redis 容器，清除继承的数据库、Redis 和身份服务连接及凭据，使用独立本地附件目录，再显式迁移。入口核对数据库身份，禁止忽略未处理异常，并要求 JSON 报告中恰好一个指定用例通过，结束时关闭本次创建的容器；不执行整套 Outline 测试，也不重置既有库。
 
 本集成 PostgreSQL 默认使用独立新卷，创建 `exre`、`outline`、`hydra` 和独立角色。它不会复制原本机 Website 数据；需要已有账号时先在新集成实例按现有注册流程建号，或后续单独执行经核对的导入。实际初始化前必须显示新实例目标，不能误认为对旧库迁移。
 
