@@ -2,7 +2,7 @@
 
 本文件说明共享认证 UI、应用流程和浏览器存储之间的边界。HTTP operation 与字段形状以 `api/openapi.yaml` 和生成 Client 类型为准。
 
-_最后更新：2026-09-29_
+_最后更新：2026-10-01_
 
 ## 责任分层
 
@@ -65,6 +65,12 @@ Hero 图片来自 `apps/web/public/images/heros/join/rifling-911/`。构建时�
 普通登录成功后先把 token 写入 `localStorage` 的 `exwebsite.auth.token`，成功写入后才整页导航。`AuthProvider` 在启动与其他标签页 storage 事件后调用 `/auth/me` 恢复身份；浏览器存储本身不作为身份依据。
 
 明确的 `SESSION_INVALID` 只删除仍与本次请求匹配的 token，避免迟到响应清掉较新的登录；资料页读取或修改收到此错误时同步更新顶栏认证状态。临时网络错误保留 token 并显示可重试状态，资料读取失败也结束等待并允许重试。主动退出成功或退出请求收到会话失效后清除匹配 token 并刷新。
+
+## 文档身份页面
+
+`apps/web/src/App.tsx` 注册 `/identity/login`、`/identity/consent`、`/identity/logout`、`/identity/status` 和 `/identity/signed-out`。挑战页面通过生成的 API Client 检查或接受 Hydra challenge；已有有效本站 Bearer 可直接完成登录与授权，缺少会话时经现有登录 UI。挑战与当前 token 不匹配时重新开始，避免迟到响应将旧身份带入新会话。
+
+`/identity/status` 仅向同源父窗口返回 nonce 和粗粒度状态，不传递 token 或资料，供 Outline 的匿名页面决定是否尝试自动接入。`/identity/signed-out` 重新验证当前 token，只删除已确认无效且仍匹配的 token；迟到的 Outline 退出跳转不能清除后来登录的新账号。服务端撤销仍是会话有效性的依据。跨服务边界见 `.ai/architectures/docs-integration/integration-boundaries.md`。
 
 ## 用户设置
 

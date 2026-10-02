@@ -1,8 +1,8 @@
 # RFC：Outline 文档授权、公开目录与工作区初始化
 
-状态：待评审；已批准产品规则的实现方案，未执行实现或验收。
+状态：架构预审已通过，实施中；实现审查与运行验收尚未完成。
 
-日期：2026-09-30。来源：`.notes/docs-integration/specs/2026-09-30-docs-integration-design.md`。依赖 `.notes/docs-integration/rfcs/environment-and-subpath-rfc.md` 与 `.notes/docs-integration/rfcs/identity-and-session-lifecycle-rfc.md`。下文 Outline 源码路径均以未来 Website 根目录的 `apps/outline/` 开始。
+日期：2026-09-30。来源：`.notes/docs-integration/specs/2026-09-30-docs-integration-design.md`。依赖 `.notes/docs-integration/rfcs/environment-and-subpath-rfc.md` 与 `.notes/docs-integration/rfcs/identity-and-session-lifecycle-rfc.md`。下文 Outline 源码路径均以 Website 根目录的 `apps/outline/` 开始。
 
 ## 决策与范围
 
@@ -12,7 +12,7 @@
 
 本期只有一个新工作区；无旧数据迁移，无逐篇发布审核，无用户自行建工作区，无第三方认证/个人 API token/MCP 外部入口绕过身份核验。
 
-## 源码事实
+## 实施前源码基线
 
 - `apps/outline/server/policies/collection.ts` 的创建允许 Admin 或 memberCollectionCreate；更新/新建文档可由显式集合 ReadWrite/Admin 成员授予。
 - `apps/outline/server/policies/document.ts` 的团队级创建拒绝 Viewer，但文档更新还允许直接文档成员和作者草稿分支，不能只设置 Viewer 就满足全部限制。
@@ -87,6 +87,8 @@
 公共 SQL 查询先联结集合级有效 Share 和已发布文档再过滤/分页；搜索复用 PostgreSQL 文档全文检索能力，只在可公开集合范围生成结果和摘要。不可先全局搜索再在应用层丢弃私有行，否则计数与分页可泄露信息。集合/文档列表按现有名称或更新时间加稳定 ID 排序；非快照分页中并发发布可改变后续页面，但不能返回私有行。
 
 旧 `shares.info`/公开 Share 页面仍需使用同一 PublicAccess resolver；不能新增公共 API 后留下旧路由旁路。登录 API 的列表/search 和 direct document load 同样应用新权限规则，公开内容对登录用户可读，但草稿不能混入默认读者视图。
+
+集成模式的 `documents.info` 对没有内部集合阅读权、但目标当前公开的登录用户返回最小公开 `data` 和顶层 `publicOnly=true` 能力标记；该标记由本次实时授权决定，不伪造成员关系或提升角色。客户端据此进入公开只读文档场景，避免完整 DocumentScene 的成员、访问记录与分享副请求，并通过受会话保护的评论 API 保留登录读者评论能力。登录列表和搜索中的同类结果也只使用安全公开投影；内部成员继续使用其正常授权投影。
 
 公共 API 不使用 optional auth 依赖 Website：其响应始终是匿名投影，即使请求携带已失效 Cookie。登录评论/编辑另走受保护 API，认证失败时不能执行写入。公开站点地图只枚举同一 resolver 结果；robots/canonical 不以 noindex 代替授权。
 

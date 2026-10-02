@@ -1,8 +1,8 @@
 # 决策索引
 
-本索引记录已接受决策及被取代的历史选择。数据库专属决策集中于 `.ai/databases/decisions/`；当前结构另见 `.ai/architectures/overview.md`。
+本索引记录已接受决策及被取代的历史选择。数据库专属决策集中于 `.ai/databases/decisions/`；当前结构见 `.ai/architectures/overview.md`，文档集成结构见 `.ai/architectures/docs-integration/integration-boundaries.md`。本次集成没有另建决定条目，运行边界以源码和上述架构页为准。
 
-_最后更新：2026-09-29_
+_最后更新：2026-10-01_
 
 | 决策 | 模块 | 状态 |
 | --- | --- | --- |
