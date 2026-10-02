@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { AuthDisplayState, AuthMode } from '@workspace/components'
 import { api } from '@web/src/api/client'
-import { AUTH_TOKEN_KEY, readToken, removeMatchingToken } from '@web/src/auth/storage'
+import { ExAxiosError } from '@workspace/sdk/http/browser'
+import { readToken, removeMatchingToken, startSessionSync, subscribeSessionChanges } from '@web/src/auth/storage'
 
 interface AuthContextValue {
   state: AuthDisplayState
@@ -47,45 +48,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
     try {
-      const { data, error } = await api.GET('/auth/me', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const data = await api.GET('/auth/me', { alert: false })
       if (currentGeneration !== generation.current) {
         return
       }
-      if (data !== undefined) {
-        setState({
+      setState({
           status: 'authenticated',
           nickname: data.nickname,
           initial: firstVisibleCharacter(data.nickname),
           avatarUrl: data.avatarUrl ?? null,
         })
-        return
-      }
-      if (error.error.code === 'SESSION_INVALID') {
-        removeMatchingToken(window.localStorage, token)
-        setState({ status: 'anonymous' })
-        return
-      }
-      setState({ status: 'unavailable', message: error.error.message })
-    } catch {
+      return
+    } catch (error) {
       if (currentGeneration === generation.current) {
-        setState({ status: 'unavailable', message: '暂时无法连接认证服务' })
+        if (error instanceof ExAxiosError && error.code === 'SESSION_INVALID') setState({ status: 'anonymous' })
+        else setState({ status: 'unavailable', message: '暂时无法连接认证服务' })
       }
     }
   }, [])
 
   useEffect(() => {
     void restoreSession()
-    const onStorage = (event: StorageEvent) => {
-      if (event.key === AUTH_TOKEN_KEY) {
-        void restoreSession()
-      }
-    }
-    window.addEventListener('storage', onStorage)
+    const stopSync = startSessionSync()
+    const unsubscribe = subscribeSessionChanges(() => void restoreSession())
     return () => {
       generation.current += 1
-      window.removeEventListener('storage', onStorage)
+      unsubscribe()
+      stopSync()
     }
   }, [restoreSession])
 
@@ -102,16 +91,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
     try {
-      const { error } = await api.POST('/auth/logout', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (error !== undefined && error.error.code !== 'SESSION_INVALID') {
-        setState({ status: 'unavailable', message: error.error.message })
-        return
-      }
+      await api.POST('/auth/logout', { alert: false })
       removeMatchingToken(window.localStorage, token)
       window.location.reload()
-    } catch {
+    } catch (error) {
+      if (error instanceof ExAxiosError && error.code === 'SESSION_INVALID') { removeMatchingToken(window.localStorage, token); window.location.reload(); return }
       setState({ status: 'unavailable', message: '退出失败，请稍后重试' })
     }
   }, [])

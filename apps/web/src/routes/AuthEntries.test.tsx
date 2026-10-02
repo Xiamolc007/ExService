@@ -49,7 +49,7 @@ it('closes the ordinary login dialog before navigating to Join', async () => {
 
 it('switches the same registration dialog to ordinary login with only the completed email', async () => {
   const user = userEvent.setup()
-  post.mockResolvedValueOnce({ data: { email: 'member@example.com', serverTime: 1000, resendAvailableAt: 1000 } }).mockResolvedValueOnce({ data: { email: 'member@example.com', nickname: '成员', completionToken: 't'.repeat(43) } }).mockResolvedValueOnce({ data: { email: 'member@example.com', status: 'registered' } })
+  post.mockResolvedValueOnce({ email: 'member@example.com', serverTime: 1000, resendAvailableAt: 1000 }).mockResolvedValueOnce({ email: 'member@example.com', nickname: '成员', completionToken: 't'.repeat(43) }).mockResolvedValueOnce({ email: 'member@example.com', status: 'registered' })
   renderLayout()
   await user.click(await screen.findByRole('button', { name: '注册' }))
   const dialog = screen.getByRole('dialog')

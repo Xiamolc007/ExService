@@ -11,6 +11,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import { createApp, serviceHandlers } from '@workspace/server'
 import { createApiClient } from '@api-client/src/client'
+import { createExAxios, ExAxiosError } from '@sdk/src/http/node'
 import { createTestAuth, experiencedJoinApplication, newJoinApplication, joinSnapshot, type TestAuth } from '@tests/helpers/auth'
 import { applicationPart, joinMultipart, multipartBody } from '@tests/helpers/multipart'
 
@@ -30,24 +31,31 @@ async function setup() { const f = await createTestAuth(); fixtures.push(f); con
 const proof = (bytes = Buffer.from('review evidence'), filename = '证明.txt') => ({ filename, bytes, contentType: 'application/octet-stream' })
 async function liveSetup() {
   const { f, app } = await setup()
+  const responses: Array<{ status: number; headers: Record<string, unknown> }> = []
+  app.addHook('onResponse', (_request, reply, done) => { responses.push({ status: reply.statusCode, headers: reply.getHeaders() }); done() })
   await app.listen({ host: '127.0.0.1', port: 0 })
   const address = app.server.address()
   if (address === null || typeof address === 'string') throw new Error('Missing ephemeral address')
-  const client = createApiClient({ baseUrl: `http://127.0.0.1:${address.port}/api` })
-  return { f, app, client }
+  const baseUrl = `http://127.0.0.1:${address.port}/api`
+  const http = createExAxios({ baseUrl, websiteBaseUrl: baseUrl, alert: false })
+  const client = createApiClient({ baseUrl, transport: request => http(request) })
+  return { f, app, client, baseUrl, responses }
 }
 function sendProof(client: ReturnType<typeof createApiClient>, email: string, bytes: Uint8Array, filename: string, contentType: string, signal?: AbortSignal) {
   const file = new File([Uint8Array.from(bytes)], filename, { type: contentType })
+  const data = new FormData()
+  data.append('application', new Blob([JSON.stringify(experiencedJoinApplication(email))], { type: 'application/json' }), 'application.json')
+  data.append('proofs', file)
   return client.POST('/join/applications', {
-    signal,
-    body: { application: experiencedJoinApplication(email), proofs: [''] },
-    bodySerializer: body => {
-      const data = new FormData()
-      data.append('application', new Blob([JSON.stringify(body.application)], { type: 'application/json' }), 'application.json')
-      data.append('proofs', file)
-      return data
-    },
+    signal, body: data, alert: false,
   })
+}
+
+async function sendProofWire(baseUrl: string, email: string, bytes: Uint8Array, filename: string, contentType: string, signal?: AbortSignal) {
+  const data = new FormData()
+  data.append('application', new Blob([JSON.stringify(experiencedJoinApplication(email))], { type: 'application/json' }), 'application.json')
+  data.append('proofs', new File([Uint8Array.from(bytes)], filename, { type: contentType }))
+  return fetch(`${baseUrl}/join/applications`, { method: 'POST', body: data, signal })
 }
 
 async function isolatedLiveClient() {
@@ -83,27 +91,25 @@ async function isolatedLiveClient() {
       resolvePort(message.port)
     })
   })
-  return createApiClient({ baseUrl: `http://127.0.0.1:${port}/api` })
+  const baseUrl = `http://127.0.0.1:${port}/api`
+  const http = createExAxios({ baseUrl, websiteBaseUrl: baseUrl, alert: false })
+  return { client: createApiClient({ baseUrl, transport: request => http(request) }), baseUrl }
 }
 
 it('consumes JSON Blob and repeated proof files through the generated Client and actual loopback socket', async () => {
-  const { f, client } = await liveSetup()
+  const { f, client, responses } = await liveSetup()
   const png = Uint8Array.from([137,80,78,71,13,10,26,10,0,255,127,128])
   const unicodeText = '中文证明与😀原始字节'
   for (const [index, application] of [newJoinApplication('new-client@example.com'), experiencedJoinApplication('experience-client@example.com'), experiencedJoinApplication('no-files@example.com')].entries()) {
     const files = index === 1 ? [new File([png], '证明图.png', { type: 'image/png' }), new File([unicodeText], '证明文.txt', { type: 'text/plain' })] : []
-    const result = await client.POST('/join/applications', {
-      body: { application, proofs: files.map(() => '') },
-      bodySerializer: body => {
-        const data = new FormData()
-        data.append('application', new Blob([JSON.stringify(body.application)], { type: 'application/json' }), 'application.json')
-        files.forEach(file => data.append('proofs', file))
-        return data
-      },
-    })
-    expect(result.response.status).toBe(202)
-    expect(result.response.headers.get('cache-control')).toBe('no-store')
-    validate('JoinApplicationReceived', result.data)
+    const data = new FormData()
+    data.append('application', new Blob([JSON.stringify(application)], { type: 'application/json' }), 'application.json')
+    files.forEach(file => data.append('proofs', file))
+    const result = await client.POST('/join/applications', { body: data, alert: false })
+    expect(responses.at(-1)?.status).toBe(202)
+    expect(responses.at(-1)?.headers['cache-control']).toBe('no-store')
+    expect(responses.at(-1)?.headers['x-request-id']).toEqual(expect.any(String))
+    validate('JoinApplicationReceived', result)
   }
   expect((await f.db.query<{n:number}>('SELECT count(*) n FROM join_application_forms')).rows[0]).toEqual({ n: 3 })
   expect((await f.db.query<{n:number}>('SELECT count(*) n FROM join_application_attachments')).rows[0]).toEqual({ n: 2 })
@@ -117,33 +123,34 @@ it('consumes JSON Blob and repeated proof files through the generated Client and
 })
 
 it('accepts self-closing SVG roots with optional XML declarations through actual multipart HTTP', async () => {
-  const { f, client } = await liveSetup()
+  const { f, client, responses } = await liveSetup()
   for (const [index, content] of ['<svg/>', '<?xml version="1.0"?><svg/>'].entries()) {
     const response = await sendProof(client, `svg-root-${index}@example.com`, Buffer.from(content), '图形.svg', 'image/svg+xml')
-    expect(response.response.status, JSON.stringify(response.error)).toBe(202)
-    expect(response.response.headers.get('cache-control')).toBe('no-store')
-    validate('JoinApplicationReceived', response.data)
+    expect(responses.at(-1)?.status).toBe(202)
+    expect(responses.at(-1)?.headers['cache-control']).toBe('no-store')
+    validate('JoinApplicationReceived', response)
   }
   expect((await f.db.query<{n:number}>('SELECT count(*) n FROM join_application_attachments')).rows[0]).toEqual({ n: 2 })
 })
 
 it('accepts exact GIF87a/GIF89a signatures and rejects high-bit GIF spoofing through actual multipart HTTP', async () => {
-  const { f, client } = await liveSetup()
+  const { f, client, responses } = await liveSetup()
   for (const signature of ['GIF87a', 'GIF89a']) {
     const response = await sendProof(client, `${signature.toLowerCase()}@example.com`, Buffer.from(signature), 'image.gif', 'image/gif')
-    expect(response.response.status, JSON.stringify(response.error)).toBe(202)
-    validate('JoinApplicationReceived', response.data)
+    expect(responses.at(-1)?.status).toBe(202)
+    validate('JoinApplicationReceived', response)
   }
-  const forged = await sendProof(client, 'forged-gif@example.com', Uint8Array.from([0xc7, 0xc9, 0xc6, 0xb8, 0xb9, 0xe1]), 'filename.gif', 'image/gif')
-  expect(forged.response.status, JSON.stringify(forged.data)).toBe(415)
-  expect(forged.error?.error.code).toBe('JOIN_UNSUPPORTED_MEDIA_TYPE')
-  expect(forged.response.headers.get('cache-control')).toBe('no-store')
-  validate('ErrorEnvelope', forged.error)
+  const forged = await sendProof(client, 'forged-gif@example.com', Uint8Array.from([0xc7, 0xc9, 0xc6, 0xb8, 0xb9, 0xe1]), 'filename.gif', 'image/gif').catch(error => error as ExAxiosError)
+  expect(responses.at(-1)?.status).toBe(415)
+  expect(forged).toBeInstanceOf(ExAxiosError)
+  expect((forged as ExAxiosError).code).toBe('JOIN_UNSUPPORTED_MEDIA_TYPE')
+  expect(responses.at(-1)?.headers['cache-control']).toBe('no-store')
+  validate('ErrorEnvelope', { error: { code: (forged as ExAxiosError).code, message: (forged as ExAxiosError).message, requestId: (forged as ExAxiosError).requestId } })
   expect((await f.db.query<{n:number}>('SELECT count(*) n FROM join_application_attachments')).rows[0]).toEqual({ n: 2 })
 })
 
 it('rejects large BOM/comment/XML non-SVG prefixes over real multipart HTTP within an isolated process deadline', async () => {
-  const client = await isolatedLiveClient()
+  const { baseUrl } = await isolatedLiveClient()
   const prefixes = [
     '\uFEFF'.repeat(50000) + '<html/>',
     '<!--前导内容-->'.repeat(50000) + '<html/>',
@@ -151,11 +158,12 @@ it('rejects large BOM/comment/XML non-SVG prefixes over real multipart HTTP with
     '<!--'.repeat(50000) + '<html/>',
   ]
   for (const [index, content] of prefixes.entries()) {
-    const response = await sendProof(client, `svg-prefix-${index}@example.com`, Buffer.from(content), 'prefix.svg', 'image/svg+xml', AbortSignal.timeout(2000))
-    expect(response.response.status, JSON.stringify(response.data)).toBe(415)
-    expect(response.error?.error.code).toBe('JOIN_UNSUPPORTED_MEDIA_TYPE')
-    expect(response.response.headers.get('cache-control')).toBe('no-store')
-    validate('ErrorEnvelope', response.error)
+    const response = await sendProofWire(baseUrl, `svg-prefix-${index}@example.com`, Buffer.from(content), 'prefix.svg', 'image/svg+xml', AbortSignal.timeout(2000))
+    expect(response.status).toBe(415)
+    const body = await response.json()
+    expect(body.error.code).toBe('JOIN_UNSUPPORTED_MEDIA_TYPE')
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    validate('ErrorEnvelope', body)
   }
 // The child has a 30s startup deadline for its own PostgreSQL container; each
 // of the four HTTP requests independently retains its 2s abort deadline.

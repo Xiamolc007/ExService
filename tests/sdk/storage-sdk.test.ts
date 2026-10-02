@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { StorageSdkError } from '@sdk/src/errors'
+import { createServer, type Server } from 'node:http'
+import { createStorageSdk } from '@sdk/src/shared'
 
 const putObject = vi.fn(async () => ({ statusCode: 200 }))
 const constructorArgs: unknown[] = []
@@ -17,7 +19,8 @@ vi.mock('cos-nodejs-sdk-v5', () => ({
 
 const { createSdk } = await import('@sdk/src/node')
 
-const BASE = 'http://127.0.0.1:8080/api'
+let BASE = ''
+let server: Server
 const CREDENTIALS = {
   tmpSecretId: 'tmp-id',
   tmpSecretKey: 'tmp-key',
@@ -29,18 +32,21 @@ const CREDENTIALS = {
 interface Recorded { url: string; method: string; authorization?: string; json?: unknown; fields?: Record<string, string>; fileBytes?: Uint8Array; fileType?: string; filename?: string }
 
 const calls: Recorded[] = []
-let responder: (url: string) => { status: number; body: unknown } = () => ({ status: 200, body: {} })
+let responder: (url: string) => { status: number; body: unknown } | Promise<{ status: number; body: unknown }> = () => ({ status: 200, body: {} })
 
-beforeEach(() => {
+beforeEach(async () => {
   calls.length = 0
   putObject.mockClear()
   constructorArgs.length = 0
-  vi.stubGlobal('fetch', async (request: Request) => {
-    const url = new URL(request.url).pathname
-    const recorded: Recorded = { url, method: request.method, authorization: request.headers.get('authorization') ?? undefined }
-    const type = request.headers.get('content-type') ?? ''
+  server = createServer(async (request, response) => {
+    const url = new URL(request.url ?? '/', 'http://127.0.0.1').pathname
+    const recorded: Recorded = { url, method: request.method ?? 'GET', authorization: request.headers.authorization }
+    const bytes: Buffer[] = []
+    for await (const chunk of request) bytes.push(Buffer.from(chunk))
+    const body = Buffer.concat(bytes)
+    const type = request.headers['content-type'] ?? ''
     if (type.startsWith('multipart/form-data')) {
-      const form = await request.formData()
+      const form = await new Response(new Uint8Array(body), { headers: { 'content-type': type } }).formData()
       recorded.fields = {}
       for (const [name, value] of form.entries()) {
         if (typeof value === 'string') recorded.fields[name] = value
@@ -51,18 +57,27 @@ beforeEach(() => {
         }
       }
     } else {
-      recorded.json = await request.json().catch(() => undefined)
+      try { recorded.json = JSON.parse(body.toString('utf8')) } catch { recorded.json = undefined }
     }
     calls.push(recorded)
-    const { status, body } = responder(url)
-    return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+    try {
+      const answer = await responder(url)
+      response.writeHead(answer.status, { 'content-type': 'application/json' })
+      response.end(JSON.stringify(answer.body))
+    } catch { response.destroy() }
   })
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  if (!address || typeof address === 'string') throw new Error('expected TCP fixture')
+  BASE = `http://127.0.0.1:${address.port}/api`
 })
 
-afterEach(() => { vi.unstubAllGlobals() })
+afterEach(async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())) })
 
-function sdk(getAccessToken: () => string | Promise<string> = () => 'token-a') {
-  return createSdk({ baseUrl: BASE, getAccessToken })
+function sdk(getAccessToken: () => string | Promise<string> = () => 'token-a', requestPolicy?: { timeoutMs?: number; signal?: AbortSignal }) {
+  return requestPolicy
+    ? createStorageSdk({ baseUrl: BASE, getAccessToken }, { putObject: async () => { await putObject({}) } }, true, requestPolicy)
+    : createSdk({ baseUrl: BASE, getAccessToken })
 }
 
 describe('SDK file branch', () => {
@@ -89,6 +104,30 @@ describe('SDK file branch', () => {
       : { status: 200, body: { url: 'u' } }
     await sdk(async () => `token-${++counter}`).storage.upload('a.bin', new Uint8Array([1]))
     expect(calls.map(call => call.authorization)).toEqual(['Bearer token-1', 'Bearer token-2'])
+  })
+
+  it('keeps concurrent upload stage tokens separate on one SDK instance', async () => {
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    let prepares = 0, tokenReads = 0
+    responder = async url => {
+      if (url.endsWith('/prepare')) {
+        prepares++
+        if (prepares === 2) release()
+        await gate
+        return { status: 200, body: { medium: 'file', maxBytes: 1024 } }
+      }
+      return { status: 200, body: { url: 'uploaded' } }
+    }
+    const client = sdk(() => `token-${++tokenReads}`)
+    await Promise.all([
+      client.storage.upload('a.bin', new Uint8Array([1])),
+      client.storage.upload('b.bin', new Uint8Array([2])),
+    ])
+    expect(prepares).toBe(2)
+    expect(tokenReads).toBe(4)
+    expect(calls.map(call => call.authorization).sort()).toEqual(['Bearer token-1', 'Bearer token-2', 'Bearer token-3', 'Bearer token-4'])
+    expect(calls.filter(call => call.url === '/api/storage/uploads').map(call => call.fields?.key).sort()).toEqual(['a.bin', 'b.bin'])
   })
 
   it('accepts Blob input and uses its media type', async () => {
@@ -200,16 +239,31 @@ describe('SDK error mapping', () => {
     { stage: 'complete', path: '/api/storage/uploads/complete', medium: 'cos', requests: ['/api/storage/uploads/prepare', '/api/storage/uploads/complete'], puts: 1 },
   ]
   const failures = [
-    { failure: 'network', cause: new TypeError('fetch failed'), code: 'NETWORK' },
-    { failure: 'timeout', cause: new DOMException('deadline expired', 'TimeoutError'), code: 'TIMEOUT' },
-    { failure: 'abort', cause: new DOMException('request aborted', 'AbortError'), code: 'TIMEOUT' },
+    { failure: 'network', code: 'NETWORK' },
+    { failure: 'timeout', code: 'TIMEOUT' },
+    { failure: 'abort', code: 'TIMEOUT' },
   ]
+
+  it('maps a browser fetch adapter deadline during prepare to StorageSdkError TIMEOUT', async () => {
+    responder = async () => new Promise(resolve => setTimeout(() => resolve({ status: 200, body: { medium: 'file', maxBytes: 1024 } }), 100))
+    vi.stubGlobal('location', { origin: new URL(BASE).origin })
+    try {
+      const browserStorage = createStorageSdk({ baseUrl: BASE, getAccessToken: () => 'token-a' }, { putObject: async () => {} }, false, { timeoutMs: 20 })
+      await expect(browserStorage.storage.upload('a.bin', new Uint8Array([1]))).rejects.toMatchObject({ code: 'TIMEOUT' })
+      expect(calls.map(call => call.url)).toEqual(['/api/storage/uploads/prepare'])
+    } finally { vi.unstubAllGlobals() }
+  })
 
   it.each(stages.flatMap(stage => failures.map(failure => ({ ...stage, ...failure }))))(
     'maps $failure errors during $stage without retrying or continuing',
-    async ({ path, medium, requests, puts, cause, code }) => {
+    async ({ path, medium, requests, puts, failure, code }) => {
+      const controller = new AbortController()
       responder = url => {
-        if (url === path) throw cause
+        if (url === path) {
+          if (failure === 'network') throw new TypeError('socket failed')
+          if (failure === 'abort') setTimeout(() => controller.abort(), 5)
+          return new Promise(resolve => setTimeout(() => resolve({ status: 200, body: {} }), 100))
+        }
         return {
           status: 200,
           body: medium === 'file'
@@ -219,7 +273,7 @@ describe('SDK error mapping', () => {
         }
       }
 
-      const error = await sdk().storage.upload('a.bin', new Uint8Array([1])).then(
+      const error = await sdk(() => 'token-a', { timeoutMs: 25, signal: controller.signal }).storage.upload('a.bin', new Uint8Array([1])).then(
         () => { throw new Error('expected failure') },
         (error: unknown) => error,
       )

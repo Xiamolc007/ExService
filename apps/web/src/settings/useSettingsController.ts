@@ -4,8 +4,9 @@ import type { components } from '@workspace/api-client'
 import type { SettingsField, SettingsTheme } from '@workspace/components'
 import { useSnapshot } from 'valtio'
 import { api } from '@web/src/api/client'
+import { ExAxiosError } from '@workspace/sdk/http/browser'
 import { useAuth } from '@web/src/auth/AuthContext'
-import { AUTH_TOKEN_KEY, readToken } from '@web/src/auth/storage'
+import { readToken, subscribeSessionChanges } from '@web/src/auth/storage'
 import {
   attachSettingsConsumer, beginSettingsRequest, beginSettingsWrite, bindSettingsToken,
   endSettingsWrite, settingsConfig, settingsRequestCurrent, type CurrentUser,
@@ -17,6 +18,7 @@ export function useSettingsController() {
   const auth = useAuth()
   const { setTheme } = useTheme()
   const snapshot = useSnapshot(settingsConfig)
+  const invalidate = auth.invalidateSession
   const [actionPending, setActionPending] = useState(false)
   const [logoutPending, setLogoutPending] = useState(false)
 
@@ -26,9 +28,7 @@ export function useSettingsController() {
       catch { bindSettingsToken(null) }
     }
     sync()
-    const onStorage = (event: StorageEvent) => { if (event.key === AUTH_TOKEN_KEY) sync() }
-    window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
+    return subscribeSessionChanges(sync)
   }, [])
   useEffect(() => {
     if (auth.state.status === 'anonymous') bindSettingsToken(null)
@@ -36,7 +36,6 @@ export function useSettingsController() {
   }, [auth.state.status])
   useEffect(() => attachSettingsConsumer(), [])
 
-  const invalidate = auth.invalidateSession
   const load = useCallback(async () => {
     let token: string
     try { token = requireToken() }
@@ -46,44 +45,36 @@ export function useSettingsController() {
     settingsConfig.profile.status = 'loading'
     settingsConfig.profile.error = null
     try {
-      const result = await api.GET('/auth/me', { headers: { Authorization: `Bearer ${token}` } })
+      const result = await api.GET('/auth/me', { alert: false })
       if (!current(token, revision)) return
-      if (result.error !== undefined) {
-        if (result.error.error.code === 'SESSION_INVALID') { invalidate(token); bindSettingsToken(null); return }
-        settingsConfig.profile.status = 'error'
-        settingsConfig.profile.error = result.error.error.message
-        return
-      }
-      settingsConfig.profile.snapshot = result.data
+      settingsConfig.profile.snapshot = result
       settingsConfig.profile.status = 'ready'
-    } catch {
+    } catch (error) {
       if (current(token, revision)) {
+        if (error instanceof ExAxiosError && error.code === 'SESSION_INVALID') { invalidate(token); bindSettingsToken(null); return }
         settingsConfig.profile.status = 'error'
-        settingsConfig.profile.error = '暂时无法读取设置资料'
+        settingsConfig.profile.error = error instanceof ExAxiosError ? error.message : '暂时无法读取设置资料'
       }
     }
   }, [invalidate])
 
-  const mutate = useCallback(async (request: (token: string) => Promise<{
-    data?: CurrentUser; error?: { error: { code: string; message: string } }
-  }>) => {
+  const mutate = useCallback(async (request: () => Promise<CurrentUser>) => {
     if (auth.state.status !== 'authenticated') throw new Error('登录状态不可用，请重试')
     const token = requireToken()
     const revision = beginSettingsWrite(token)
     setActionPending(true)
     try {
-      const result = await request(token)
+      const result = await request()
       if (!current(token, revision)) throw new Error('登录状态已变更，请重新打开设置')
-      if (result.error) {
-        if (result.error.error.code === 'SESSION_INVALID') { auth.invalidateSession(token); bindSettingsToken(null) }
-        throw new Error(result.error.error.message)
-      }
-      if (!result.data) throw new Error('服务器未返回更新后的资料')
-      settingsConfig.profile.snapshot = result.data
+      settingsConfig.profile.snapshot = result
       settingsConfig.profile.status = 'ready'
       try { await auth.refreshProfile() }
       catch { /* AuthContext manages its own unavailable state. The saved snapshot remains valid. */ }
     } catch (error) {
+      if (error instanceof ExAxiosError) {
+        if (error.code === 'SESSION_INVALID') { auth.invalidateSession(token); bindSettingsToken(null) }
+        throw new Error(error.message)
+      }
       if (error instanceof Error) throw error
       throw new Error('保存失败，请稍后重试')
     } finally { endSettingsWrite(token, revision); setActionPending(false) }
@@ -92,8 +83,8 @@ export function useSettingsController() {
   const save = useCallback(async (field: SettingsField, value: string) => {
     const body = field === 'nickname' ? { nickname: value } : field === 'qq' ?
       { qq: value === '' ? null : value } : { fivemId: value === '' ? null : value }
-    await mutate((token) => api.PATCH('/auth/me', {
-      headers: { Authorization: `Bearer ${token}` }, body,
+    await mutate(() => api.PATCH('/auth/me', {
+      alert: false, body,
     }))
   }, [mutate])
 
@@ -103,15 +94,15 @@ export function useSettingsController() {
       throw new Error('只支持不超过 2 MiB 的 PNG、JPEG 或 WebP 图片')
     }
     const imageBase64 = await toBase64(file)
-    await mutate((token) => api.POST('/auth/me/avatar', {
-      headers: { Authorization: `Bearer ${token}` }, body: { imageBase64, mediaType },
+    await mutate(() => api.POST('/auth/me/avatar', {
+      alert: false, body: { imageBase64, mediaType },
     }))
   }, [mutate])
 
   const removeAvatar = useCallback(async () => {
     const body: components['schemas']['UpdateCurrentUserRequest'] = { avatar: null }
-    await mutate((token) => api.PATCH('/auth/me', {
-      headers: { Authorization: `Bearer ${token}` }, body: body as never,
+    await mutate(() => api.PATCH('/auth/me', {
+      alert: false, body,
     }))
   }, [mutate])
 

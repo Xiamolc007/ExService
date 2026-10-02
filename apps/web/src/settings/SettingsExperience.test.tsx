@@ -41,7 +41,7 @@ describe('SettingsExperience', () => {
 
   it('keeps first-open general settings available and refreshes a cached snapshot on reopen', async () => {
     writeToken(window.localStorage, 'current-token')
-    get.mockResolvedValue({ data: user })
+    get.mockResolvedValue(user)
     const first = render(<SettingsExperience initialCategory="general" />)
     expect(screen.getByText('general:idle')).toBeTruthy()
     expect(get).not.toHaveBeenCalled()
@@ -56,7 +56,7 @@ describe('SettingsExperience', () => {
   it('loads the selected profile category when authentication recovers', async () => {
     authState.status = 'unavailable'
     writeToken(window.localStorage, 'current-token')
-    get.mockResolvedValue({ data: user })
+    get.mockResolvedValue(user)
     const view = render(<SettingsExperience initialCategory="general" />)
     await userEvent.click(screen.getByRole('button', { name: '个人资料分类' }))
     expect(get).not.toHaveBeenCalled()

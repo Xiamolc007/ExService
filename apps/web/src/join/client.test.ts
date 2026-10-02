@@ -39,16 +39,16 @@ it('rejects individually valid multibyte answers whose combined JSON exceeds 64 
   expect(experiencedJoinApplicationSchema.safeParse(value).success).toBe(true)
   expect(value.proofs).toHaveLength(0)
   expect(payloadSize(value)).toBeGreaterThan(65536)
-  post.mockResolvedValue({ data: { status: 'received' } })
+  post.mockResolvedValue({ status: 'received' })
   await expect(Promise.resolve().then(() => submitApplication(value))).rejects.toThrow('申请文字资料总量超出限制，请缩短较长的回答后重试')
   expect(post).not.toHaveBeenCalled()
 })
 it.each([65535, 65536])('sends a valid JSON Blob with %i UTF-8 bytes', async bytes => {
   const value = draftAtBytes(bytes)
-  post.mockResolvedValue({ data: { status: 'received' } })
+  post.mockResolvedValue({ status: 'received' })
   await submitApplication(value)
   const options = post.mock.calls[0]![1]
-  const parts = options.bodySerializer()
+  const parts = options.body
   expect(parts.get('application').size).toBe(bytes)
   expect(parts.get('application').type).toBe('application/json')
   expect(parts.get('application').name).toBe('application.json')
@@ -57,7 +57,7 @@ it.each([65535, 65536])('sends a valid JSON Blob with %i UTF-8 bytes', async byt
 })
 it('rejects one UTF-8 byte over the budget even though every answer remains valid', async () => {
   const value = draftAtBytes(65537)
-  post.mockResolvedValue({ data: { status: 'received' } })
+  post.mockResolvedValue({ status: 'received' })
   await expect(Promise.resolve().then(() => submitApplication(value))).rejects.toThrow('申请文字资料总量超出限制，请缩短较长的回答后重试')
   expect(post).not.toHaveBeenCalled()
 })
@@ -65,16 +65,16 @@ it('keeps normal submissions and repeated proof files in one multipart operation
   const value = draft()
   const file = new File(['proof'], 'proof.txt', { type: 'text/plain' })
   value.proofs = [file]
-  post.mockResolvedValue({ data: { status: 'received' } })
+  post.mockResolvedValue({ status: 'received' })
   const response = await submitApplication(value)
-  expect(response.data?.status).toBe('received')
+  expect(response.status).toBe('received')
   expect(post).toHaveBeenCalledTimes(1)
   const [path, options] = post.mock.calls[0]!
   expect(path).toBe('/join/applications')
-  expect(options.body.proofs).toEqual(['binary'])
-  const parts = options.bodySerializer()
+  const parts = options.body
   const application = JSON.parse(await parts.get('application').text())
   expect(application.form.answers.deescalationEssay).toBe('中'.repeat(150))
   expect(application).not.toHaveProperty('proofs')
+  expect(parts.getAll('proofs')).toHaveLength(1)
   expect(await parts.get('proofs').text()).toBe('proof')
 })

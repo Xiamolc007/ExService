@@ -23,7 +23,7 @@ export default defineConfig({
     'import.meta.env.VITE_COMMUNITY_KOOK_URL': JSON.stringify(communityConfig.community?.['rifling911-kookUrl'] ?? ''),
   },
   resolve: {
-    dedupe: ['react', 'react-dom'],
+    dedupe: ['react', 'react-dom', '@exre/exui'],
     alias: {
       '@web': resolve(repositoryRoot, 'apps/web'),
       '@server': resolve(repositoryRoot, 'apps/server'),

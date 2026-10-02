@@ -1,5 +1,6 @@
 import { createApiClient } from '@workspace/api-client'
 import { StorageSdkError, toStorageSdkError } from './errors.js'
+import { createHttpCore } from './http/core.js'
 
 /** 每次本站请求与每次 COS PutObject 的截止时间。 */
 export const REQUEST_TIMEOUT_MS = 120_000
@@ -88,9 +89,12 @@ async function apiRequest<T>(pending: Promise<T>): Promise<T> {
  *
  * 每次调用独立持有 COS 临时凭证，不使用全局可变凭证缓存，避免不同 key 并发串用。
  */
-export function createStorageSdk(options: SdkOptions, transport: CosTransport, requireAbsoluteBaseUrl: boolean) {
+export function createStorageSdk(options: SdkOptions, transport: CosTransport, requireAbsoluteBaseUrl: boolean, requestPolicy: { timeoutMs?: number; signal?: AbortSignal } = {}) {
   assertBaseUrl(options.baseUrl, requireAbsoluteBaseUrl)
-  const client = createApiClient({ baseUrl: options.baseUrl })
+  const http = createHttpCore({ environment: requireAbsoluteBaseUrl ? 'node' : 'browser', origin: requireAbsoluteBaseUrl ? undefined : location.origin }, {
+    baseUrl: options.baseUrl, websiteBaseUrl: options.baseUrl, alert: false, onSessionExpired: () => {},
+  })
+  const client = createApiClient({ baseUrl: options.baseUrl, transport: request => http(request) })
 
   async function headers(): Promise<Record<string, string>> {
     const token = await options.getAccessToken()
@@ -108,7 +112,7 @@ export function createStorageSdk(options: SdkOptions, transport: CosTransport, r
     const contentType = resolveContentType(uploadOptions.contentType, data instanceof Uint8Array ? undefined : data.type)
 
     const prepared = await apiRequest(client.POST('/storage/uploads/prepare', {
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      timeout: requestPolicy.timeoutMs ?? REQUEST_TIMEOUT_MS, signal: requestPolicy.signal, alert: false,
       headers: await headers(),
       body: {
         key,
@@ -117,10 +121,7 @@ export function createStorageSdk(options: SdkOptions, transport: CosTransport, r
         ...(uploadOptions.medium === undefined ? {} : { medium: uploadOptions.medium }),
       },
     }))
-    if (prepared.error !== undefined || prepared.data === undefined) {
-      throw toStorageSdkError({ error: prepared.error, status: prepared.response.status })
-    }
-    const plan = prepared.data
+    const plan = prepared
 
     // prepare 的 maxBytes 只是客户端预检，服务器仍是最终校验者。
     if (bytes.byteLength > plan.maxBytes) throw new StorageSdkError('TOO_LARGE')
@@ -139,14 +140,11 @@ export function createStorageSdk(options: SdkOptions, transport: CosTransport, r
         throw toStorageSdkError({ cause })
       }
       const completed = await apiRequest(client.POST('/storage/uploads/complete', {
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        timeout: requestPolicy.timeoutMs ?? REQUEST_TIMEOUT_MS, signal: requestPolicy.signal, alert: false,
         headers: await headers(),
         body: { key: plan.key, uploadTicket: plan.uploadTicket },
       }))
-      if (completed.error !== undefined || completed.data === undefined) {
-        throw toStorageSdkError({ error: completed.error, status: completed.response.status })
-      }
-      return completed.data.url
+      return completed.url
     }
 
     // FormData 序列化：boundary 由运行时生成，不手写 Content-Type。
@@ -158,17 +156,11 @@ export function createStorageSdk(options: SdkOptions, transport: CosTransport, r
     form.append('data', new Blob([new Uint8Array(bytes)], { type: contentType }), key.split('/').pop() ?? key)
 
     const uploaded = await apiRequest(client.POST('/storage/uploads', {
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      timeout: requestPolicy.timeoutMs ?? REQUEST_TIMEOUT_MS, signal: requestPolicy.signal, alert: false,
       headers: await headers(),
-      // 生成类型把 `data` 描述为 string（format: binary）；实际请求体是 FormData，
-      // 由 openapi-fetch 原样透传并让运行时补齐带 boundary 的 Content-Type。
-      body: form as unknown as { key: string; data: string },
-      bodySerializer: value => value as unknown as string,
+      body: form,
     }))
-    if (uploaded.error !== undefined || uploaded.data === undefined) {
-      throw toStorageSdkError({ error: uploaded.error, status: uploaded.response.status })
-    }
-    return uploaded.data.url
+    return uploaded.url
   }
 
   return { storage: { upload } }

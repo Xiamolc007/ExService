@@ -12,6 +12,7 @@ export type StorageSdkErrorCode =
   | 'BUSY'
   | 'NETWORK'
   | 'UNKNOWN'
+import { ExAxiosError } from './http/core.js'
 
 const SERVER_CODE_TO_SDK_CODE: Record<string, StorageSdkErrorCode> = {
   STORAGE_INVALID_INPUT: 'INVALID_INPUT',
@@ -67,6 +68,12 @@ export function serverCodeToSdkCode(code: unknown): StorageSdkErrorCode {
  */
 export function toStorageSdkError(input: { error?: unknown; status?: number; cause?: unknown }): StorageSdkError {
   const { error, status, cause } = input
+  if (cause instanceof ExAxiosError) {
+    const code = cause.code === 'SESSION_INVALID' ? 'UNAUTHORIZED'
+      : cause.code === 'TIMEOUT' || cause.code === 'CANCELLED' ? 'TIMEOUT'
+      : cause.code === 'NETWORK_ERROR' ? 'NETWORK' : serverCodeToSdkCode(cause.code)
+    return new StorageSdkError(code, { status: cause.status, requestId: cause.requestId, detail: sanitizeDetail(cause.kind === 'http' ? cause.message : undefined) })
+  }
   const envelope = typeof error === 'object' && error !== null
     ? (error as { error?: { code?: unknown; message?: unknown; requestId?: unknown } }).error
     : undefined

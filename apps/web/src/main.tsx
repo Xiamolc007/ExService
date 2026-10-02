@@ -50,12 +50,7 @@ createRoot(container).render(
  */
 async function checkServer(): Promise<void> {
   try {
-    const { error } = await api.GET('/health')
-
-    if (error) {
-      console.error('[dev] GET /api/health returned an error response from the Server.', error)
-      return
-    }
+    await api.GET('/health', { alert: false })
 
     console.info('[dev] GET /api/health reached the Server.')
   } catch (cause) {

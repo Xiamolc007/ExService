@@ -30,6 +30,18 @@ export default [
     plugins: [dts({ tsconfig: resolve(packageRoot, 'tsconfig.build.json'), respectExternal: true })],
     external: ['cos-nodejs-sdk-v5'],
   },
+  {
+    input: resolve(packageRoot, 'src/http/browser.ts'),
+    output: { file: resolve(packageRoot, 'dist/http-browser.d.ts'), format: 'es' },
+    plugins: [dts({ tsconfig: resolve(packageRoot, 'tsconfig.build.json'), respectExternal: true })],
+    external: ['axios', '@exre/exui'],
+  },
+  {
+    input: resolve(packageRoot, 'src/http/node.ts'),
+    output: { file: resolve(packageRoot, 'dist/http-node.d.ts'), format: 'es' },
+    plugins: [dts({ tsconfig: resolve(packageRoot, 'tsconfig.build.json'), respectExternal: true })],
+    external: ['axios'],
+  },
 ]
 
 // 声明构建需要能解析 workspace 源码别名，路径在 tsconfig.build.json 中与仓库相对位置一致。

@@ -1,4 +1,6 @@
 import { createApiClient } from '@workspace/api-client'
+import { createExAxios } from '@workspace/sdk/http/browser'
+import { bindSessionHttp, syncSessionToken } from '@web/src/auth/storage'
 
 /**
  * 前端唯一的 API base URL 来源。
@@ -9,6 +11,17 @@ import { createApiClient } from '@workspace/api-client'
  * 使用 `||` 而不是 `??`：设置为空字符串（例如 `VITE_API_BASE_URL=`）时同样回退到 `/api`，
  * 否则 `createApiClient` 会在模块加载阶段抛错，前端直接白屏。
  */
-const baseUrl: string = import.meta.env.VITE_API_BASE_URL || '/api'
+const pageOrigin = typeof window === 'undefined' ? 'http://localhost' : window.location.origin
+const baseUrl: string = new URL(import.meta.env.VITE_API_BASE_URL || '/api', pageOrigin).href.replace(/\/$/, '')
 
-export const api = createApiClient({ baseUrl })
+export const http = createExAxios({
+  baseUrl,
+  websiteBaseUrl: baseUrl,
+  onSessionExpired: () => {
+    if (syncSessionToken() !== null) return
+    if (window.location.pathname === '/login' && new URLSearchParams(window.location.search).has('ssoRequestId')) return
+    if (window.location.pathname !== '/login') window.location.replace('/login')
+  },
+})
+bindSessionHttp(token => http.setToken(token))
+export const api = createApiClient({ baseUrl, transport: request => http(request) })

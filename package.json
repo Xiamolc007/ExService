@@ -11,7 +11,7 @@
     "dev": "concurrently --names web,server --prefix-colors cyan,magenta \"pnpm --filter @workspace/web dev\" \"pnpm --filter @workspace/server dev\"",
     "api:lint": "redocly lint api/openapi.yaml",
     "api:generate": "openapi-typescript api/openapi.yaml -o packages/api-client/src/generated/schema.d.ts",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm -r typecheck && pnpm exec tsc --noEmit -p tests/api-client/tsconfig.json",
     "test": "vitest run",
     "build": "pnpm --filter @workspace/sdk build && pnpm --filter @workspace/web build && pnpm --filter @workspace/server build",
     "db:migrate": "pnpm --filter @workspace/server db:migrate",

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
+import { ExAxiosError } from '@workspace/sdk/http/browser'
 
 const post = vi.hoisted(() => vi.fn())
 vi.mock('@web/src/api/client', () => ({ api: { POST: post } }))
@@ -36,7 +37,7 @@ describe('AuthFlow captcha stage', () => {
 
   it('submits ordinary login only after the placeholder step, without a captcha credential', async () => {
     const user = userEvent.setup()
-    post.mockResolvedValue({ error: { error: { code: 'INVALID_CREDENTIALS', message: 'Invalid credentials' } } })
+    post.mockRejectedValue(new ExAxiosError('http', 'INVALID_CREDENTIALS', 'Invalid credentials', { status: 401 }))
     render(<MemoryRouter><AuthFlow initialMode="login" presentation="page"
       footer={<p>By signing up, you agree to our Terms, Acceptable Use, and Privacy Policy.</p>} /></MemoryRouter>)
 
@@ -52,6 +53,7 @@ describe('AuthFlow captcha stage', () => {
     await user.click(screen.getByRole('button', { name: '登录' }))
     expect(post).toHaveBeenCalledWith('/auth/login', {
       body: { email: 'member@example.com', password: 'password-one' },
+      alert: false,
     })
     expect(await screen.findByText('邮箱或密码错误')).toBeTruthy()
 
@@ -62,9 +64,9 @@ describe('AuthFlow captcha stage', () => {
     const user = userEvent.setup()
     window.localStorage.clear()
     const ssoRequestId = 's'.repeat(43)
-    post.mockImplementation((path: string) => Promise.resolve(path === '/auth/sso/inspect'
-      ? { data: { ssoRequestId, status: 'pending' } }
-      : { error: { error: { code: 'INVALID_CREDENTIALS', message: 'Invalid credentials' } } }))
+    post.mockImplementation((path: string) => path === '/auth/sso/inspect'
+      ? Promise.resolve({ ssoRequestId, status: 'pending' })
+      : Promise.reject(new ExAxiosError('http', 'INVALID_CREDENTIALS', 'Invalid credentials', { status: 401 })))
     render(<MemoryRouter><AuthFlow initialMode="login" presentation="page" ssoRequestId={ssoRequestId} /></MemoryRouter>)
 
     await screen.findByRole('button', { name: '继续' })
@@ -75,6 +77,7 @@ describe('AuthFlow captcha stage', () => {
     await user.click(screen.getByRole('button', { name: '登录' }))
     expect(post).toHaveBeenCalledWith('/auth/sso/login', {
       body: { ssoRequestId, email: 'member@example.com', password: 'password-one' },
+      alert: false,
     })
   })
 })

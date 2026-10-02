@@ -3,6 +3,7 @@ import { Alert, AlertDescription, Button, Card, ExMessage, Tabs, TabsList, TabsT
 import { JoinReviewDialog, joinApplicationFields, joinApplicationCommitments, joinApplicationSteps } from '@workspace/components'
 import type { components } from '@workspace/api-client'
 import { api } from '@web/src/api/client'
+import { ExAxiosError } from '@workspace/sdk/http/browser'
 import styles from '@web/src/pages/JoinReviewPage/JoinReviewPage.module.scss'
 
 type Detail = components['schemas']['JoinApplicationDetail']
@@ -50,10 +51,9 @@ export function JoinReviewPage() {
   useEffect(() => {
     const current = ++listGeneration.current
     setListBusy(true); setListError(null)
-    void api.GET('/admin/join/applications', { params: { query: { view, limit: '20', offset: String(offset) } } }).then(result => {
+    void api.GET('/admin/join/applications', { params: { query: { view, limit: '20', offset: String(offset) } }, alert: false }).then(result => {
       if (current !== listGeneration.current || !mounted.current) return
-      if (result.data !== undefined) setList(result.data)
-      else setListError('无法加载申请列表，请重试')
+      setList(result)
     }).catch(() => { if (current === listGeneration.current && mounted.current) setListError('无法加载申请列表，请重试') }).finally(() => { if (current === listGeneration.current && mounted.current) setListBusy(false) })
     return () => { listGeneration.current++ }
   }, [view, offset, reload])
@@ -62,10 +62,9 @@ export function JoinReviewPage() {
     const current = ++detailGeneration.current
     if (selected === null) { setDetail(null); setDetailBusy(false); return }
     setDetail(null); setDetailBusy(true); setDetailError(null); setBlockedUntil(0)
-    void api.GET('/admin/join/applications/{applicationId}', { params: { path: { applicationId: selected.id } } }).then(result => {
+    void api.GET('/admin/join/applications/{applicationId}', { params: { path: { applicationId: selected.id } }, alert: false }).then(result => {
       if (current !== detailGeneration.current || !mounted.current) return
-      if (result.data !== undefined) adopt(result.data.formVersion === 0 ? { ...result.data, form: null } : result.data)
-      else setDetailError('无法加载申请详情，请重试')
+      adopt(result.formVersion === 0 ? { ...result, form: null } : result)
     }).catch(() => { if (current === detailGeneration.current && mounted.current) setDetailError('无法加载申请详情，请重试') }).finally(() => { if (current === detailGeneration.current && mounted.current) setDetailBusy(false) })
     return () => { detailGeneration.current++ }
   }, [selected, detailReload])
@@ -80,10 +79,9 @@ export function JoinReviewPage() {
     downloadPending.current = true; setDownloading(attachment.id); setDownloadError(null)
     const same = () => mounted.current && selection.current?.serial === target.serial
     try {
-      const result = await api.GET('/admin/join/applications/{applicationId}/attachments/{attachmentId}', { params: { path: { applicationId: target.id, attachmentId: attachment.id } }, parseAs: 'blob' })
+      const result = await api.GET('/admin/join/applications/{applicationId}/attachments/{attachmentId}', { params: { path: { applicationId: target.id, attachmentId: attachment.id } }, responseType: 'blob', alert: false })
       if (!same()) return
-      if (result.data === undefined) { setDownloadError(result.response.status === 503 ? '当前下载繁忙，请稍后重试' : '附件下载失败，请重试'); return }
-      const url = URL.createObjectURL(result.data)
+      const url = URL.createObjectURL(result)
       const anchor = document.createElement('a')
       anchor.href = url; anchor.download = attachment.originalName; document.body.append(anchor)
       try { anchor.click() } finally {
@@ -91,7 +89,7 @@ export function JoinReviewPage() {
         const timer = window.setTimeout(() => { URL.revokeObjectURL(url); objectUrls.current.delete(url) }, 0)
         objectUrls.current.set(url, timer)
       }
-    } catch { if (same()) setDownloadError('附件下载失败，请检查网络并重试') }
+    } catch (error) { if (same()) setDownloadError(error instanceof ExAxiosError && error.status === 503 ? '当前下载繁忙，请稍后重试' : '附件下载失败，请检查网络并重试') }
     finally { downloadPending.current = false; if (mounted.current) setDownloading(null) }
   }
   async function act(action: 'approve' | 'reject' | 'invitations') {
@@ -101,15 +99,17 @@ export function JoinReviewPage() {
     const same = () => mounted.current && selection.current?.serial === target.serial
     try {
       const path = action === 'approve' ? '/admin/join/applications/{applicationId}/approve' : action === 'reject' ? '/admin/join/applications/{applicationId}/reject' : '/admin/join/applications/{applicationId}/invitations'
-      const result = await api.POST(path, { params: { path: { applicationId: target.id } }, body: {} })
+      const result = await api.POST(path, { params: { path: { applicationId: target.id } }, body: {}, alert: false })
       if (mounted.current) setReload(value => value + 1)
       if (!same()) return
-      if (result.data !== undefined) { adopt(result.data.formVersion === 0 ? { ...result.data, form: null } : result.data); ExMessage.info(action === 'reject' ? '申请已拒绝' : '审核与邀请状态已更新'); return }
-      if (result.response.status === 409) { setDetailReload(value => value + 1); return }
-      const seconds = Number(result.response.headers.get('Retry-After'))
-      if (result.response.status === 429 && Number.isSafeInteger(seconds) && seconds > 0) setBlockedUntil(Date.now() + seconds * 1000)
-      setDetailError(result.response.status === 429 ? '发送仍在冷却中，请稍后重试' : '操作失败，请刷新详情后重试')
-    } catch { if (same()) setDetailError('操作失败，请刷新详情后重试') }
+      adopt(result.formVersion === 0 ? { ...result, form: null } : result); ExMessage.info(action === 'reject' ? '申请已拒绝' : '审核与邀请状态已更新')
+    } catch (error) {
+      if (!same()) return
+      if (error instanceof ExAxiosError && error.status === 409) { setDetailReload(value => value + 1); return }
+      const seconds = error instanceof ExAxiosError ? error.retryAfterSeconds : undefined
+      if (error instanceof ExAxiosError && error.status === 429 && seconds !== undefined && seconds > 0) setBlockedUntil(Date.now() + seconds * 1000)
+      setDetailError(error instanceof ExAxiosError && error.status === 429 ? '发送仍在冷却中，请稍后重试' : '操作失败，请刷新详情后重试')
+    }
     finally { mutation.current = false; if (mounted.current) setMutationBusy(false) }
   }
   const cooldown = Math.max(0, Math.ceil((Math.max(resendUntil, blockedUntil) - clock) / 1000))

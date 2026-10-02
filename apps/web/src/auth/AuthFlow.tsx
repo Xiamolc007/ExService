@@ -8,7 +8,8 @@ import {
   type LoginDraft,
 } from '@workspace/components'
 import { api } from '@web/src/api/client'
-import { readToken, removeMatchingToken, writeSsoSuccess, writeToken } from '@web/src/auth/storage'
+import { ExAxiosError } from '@workspace/sdk/http/browser'
+import { readToken, writeSsoSuccess, writeToken } from '@web/src/auth/storage'
 
 export interface AuthFlowProps {
   initialMode?: 'login'
@@ -69,17 +70,8 @@ export function AuthFlow({
     setSsoRetryError(null)
     setFlowBusy(true)
     try {
-      const inspected = await api.POST('/auth/sso/inspect', { body: { ssoRequestId: requestId } })
+      await api.POST('/auth/sso/inspect', { body: { ssoRequestId: requestId }, alert: false })
       if (current !== generation.current) return
-      if (inspected.error !== undefined) {
-        if (isFatalSsoCode(inspected.error.error.code)) {
-          setFatalSsoError(inspected.error.error.message)
-        } else {
-          setSsoRetryError(inspected.error.error.message)
-        }
-        setFlowBusy(false)
-        return
-      }
       let token: string | null
       try {
         token = readToken(window.localStorage)
@@ -92,29 +84,17 @@ export function AuthFlow({
         setFlowBusy(false)
         return
       }
-      const confirmed = await api.POST('/auth/sso/confirm', {
-        body: { ssoRequestId: requestId },
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      await api.POST('/auth/sso/confirm', { body: { ssoRequestId: requestId }, alert: false })
       if (current !== generation.current) return
-      if (confirmed.data !== undefined) {
-        finishSso(requestId)
-        return
-      }
-      if (confirmed.error.error.code === 'SESSION_INVALID') {
-        removeMatchingToken(window.localStorage, token)
-        setFlowBusy(false)
-        return
-      }
-      if (isFatalSsoCode(confirmed.error.error.code)) {
-        setFatalSsoError(confirmed.error.error.message)
-      } else {
-        setSsoRetryError(confirmed.error.error.message)
-      }
-      setFlowBusy(false)
-    } catch {
+      finishSso(requestId)
+    } catch (error) {
       if (current === generation.current) {
-        setSsoRetryError('暂时无法连接认证服务，请重试')
+        if (error instanceof ExAxiosError && error.code === 'SESSION_INVALID') {
+          setFlowBusy(false)
+          return
+        }
+        if (error instanceof ExAxiosError && isFatalSsoCode(error.code)) setFatalSsoError(error.message)
+        else setSsoRetryError('暂时无法连接认证服务，请重试')
         setFlowBusy(false)
       }
     }
@@ -125,32 +105,20 @@ export function AuthFlow({
     authForm.current?.clearServerErrors()
     try {
       if (ssoRequestId !== undefined) {
-        const result = await api.POST('/auth/sso/login', {
-          body: { ssoRequestId, email: draft.email, password: draft.password },
+        await api.POST('/auth/sso/login', {
+          body: { ssoRequestId, email: draft.email, password: draft.password }, alert: false,
         })
         if (current !== generation.current) return
-        if (result.error !== undefined) {
-          if (isFatalSsoCode(result.error.error.code)) {
-            setFatalSsoError(result.error.error.message)
-            return
-          }
-          authForm.current?.setServerErrors(mapError(result.error.error.code, result.error.error.message))
-          return
-        }
         finishSso(ssoRequestId)
         return
       }
 
       const result = await api.POST('/auth/login', {
-        body: { email: draft.email, password: draft.password },
+        body: { email: draft.email, password: draft.password }, alert: false,
       })
       if (current !== generation.current) return
-      if (result.error !== undefined) {
-        authForm.current?.setServerErrors(mapError(result.error.error.code, result.error.error.message))
-        return
-      }
       try {
-        writeToken(window.localStorage, result.data.token)
+        writeToken(window.localStorage, result.token)
       } catch {
         authForm.current?.setServerErrors({ form: '浏览器无法保存登录信息，请检查存储设置后重试' })
         return
@@ -161,8 +129,12 @@ export function AuthFlow({
       } else {
         window.location.replace('/')
       }
-    } catch {
-      if (current === generation.current) authForm.current?.setServerErrors({ form: '暂时无法连接认证服务，请重试' })
+    } catch (error) {
+      if (current !== generation.current) return
+      if (error instanceof ExAxiosError) {
+        if (isFatalSsoCode(error.code)) setFatalSsoError(error.message)
+        else authForm.current?.setServerErrors(mapError(error.code, error.message))
+      } else authForm.current?.setServerErrors({ form: '暂时无法连接认证服务，请重试' })
     }
   }
 

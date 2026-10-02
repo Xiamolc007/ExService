@@ -17,13 +17,12 @@ export function submitApplication(draft: JoinApplicationDraft) {
   const application = new Blob([JSON.stringify(body.application)], { type: 'application/json' })
   // Match the upload operation's jsonBytes budget in api/openapi.yaml, using actual UTF-8 bytes.
   if (application.size > 64 * 1024) throw new JoinApplicationTextLimitError()
+  const parts = new FormData()
+  parts.append('application', application, 'application.json')
+  for (const file of draft.proofs) parts.append('proofs', file, file.name)
   return api.POST('/join/applications', {
-    body,
-    bodySerializer: () => {
-      const parts = new FormData()
-      parts.append('application', application, 'application.json')
-      for (const file of draft.proofs) parts.append('proofs', file, file.name)
-      return parts
-    },
+    body: parts,
+    timeout: 120_000,
+    alert: false,
   })
 }

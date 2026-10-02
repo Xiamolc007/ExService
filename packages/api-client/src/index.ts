@@ -8,6 +8,7 @@
 
 export { createApiClient } from '@api-client/src/client'
 export type { ApiClient, CreateApiClientOptions } from '@api-client/src/client'
+export type { ApiTransport, HttpTransportRequest } from '@api-client/src/transport'
 
 /**
  * 由 `pnpm api:generate` 从 `api/openapi.yaml` 生成的类型。

@@ -10,6 +10,7 @@ import {
 } from "@exre/exui";
 import { ArrowUpRight, CircleCheck } from "lucide-react";
 import { HalftoneDots } from "@paper-design/shaders-react";
+import { ExAxiosError } from "@workspace/sdk/http/browser";
 import {
   CompleteJoinApplicationModal,
   type CompleteJoinApplicationModalHandle,
@@ -86,42 +87,39 @@ export function JoinPage() {
     try {
       const result = await submitApplication(draft);
       if (!live.current) return;
-      if (result.data?.status === "received") {
+      if (result.status === "received") {
         delete drafts.current[draft.form.applicationType];
         setReceived(true);
         ExMessage.info("申请已收到，请等待社区审核安排");
         return;
       }
-      const code = result.error?.error.code;
+    } catch (error) {
+      if (!live.current) return;
+      if (error instanceof JoinApplicationTextLimitError) { form.current?.setError(error.message); return; }
+      const status = error instanceof ExAxiosError ? error.status : undefined;
+      const code = error instanceof ExAxiosError ? error.code : undefined;
       if (
-        result.response.status === 409 &&
+        status === 409 &&
         code === "JOIN_APPLICATION_EXISTS"
       ) {
         form.current?.setError("该邮箱已有申请，不能重复提交", "email");
         setServerAction("query");
-      } else if (result.response.status === 409 && code === "EMAIL_IN_USE") {
+      } else if (status === 409 && code === "EMAIL_IN_USE") {
         form.current?.setError("该邮箱已有正式账号，请前往登录", "email");
         setServerAction("login");
       } else {
         const message =
-          result.response.status === 429
+          status === 429
             ? "提交过于频繁，请稍后重试"
-            : result.response.status === 413
+            : status === 413
               ? "申请文字资料或证明文件超出大小限制，请缩短回答或检查附件数量与大小后重试"
-              : result.response.status === 415
+              : status === 415
                 ? "证明文件格式不受支持，请检查后重试"
-                : result.response.status === 503
+                : status === 503
                   ? "当前上传繁忙，请稍后重试"
-                  : "提交失败，请检查资料并重试";
+                  : error instanceof ExAxiosError ? "提交失败，请检查资料并重试" : "提交失败，请检查网络并重试";
         form.current?.setError(message);
       }
-    } catch (error) {
-      if (live.current)
-        form.current?.setError(
-          error instanceof JoinApplicationTextLimitError
-            ? error.message
-            : "提交失败，请检查网络并重试",
-        );
     } finally {
       pending.current = false;
       if (live.current) setBusy(false);

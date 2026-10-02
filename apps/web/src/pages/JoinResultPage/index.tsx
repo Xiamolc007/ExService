@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { Alert, AlertDescription, Button, Card, Field, FieldContent, FieldError, FieldLabel, Input } from '@exre/exui'
 import type { components } from '@workspace/api-client'
 import { api } from '@web/src/api/client'
+import { ExAxiosError } from '@workspace/sdk/http/browser'
 import { communityLinks } from '@web/src/join/community'
 import styles from '@web/src/pages/JoinResultPage/JoinResultPage.module.scss'
 
@@ -42,12 +43,11 @@ export function JoinResultPage() {
     pending.current = true; setBusy(true); setResult(null); setError(null)
     const active = () => mounted.current && generation.current === current
     const body: components['schemas']['JoinApplicationQueryRequest'] = value
-    void api.POST('/join/applications/query', { body }).then(response => {
+    void api.POST('/join/applications/query', { body, alert: false }).then(data => {
       if (!active()) return
-      const data = response.data
       if (data && Object.hasOwn(results, data.status) && results[data.status].action === data.nextAction) setResult(data)
-      else setError(response.response?.status === 429 ? '查询过于频繁，请稍后再试' : '查询失败，请检查网络后重新查询')
-    }).catch(() => { if (active()) setError('查询失败，请检查网络后重新查询') }).finally(() => { if (active()) { pending.current = false; setBusy(false) } })
+      else setError('查询失败，请检查网络后重新查询')
+    }).catch(error => { if (active()) setError(error instanceof ExAxiosError && error.status === 429 ? '查询过于频繁，请稍后再试' : '查询失败，请检查网络后重新查询') }).finally(() => { if (active()) { pending.current = false; setBusy(false) } })
   }
   const display = result === null ? null : results[result.status]
   return <main className={styles.page}><Button asChild variant="link"><Link to="/join/rifling-911">返回加入页</Link></Button><header><h1>申请结果查询</h1><p>使用提交申请时的邮箱主动查询。查询不会发送验证码，也不会修改申请或邀请。</p></header><Card className={styles.card}><QueryForm busy={busy} onQuery={query} onEdit={edit} />{busy && <p role="status">正在查询申请结果</p>}{error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription><p>请使用上方查询按钮重试。</p></Alert>}{display && <section className={styles.result} aria-live="polite"><h2>{display.title}</h2><p>{display.description}</p>{'href' in display && <Button asChild><Link to={display.href}>{display.link}</Link></Button>}{result?.nextAction === 'contact_community' && <><p>请查看社区置顶通知，联系社区工作人员。</p>{communityLinks.map(link => <Button key={link.label} asChild variant="outline"><a href={link.url} target="_blank" rel="noopener noreferrer">{link.label}</a></Button>)}</>}</section>}</Card></main>

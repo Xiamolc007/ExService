@@ -12,6 +12,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { JoinPage } from "@web/src/pages/JoinPage/Rifling-911/index";
 import { ExMessage } from "@exre/exui";
+import { ExAxiosError } from "@workspace/sdk/http/browser";
 const post = vi.hoisted(() => vi.fn());
 vi.mock("@web/src/api/client", () => ({ api: { POST: post } }));
 vi.mock("@web/src/join/hero-images", () => ({
@@ -274,7 +275,7 @@ it("restores the dismissed step and attached files, but releases drafts on page 
   expect(post).not.toHaveBeenCalled();
 });
 it("submits a complete new payload only on confirmation and waits for server acknowledgement", async () => {
-  const next = deferred<{ data: { status: string } }>();
+  const next = deferred<{ status: string }>();
   vi.spyOn(ExMessage, "info").mockReturnValue("info");
   post.mockReturnValue(next.promise);
   render(
@@ -294,8 +295,11 @@ it("submits a complete new payload only on confirmation and waits for server ack
   expect(screen.getByRole("dialog")).toBeTruthy();
   const [path, options] = post.mock.calls[0]!;
   expect(path).toBe("/join/applications");
-  expect(options.body.application.email).toBe("member@example.com");
-  expect(options.body.application.form).toMatchObject({
+  const parts = options.body as FormData;
+  const encoded = await new Promise<string>(resolve => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.readAsText(parts.get('application') as Blob) });
+  const application = JSON.parse(encoded);
+  expect(application.email).toBe("member@example.com");
+  expect(application.form).toMatchObject({
     applicationType: "new",
     birthDate: "2000-01-01",
     department: "leo",
@@ -305,14 +309,15 @@ it("submits a complete new payload only on confirmation and waits for server ack
       acceptAcademyAttendanceConsequences: true,
     },
   });
-  expect(options.body.proofs).toEqual([]);
-  const parts = options.bodySerializer();
+  expect(parts.getAll('proofs')).toEqual([]);
   expect(Array.from(parts.keys())).toEqual(["application"]);
-  expect(parts.get("application").name).toBe("application.json");
-  expect(parts.get("application").type).toBe("application/json");
+  const applicationPart = parts.get("application");
+  expect(applicationPart).toBeInstanceOf(File);
+  expect((applicationPart as File).name).toBe("application.json");
+  expect((applicationPart as File).type).toBe("application/json");
   expect(options.headers).toBeUndefined();
   await act(async () => {
-    next.resolve({ data: { status: "received" } });
+    next.resolve({ status: "received" });
   });
   expect(
     await screen.findByRole("heading", { name: "申请已收到" }),
@@ -328,7 +333,7 @@ it("retains experienced values and the same File on a failed submit and successf
   vi.spyOn(ExMessage, "info").mockReturnValue("info");
   post
     .mockRejectedValueOnce(new Error("SQL secret"))
-    .mockResolvedValueOnce({ data: { status: "received" } });
+    .mockResolvedValueOnce({ status: "received" });
   render(
     <MemoryRouter>
       <JoinPage />
@@ -346,9 +351,8 @@ it("retains experienced values and the same File on a failed submit and successf
   ).toBeTruthy();
   const first = post.mock.calls[0]![1],
     second = post.mock.calls[1]![1];
-  expect(second.body).toEqual(first.body);
-  expect(second.body.proofs).toEqual(["binary"]);
-  const retained = second.bodySerializer().get("proofs") as File;
+  expect(second.body.getAll('proofs')).toHaveLength(1);
+  const retained = second.body.get("proofs") as File;
   expect(retained.name).toBe(file.name);
   expect(retained.size).toBe(file.size);
   const contents = await new Promise<string>((resolve) => {
@@ -357,7 +361,7 @@ it("retains experienced values and the same File on a failed submit and successf
     reader.readAsText(retained);
   });
   expect(contents).toBe("proof");
-  expect(Array.from(second.bodySerializer().keys())).toEqual([
+  expect(Array.from(second.body.keys())).toEqual([
     "application",
     "proofs",
   ]);
@@ -373,10 +377,7 @@ it.each([
 ])(
   "handles %s as a conflict without claiming receipt",
   async (code, message, link, href) => {
-    post.mockResolvedValue({
-      error: { error: { code, message: "safe" } },
-      response: new Response(null, { status: 409 }),
-    });
+    post.mockRejectedValue(new ExAxiosError('http', code, 'safe', { status: 409 }));
     render(
       <MemoryRouter>
         <JoinPage />
@@ -398,7 +399,7 @@ it.each([false, true])(
   "keeps oversized text and files editable before any request (proof=%s)",
   async (withProof) => {
     vi.spyOn(ExMessage, "info").mockReturnValue("info");
-    post.mockResolvedValue({ data: { status: "received" } });
+    post.mockResolvedValue({ status: "received" });
     render(
       <MemoryRouter>
         <JoinPage />
@@ -443,7 +444,7 @@ it.each([false, true])(
     ).toBeTruthy();
     expect(post).toHaveBeenCalledTimes(1);
     if (withProof) {
-      const retained = post.mock.calls[0]![1].bodySerializer().get(
+      const retained = post.mock.calls[0]![1].body.get(
         "proofs",
       ) as File;
       expect(retained.name).toBe("retained.txt");
@@ -457,12 +458,7 @@ it.each([false, true])(
   },
 );
 it("explains that a server 413 can involve text or attachments without discarding the draft", async () => {
-  post.mockResolvedValue({
-    response: new Response(null, { status: 413 }),
-    error: {
-      error: { code: "JOIN_UPLOAD_TOO_LARGE", message: "private detail" },
-    },
-  });
+  post.mockRejectedValue(new ExAxiosError('http', 'JOIN_UPLOAD_TOO_LARGE', 'private detail', { status: 413 }));
   render(
     <MemoryRouter>
       <JoinPage />
