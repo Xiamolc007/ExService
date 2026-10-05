@@ -78,7 +78,13 @@
 
 | 命令 | 作用 |
 | --- | --- |
-| `pnpm dev` | 并行启动 Vite（`8081`）与 Server（`8080`）；不执行 migration/reset。 |
+| `pnpm dev` | 只读核对已准备 local 目标，监督 Website、Outline 与身份基础服务；入口 `http://127.0.0.1:8080/`；不隐式准备、迁移、reset 或 bootstrap。 |
+| `pnpm integration:configure -- --mode local` | 校验工具、依赖与原 Website 数据源，保存 local 配置及稳定密钥。 |
+| `pnpm integration:init -- --mode local` | 显式准备独立 Outline/Hydra 数据库及迁移，不创建 Website `exre`。 |
+| `pnpm integration:migrate -- --mode local` | 显式迁移已核验的 local Outline/Hydra 目标。 |
+| `pnpm integration:bootstrap -- --mode local --admin-user-id <Website-UUID>` | 显式核验用户选定的已有启用账号并初始化文档管理员；缺 UUID 拒绝。 |
+| `pnpm integration:down -- --mode local` | 停止归属已验证的受管运行资源，不删除卷或数据。 |
+| `pnpm integration:dev` / `pnpm integration:up` | 保留原 8090 dev / full 模式，独立配置和准备。 |
 | `pnpm api:lint` | 用 Redocly 校验 Contract 的解析、引用与项目规则。 |
 | `pnpm api:generate` | 用 openapi-typescript 更新 `packages/api-client/src/generated/schema.d.ts`。 |
 | `pnpm typecheck` | 对每个 workspace 包执行无输出的 TypeScript 检查。 |
@@ -87,17 +93,22 @@
 | `pnpm db:migrate` | 对已存在的独立 `exre` 数据库显式应用 PostgreSQL migration；不创建数据库。 |
 | `pnpm db:reset -- --confirm exre` | 开发专用：校验回环地址、数据库身份和对象归属后重建应用结构；不删除头像。 |
 
-新环境初始化顺序：
+本地集成准备顺序：
 
-先创建独立的 PostgreSQL `exre` 数据库，并在本机 `apps/server/.env.local` 填入 `DATABASE_URL`、`AUTH_CODE_HMAC_KEY` 等配置；示例见 `apps/server/.env.example`。数据库不会由应用自动创建。
+保留原 Website `exre`、账号、HMAC、存储与头像配置；进程环境优先于 `apps/server/.env.local`，示例见 `apps/server/.env.example`。需要满足根包和 Outline engines 的 Node、pnpm、Corepack/Yarn、Docker Compose、两个应用分别安装的依赖及现有 ExUI 构建产物。全新 Website 须显式创建和迁移独立 `exre` 并完成账号注册；local configure/init 不创建 Website 数据库或账号。bootstrap 前须由用户明确选择一个已有启用账号的 UUID，不能自动选择或创建。
 
 ```bash
 pnpm install
 pnpm api:lint
 pnpm api:generate
+pnpm integration:configure -- --mode local
 pnpm db:migrate
+pnpm integration:init -- --mode local
+pnpm integration:bootstrap -- --mode local --admin-user-id <Website-UUID>
 pnpm dev
 ```
+
+运行拓扑、准备与只读检查、旧模式兼容、归属和恢复规则集中在 `.ai/architectures/docs-integration/integration-boundaries.md`；此流程不代表真实浏览器或生产部署已验收。
 
 ## 修改 API 的固定顺序
 

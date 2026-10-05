@@ -2,7 +2,7 @@
 
 本文件说明 ExWebsite 当前开发拓扑。HTTP 形状以 `api/openapi.yaml` 为准；Server 请求与数据库生命周期见 `.ai/architectures/mock-server/request-lifecycle.md`，数据规则见 `.ai/databases/data-model.md`。
 
-_最后更新：2026-10-01_
+_最后更新：2026-10-05_
 
 ## 系统结构
 
@@ -17,7 +17,7 @@ api/openapi.yaml ──api:generate──▶ packages/api-client ──▶ apps/
 
 上图是 Website 业务请求链；`apps/server/` 是唯一 Website Fastify Server。Contract 不依赖实现；Fastify 只注册带 `operationId` 的 operation，Website 前端只经共享 Client 发请求。当前仍是本地开发拓扑，公网部署能力需后续设计。
 
-本地文档集成增加 gateway、Hydra 与独立的 Outline 服务：同域 `/docs` 归 Outline，Website 的 `/api` 仍归 Fastify，Hydra 使用单独 issuer 主机名。Outline 是 `apps/outline/` Git submodule，保留自己的 Yarn、数据库与文件存储；它不成为 Website pnpm workspace 包，Website Fastify 也不接管文档 API。完整容器与宿主机开发模式共用入口契约，详见 `.ai/architectures/docs-integration/integration-boundaries.md`。
+普通开发入口已接入完整 local 文档与统一身份集成；Website 的 `/api` 仍归 Fastify。Outline 是 `apps/outline/` Git submodule，保留自己的 Yarn、数据库与附件存储，不成为 pnpm workspace 包，Website Fastify 不接管文档 API。local 与原 8090 dev/full 的配置、身份及请求边界统一见 `.ai/architectures/docs-integration/integration-boundaries.md`。
 
 ## 模块边界
 
@@ -37,10 +37,14 @@ api/openapi.yaml ──api:generate──▶ packages/api-client ──▶ apps/
 - TypeScript 别名由 `tsconfig.base.json` 声明；Vite 与 Vitest 分别配置解析。Server 构建由 `scripts/rewrite-server-imports.mjs` 把别名改写为产物内相对引用。
 - 根命令位于 `package.json`；Server 运行时依赖属于 `apps/server/package.json`。
 
+## 开发进程
+
+根目录 `pnpm dev` 由 `scripts/docs-integration/local-dev.mjs` 监督应用及已准备的基础服务，普通运行只读校验准备状态。工具与依赖、显式准备、资源归属、失败清理和旧模式兼容均以 `.ai/architectures/docs-integration/integration-boundaries.md` 为唯一详细说明；首次使用步骤见 `README.md`。正常运行与镜像构建证明不替代真实浏览器或公网部署验收。
+
 ## 前端请求流
 
 1. `apps/web/src/api/client.ts` 读取 `VITE_API_BASE_URL`，缺省 `/api`，创建共享 Client。
-2. 开发期 Vite 将 `/api/*` 代理至本机 `127.0.0.1:8080`，保留 `/api` 前缀；Server 的 Glue 注册该前缀。
+2. 开发期 Vite 将 `/api/*` 代理至本机 Website Server，保留 `/api` 前缀；Server 的 Glue 注册该前缀。根命令注入代理目标，单独启动 Web 时使用配置的缺省目标。
 3. `apps/web/src/main.tsx` 在开发模式调用健康 operation 检查连通性；失败仅记录开发错误。
 
 前端页面由单个 React router 管理。`apps/web/src/main.tsx` 的 ExUI `ThemeProvider` 包住整个路由树，并且只在该入口导入一次 `@exre/exui/style.css`。深链接部署时仍需 SPA fallback，见 `.ai/decisions/web/02-react-route-skeleton.md`。
