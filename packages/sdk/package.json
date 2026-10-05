@@ -55,7 +55,7 @@
     "@exre/exui": { "optional": true }
   },
   "devDependencies": {
-    "@exre/exui": "^0.6.0",
+    "@exre/exui": "link:../../../../exui/packages/components",
     "@types/node": "^22.20.3",
     "@workspace/api-client": "workspace:*",
     "rollup": "^4.52.5",
