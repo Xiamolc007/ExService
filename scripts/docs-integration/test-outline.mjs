@@ -9,12 +9,21 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
 /** Requires explicit, literal test cases instead of allowing the full server suite. */
 export function testSelection(args) {
-  const [file, ...cases] = args
+  let selected = args
+  let databaseName = 'outline-test'
+  if (args[0] === '--database-name') {
+    databaseName = args[1]
+    selected = args.slice(2)
+    if (!['outline-test', 'outline'].includes(databaseName)) {
+      throw new Error('Disposable database name must be outline-test or outline.')
+    }
+  }
+  const [file, ...cases] = selected
   if (!file || !/^(?:server|plugins)\/(?:[\w.-]+\/)*[\w.-]+\.test\.tsx?$/.test(file) ||
       !cases.length || cases.some(name => !name.trim() || /[\r\n]/.test(name))) {
     throw new Error('Provide one server/plugins test file and one or more literal test case names.')
   }
-  return { file, cases }
+  return { file, cases, databaseName }
 }
 
 /** Keeps only operating-system and package-cache settings, then supplies disposable service credentials. */
@@ -64,7 +73,7 @@ async function run(node, corepack, args, environment, log) {
 }
 
 async function main(args) {
-  const { file, cases } = testSelection(args)
+  const { file, cases, databaseName } = testSelection(args)
   const outline = realpathSync(resolve(root, 'apps/outline'))
   const target = realpathSync(resolve(outline, file))
   if (!target.startsWith(`${outline}${sep}`)) throw new Error('Test file is outside the Outline checkout.')
@@ -85,13 +94,13 @@ async function main(args) {
     let postgres, redis, client
     try {
       postgres = await new PostgreSqlContainer(images.postgres)
-        .withDatabase('outline-test').withUsername('user').withPassword(randomBytes(24).toString('hex')).start()
+        .withDatabase(databaseName).withUsername('user').withPassword(randomBytes(24).toString('hex')).start()
       redis = await new GenericContainer(images.redis).withExposedPorts(6379)
         .withWaitStrategy(Wait.forLogMessage('Ready to accept connections')).start()
       client = new Client({ connectionString: postgres.getConnectionUri() })
       await client.connect()
       const identity = await client.query('SELECT current_database() AS name')
-      if (identity.rows[0].name !== 'outline-test') throw new Error('Disposable test database identity mismatch.')
+      if (identity.rows[0].name !== databaseName) throw new Error('Disposable test database identity mismatch.')
       for (const extension of ['uuid-ossp', 'unaccent', 'pg_trgm', 'btree_gin']) {
         await client.query(`CREATE EXTENSION IF NOT EXISTS "${extension}" WITH SCHEMA public`)
       }

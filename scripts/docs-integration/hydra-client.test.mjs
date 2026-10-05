@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import test from 'node:test'
-import { ensureHydraClient } from './hydra-client.mjs'
+import { ensureHydraClient, verifyHydraClient } from './hydra-client.mjs'
 
 async function fixture(run) {
   const clients = new Map()
@@ -87,3 +87,21 @@ test('rejects changed callbacks, privileges, or secret rather than overwriting a
     })
   }
 })
+
+test('read-only runtime verify refuses missing clients without creating or updating', async () => fixture(async state => {
+  await assert.rejects(verifyHydraClient(state), /initialization failed/)
+  assert.equal(state.calls.filter(([method]) => method !== 'GET').length, 0)
+  await ensureHydraClient(state)
+  const before = state.calls.filter(([method, path]) => method === 'POST' && path === '/admin/clients').length
+  await verifyHydraClient(state)
+  assert.equal(state.calls.filter(([method, path]) => method === 'POST' && path === '/admin/clients').length, before)
+}))
+test('local issuer client callbacks and metadata are fixed to the validated local origin', async () => fixture(async state => {
+  const options = { ...state, mode: 'local', clientId: 'ex-outline-local', publicOrigin: 'http://127.0.0.1:8080' }
+  await ensureHydraClient(options)
+  assert.equal(state.getClient('ex-outline-local').metadata.issuer, `${state.publicUrl}/`)
+  assert.deepEqual(state.getClient('ex-outline-local').redirect_uris, ['http://127.0.0.1:8080/docs/auth/oidc.callback'])
+  await verifyHydraClient(options)
+  await assert.rejects(ensureHydraClient({ ...options, callback: 'http://127.0.0.1:8081/wrong' }), /configuration/)
+  await assert.rejects(ensureHydraClient({ ...options, publicOrigin: 'http://localhost:8080' }), /configuration/)
+}))

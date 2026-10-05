@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
-import { spawn, spawnSync } from 'node:child_process'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import test from 'node:test'
 import * as command from './command.mjs'
+import { identityAlive, processIdentity, spawnOwned, stopOwned } from './ownership.mjs'
 
 const values = {
   WEBSITE_SERVER_UPSTREAM: 'host.docker.internal:19180',
@@ -34,6 +34,15 @@ test('development starts the linked ExUI watcher rather than watching a copied b
     { cwd: 'D:/fixtures/exui', args: ['pnpm', 'exec', 'node', join(options.root, 'scripts', 'docs-integration', 'watch-exui.mjs')] })
 })
 
+test('legacy preserves direct TLS backend while gateway and outbox share the explicitly persisted HTTP transport', () => {
+  const processes = command.devProcesses({ ...values, OUTLINE_DIRECT_UPSTREAM: 'host.docker.internal:14100',
+    OUTLINE_BACKEND_UPSTREAM: 'host.docker.internal:14102', OUTLINE_HTTP_PORT: '14102' }, options)
+  const outline = processes.find(item => item.name === 'outline'), server = processes.find(item => item.name === 'server')
+  assert.equal(outline.environment.PORT, '14100')
+  assert.equal(outline.environment.OUTLINE_DEV_HTTP_PORT, '14102')
+  assert.equal(server.environment.OUTLINE_INTERNAL_URL, 'http://127.0.0.1:14102/')
+})
+
 test('invalid upstreams fail before any host process starts', () => {
   for (const upstream of ['other-host:18180', 'host.docker.internal:0', 'host.docker.internal:65536', 'host.docker.internal:abc']) {
     assert.throws(() => command.devProcesses?.({ ...values, WEBSITE_SERVER_UPSTREAM: upstream }, options), /端口|upstream/)
@@ -52,26 +61,13 @@ test('a stale mode record does not prevent starting another mode', () => {
 })
 
 test('stopping owned host apps also stops their descendant processes', async () => {
-  const child = spawn(process.execPath, ['-e', `
-    const { spawn } = require('node:child_process');
-    const descendant = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)']);
-    console.log(descendant.pid);
-    setInterval(() => {}, 1000);
-  `], { stdio: ['ignore', 'pipe', 'ignore'], detached: process.platform !== 'win32' })
-  const descendantPid = await new Promise((resolve, reject) => {
-    child.stdout.once('data', data => resolve(Number(data.toString().trim())))
-    child.once('error', reject)
-  })
-  const alive = pid => { try { process.kill(pid, 0); return true } catch { return false } }
+  const messages = [], owned = await spawnOwned({ name: 'compatibility-fixture', command: process.execPath,
+    args: [resolve('tests/dev/fixture-process.mjs'), 'descendant'], cwd: resolve('.'), environment: process.env },
+  { onLog: (_name, line) => messages.push(line) })
   try {
-    command.stopHostProcesses?.([child])
-    for (let count = 0; count < 20 && alive(descendantPid); count++) await delay(50)
-    assert.equal(alive(descendantPid), false, 'owned watcher/app descendants must not survive integration:down')
-  } finally {
-    if (child.exitCode === null && child.signalCode === null) {
-      if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' })
-      else { try { process.kill(-child.pid, 'SIGKILL') } catch {} }
-    }
-    if (alive(descendantPid)) { try { process.kill(descendantPid, 'SIGKILL') } catch {} }
-  }
+    for (let count = 0; count < 100 && !messages.some(value => value.startsWith('DESCENDANT:')); count++) await delay(50)
+    const descendant = processIdentity(Number(messages.find(value => value.startsWith('DESCENDANT:'))?.split(':')[1]))
+    await command.stopHostProcesses([owned])
+    assert.equal(identityAlive(descendant), false)
+  } finally { await stopOwned([owned]) }
 })

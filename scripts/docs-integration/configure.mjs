@@ -138,7 +138,9 @@ export function configure(sourceInput = process.env.EXUI_SOURCE_DIR) {
     ['EXUI_BUILD_CONTEXT', cleanContextPath],
     ['WEBSITE_SERVER_UPSTREAM', `host.docker.internal:${process.env.INTEGRATION_SERVER_PORT ?? '18180'}`],
     ['WEBSITE_WEB_UPSTREAM', `host.docker.internal:${process.env.INTEGRATION_WEB_PORT ?? '18181'}`],
-    ['OUTLINE_BACKEND_UPSTREAM', `host.docker.internal:${process.env.INTEGRATION_OUTLINE_PORT ?? '13100'}`],
+    ['OUTLINE_DIRECT_UPSTREAM', `host.docker.internal:${process.env.INTEGRATION_OUTLINE_PORT ?? '13100'}`],
+    ['OUTLINE_HTTP_PORT', process.env.INTEGRATION_OUTLINE_HTTP_PORT ?? '13102'],
+    ['OUTLINE_BACKEND_UPSTREAM', `host.docker.internal:${process.env.INTEGRATION_OUTLINE_HTTP_PORT ?? '13102'}`],
     ['OUTLINE_STATIC_UPSTREAM', `host.docker.internal:${process.env.INTEGRATION_OUTLINE_VITE_PORT ?? '13101'}`],
     ['OUTLINE_STATIC_PREFIX', 'docs/'],
   ]

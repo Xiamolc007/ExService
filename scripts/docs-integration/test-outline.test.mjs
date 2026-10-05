@@ -7,10 +7,25 @@ test('requires one explicit server file and literal case names before starting c
     assert.throws(() => testSelection(args))
   }
   assert.deepEqual(testSelection(['server/models/User.test.ts', 'literal .* case']), {
-    file: 'server/models/User.test.ts', cases: ['literal .* case'],
+    file: 'server/models/User.test.ts', cases: ['literal .* case'], databaseName: 'outline-test',
   })
   assert.equal(testSelection(['plugins/storage/server/api/files.test.ts', 'case']).file,
     'plugins/storage/server/api/files.test.ts')
+})
+
+test('limits explicit disposable database selection to the two fixed database names', () => {
+  for (const databaseName of ['outline', 'outline-test']) {
+    assert.deepEqual(testSelection(['--database-name', databaseName, 'server/identity/readiness.test.ts', 'case']), {
+      file: 'server/identity/readiness.test.ts', cases: ['case'], databaseName,
+    })
+  }
+  for (const args of [
+    ['--database-name'], ['--database-name', 'exre', 'server/identity/readiness.test.ts', 'case'],
+    ['--database-name', 'outline; DROP DATABASE', 'server/identity/readiness.test.ts', 'case'],
+    ['--database-name=outline', 'server/identity/readiness.test.ts', 'case'],
+  ]) {
+    assert.throws(() => testSelection(args))
+  }
 })
 
 test('replaces inherited database and Redis connections and private service credentials', () => {

@@ -1,15 +1,28 @@
 import { createHash, randomBytes } from 'node:crypto'
 
 /** Provisions a fixed confidential OIDC client without widening existing grants. */
-export async function ensureHydraClient({ adminUrl, publicUrl = 'http://identity.exwebsite.test:8090/', clientSecret,
-  clientId = 'ex-outline' }) {
+export async function ensureHydraClient(options) { return checkHydraClient(options, true) }
+/** Runtime verification can never provision a missing client. */
+export async function verifyHydraClient(options) { return checkHydraClient(options, false) }
+async function checkHydraClient({ adminUrl, publicUrl = 'http://identity.exwebsite.test:8090/', clientSecret,
+  clientId = 'ex-outline', mode = 'dev', publicOrigin = 'http://exwebsite.test:8090', callback, tokenUrl }, create) {
+  if (!['local', 'dev', 'full'].includes(mode)) throw new Error('Invalid Hydra bootstrap configuration')
+  const origin = new URL(publicOrigin), issuer = new URL(publicUrl)
+  if (tokenUrl !== undefined && (mode !== 'full' || tokenUrl !== 'http://hydra:4444/')) throw new Error('Invalid Hydra bootstrap configuration')
+  if (origin.href !== `${publicOrigin}/` || issuer.pathname !== '/' || issuer.search || issuer.hash || issuer.username || issuer.password ||
+      (mode === 'local' ? (origin.protocol !== 'http:' || origin.hostname !== '127.0.0.1' || !origin.port ||
+        issuer.protocol !== 'http:' || issuer.hostname !== '127.0.0.1' || !issuer.port || clientId !== 'ex-outline-local') :
+        (publicOrigin !== 'http://exwebsite.test:8090'))) throw new Error('Invalid Hydra bootstrap configuration')
   const clients = {
+    'ex-outline-local': { name: 'Docs Local', callback: `${publicOrigin}/docs/auth/oidc.callback`,
+      logout: `${publicOrigin}/identity/signed-out` },
     'ex-outline': { name: 'Docs', callback: 'http://exwebsite.test:8090/docs/auth/oidc.callback',
       logout: 'http://exwebsite.test:8090/identity/signed-out' },
     'ex-oidc-probe': { name: 'OIDC Probe', callback: 'http://127.0.0.1:18765/callback',
       logout: 'http://127.0.0.1:18765/signed-out' },
   }
   const client = Object.hasOwn(clients, clientId) && clients[clientId]
+  if (callback !== undefined && callback !== client?.callback) throw new Error('Invalid Hydra bootstrap configuration')
   const base = new URL(adminUrl)
   if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password ||
       base.pathname !== '/' || base.search || base.hash || !clientSecret || !client) throw new Error('Invalid Hydra bootstrap configuration')
@@ -20,14 +33,14 @@ export async function ensureHydraClient({ adminUrl, publicUrl = 'http://identity
     subject_type: 'public', token_endpoint_auth_method: 'client_secret_basic',
     post_logout_redirect_uris: [client.logout],
     authorization_code_grant_access_token_lifespan: '60s', authorization_code_grant_id_token_lifespan: '60s',
-    metadata: { integration: 'docs-integration', issuer: 'http://identity.exwebsite.test:8090/',
+    metadata: { integration: 'docs-integration', issuer: issuer.href,
       secretFingerprint: createHash('sha256').update(clientSecret).digest('hex') },
   }
   const request = (path, options = {}) => fetch(new URL(path, base), {
     ...options, signal: AbortSignal.timeout(1000),
   })
   let response = await request(`/admin/clients/${clientId}`)
-  if (response.status === 404) {
+  if (response.status === 404 && create) {
     response = await request('/admin/clients', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(desired) })
     // A competing bootstrap may have created the same client. Recheck exact state.
@@ -50,7 +63,7 @@ export async function ensureHydraClient({ adminUrl, publicUrl = 'http://identity
   }
   // A non-existent random code cannot issue a token, but proves the stored client secret
   // is valid. Hydra does not return stored secrets through its administrative GET API.
-  const probe = await fetch(new URL('/oauth2/token', publicUrl), {
+  const probe = await fetch(new URL('/oauth2/token', tokenUrl ?? publicUrl), {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded',
       Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}` },
     body: new URLSearchParams({ grant_type: 'authorization_code', code: randomBytes(32).toString('base64url'),

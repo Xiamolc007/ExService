@@ -8,7 +8,8 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "dev": "concurrently --names web,server --prefix-colors cyan,magenta \"pnpm --filter @workspace/web dev\" \"pnpm --filter @workspace/server dev\"",
+    "dev": "node scripts/docs-integration/local-dev.mjs",
+    "dev:outline": "node scripts/dev-app.mjs outline",
     "api:lint": "redocly lint api/openapi.yaml",
     "api:generate": "openapi-typescript api/openapi.yaml -o packages/api-client/src/generated/schema.d.ts",
     "typecheck": "pnpm -r typecheck && pnpm exec tsc --noEmit -p tests/api-client/tsconfig.json",
