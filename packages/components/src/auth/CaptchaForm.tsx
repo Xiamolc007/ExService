@@ -17,7 +17,7 @@ const captchaSchema = z.object({
 type CaptchaFields = z.infer<typeof captchaSchema>
 
 export const CaptchaForm = forwardRef<AuthFormHandle, AuthFormProps>(function CaptchaForm({
-  busy, onCaptchaSubmit,
+  busy, onCaptchaSubmit, description,
 }, ref) {
   const id = useId()
   const { register, handleSubmit, setError, clearErrors, getFieldState,
@@ -45,6 +45,7 @@ export const CaptchaForm = forwardRef<AuthFormHandle, AuthFormProps>(function Ca
       <div className={`${styles.intro} ${styles.loginIntro}`}>
         <ExIcon size="6rem" className={styles.authIcon} />
         <h2 tabIndex={-1}>输入验证码</h2>
+        {description && <p className={styles.destination}>{description}</p>}
       </div>
       {errors.root?.server && <Alert variant="destructive" role="alert"><AlertDescription>{errors.root.server.message}</AlertDescription></Alert>}
       <Field data-invalid={errors.answer ? true : undefined}>

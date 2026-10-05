@@ -62,6 +62,17 @@
   }
 }
 
+.destination {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+
+  strong {
+    color: var(--exui-text-primary);
+    font-weight: var(--exui-font-weight-medium);
+  }
+}
+
 .authIcon {
   justify-self: center;
   margin-bottom: 0.75rem;

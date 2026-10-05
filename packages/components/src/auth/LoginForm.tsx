@@ -40,6 +40,7 @@ const loginSchema = z.object({
 
 export const LoginForm = forwardRef<AuthFormHandle, AuthFormProps>(function LoginForm({
   initialEmail = "",
+  description,
   busy,
   onContinueLogin,
   onJoin,
@@ -89,6 +90,7 @@ export const LoginForm = forwardRef<AuthFormHandle, AuthFormProps>(function Logi
       <div className={`${styles.intro} ${styles.loginIntro}`}>
         <ExIcon size="6rem" className={styles.authIcon} />
         <h2 tabIndex={-1}>登录到 Exre</h2>
+        {description && <p className={styles.destination}>{description}</p>}
         <p>
           还没有账号？{" "}
           <Button

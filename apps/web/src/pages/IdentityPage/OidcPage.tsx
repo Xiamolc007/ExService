@@ -7,6 +7,8 @@ import { AuthFlow } from '@web/src/auth/AuthFlow'
 import { readToken, removeMatchingToken } from '@web/src/auth/storage'
 import { AuthBackdrop } from '@web/src/pages/AuthPage/AuthBackdrop'
 import styles from '@web/src/pages/AuthPage/AuthPage.module.scss'
+import identityStyles from './OidcPage.module.scss'
+import { OidcSharingDialog } from './OidcSharingDialog'
 
 type Phase = 'login' | 'consent' | 'logout'
 type ClientInfo = { clientName: string; scopes: string[] }
@@ -151,20 +153,26 @@ function OidcChallenge({ phase, search }: { phase: Phase; search: string }) {
     setAttempt(value => value + 1)
   }
 
+  const loginRequired = challenge !== null && stage === 'login-required' && phase === 'login'
+  const serviceName = info?.clientName === 'Docs' ? '文档服务' : (info?.clientName ?? '文档服务')
+
   return <main className={styles.page} data-page="identity">
     <AuthBackdrop />
-    <Card glass className={styles.panel}>
-      <h1>{phase === 'logout' ? '退出文档服务' : '继续登录文档服务'}</h1>
-      {info !== null && <p>{info.clientName} · {info.scopes.join('、')}</p>}
+    <Card glass className={styles.panel} data-auth-mode={loginRequired ? 'login' : undefined}>
+      {!loginRequired && <h1 className={identityStyles.statusTitle}>{phase === 'logout' ? '退出文档服务' : '继续登录文档服务'}</h1>}
       {challenge === null || stage === 'invalid' ? <Alert variant="destructive" role="alert">
         <AlertDescription>身份入口无效，请从文档服务重新进入。</AlertDescription>
       </Alert> : stage === 'login-required' && phase === 'login' ? <AuthFlow
         presentation="page" onSessionCreated={value => { setStage('checking'); setToken(value) }}
+        description={<>使用 Exre 账号，继续访问 <strong>{serviceName}</strong></>}
       /> : stage === 'restart' ? <p role="alert">此登录流程已失效，请重新从文档服务发起登录。</p>
-        : stage === 'retry-inspect' || stage === 'retry-accept' ? <>
+        : stage === 'retry-inspect' || stage === 'retry-accept' ? <div className={identityStyles.retryState}>
           <p role="alert">暂时无法连接身份服务，请重试。</p>
           <Button type="button" onClick={retry}>重试</Button>
-        </> : <p role="status">正在处理身份请求…</p>}
+        </div> : <p role="status">正在处理身份请求…</p>}
+      {info !== null && stage !== 'invalid' && phase !== 'logout' && <OidcSharingDialog
+        serviceName={serviceName} scopes={info.scopes}
+      />}
     </Card>
   </main>
 }

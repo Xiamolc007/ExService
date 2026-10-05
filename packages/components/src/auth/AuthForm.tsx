@@ -1,4 +1,4 @@
-import { forwardRef } from 'react'
+import { forwardRef, type ReactNode } from 'react'
 import { LoginForm } from '@components/src/auth/LoginForm'
 import { CaptchaForm } from '@components/src/auth/CaptchaForm'
 
@@ -11,6 +11,7 @@ export interface AuthFormProps {
   step: AuthStep
   busy: boolean
   initialEmail?: string
+  description?: ReactNode
   onContinueLogin: (draft: LoginDraft) => void
   onCaptchaSubmit: (answer: string) => void | Promise<void>
   onJoin: () => void

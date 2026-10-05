@@ -20,6 +20,7 @@ export interface AuthFlowProps {
   onFinished?: () => void
   onSessionCreated?: (token: string) => void
   footer?: ReactNode
+  description?: ReactNode
 }
 
 export function AuthFlow({
@@ -30,6 +31,7 @@ export function AuthFlow({
   onFinished,
   onSessionCreated,
   footer,
+  description,
 }: AuthFlowProps) {
   const navigate = useNavigate()
   const [step, setStep] = useState<'credentials' | 'captcha'>('credentials')
@@ -217,6 +219,7 @@ export function AuthFlow({
       step={step}
       busy={flowBusy}
       initialEmail={email}
+      description={description}
       onContinueLogin={continueLogin}
       onCaptchaSubmit={submitCaptcha}
       onJoin={join}
