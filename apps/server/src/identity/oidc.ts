@@ -65,7 +65,7 @@ export class HttpHydraAdmin implements HydraAdmin {
   acceptLogout(challenge: string) { return this.call<HydraRedirect>('PUT', '/admin/oauth2/auth/requests/logout/accept', 'logout_challenge', challenge) }
 }
 
-interface OidcClientConfig { name: string; redirectUri: string; scopes: string[] }
+interface OidcClientConfig { readonly name: string; readonly redirectUri: string; readonly scopes: readonly string[] }
 interface FlowRow { session_id: string; client_id: string; hydra_sid: string | null;
   state: string; expires_at: number; encrypted_redirect: string | null }
 
@@ -73,7 +73,7 @@ export class OidcService {
   private readonly now: () => number
   private readonly issuer: URL
   constructor(private readonly options: { db: AppDatabase; authServices: AuthService; admin: HydraAdmin;
-    flowKey: Buffer; issuer: string; clients: Record<string, OidcClientConfig>; now?: () => number }) {
+    flowKey: Buffer; issuer: string; clients: Readonly<Record<string, OidcClientConfig>>; now?: () => number }) {
     if (options.flowKey.length !== 32) throw new Error('IDENTITY_FLOW_KEY must be 32 bytes')
     this.now = options.now ?? Date.now
     this.issuer = new URL(options.issuer)

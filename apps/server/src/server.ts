@@ -13,23 +13,17 @@ import { parseStorageConfig, StorageConfigError } from '@server/src/modules/stor
 import { CorsConfigError, parseCorsAllowedOrigins } from '@server/src/http/cors.js'
 import { HttpHydraAdmin, OidcService } from '@server/src/identity/oidc.js'
 import { configuredIdentityOutboxWorker, startIdentityOutboxWorker } from '@server/src/identity/outbox.js'
+import { IdentityConfigError, parseIdentityConfig } from '@server/src/identity/config.js'
 
 const PORT = Number(process.env.SERVER_PORT ?? '8080')
 const HOST = process.env.SERVER_HOST ?? '127.0.0.1'
-const integrationEnabled = process.env.WEBSITE_INTEGRATION_ENABLED === 'true'
-
-function identityKey(name: string): string {
-  const value = process.env[name]
-  if (!value || !/^[0-9a-f]{64}$/i.test(value)) throw new Error(`${name} must be a 32-byte hexadecimal secret`)
-  return value
-}
-
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
   throw new Error('SERVER_PORT 必须是有效端口。')
 }
 
 try {
   // 配置在监听前解析为不可变对象；非法配置直接失败，不输出变量值或底层异常。
+  const identity = parseIdentityConfig()
   const storageConfig = parseStorageConfig()
   const corsAllowedOrigins = parseCorsAllowedOrigins(process.env.SERVER_CORS_ALLOWED_ORIGINS)
   const storageServices = createStorageModule({ config: storageConfig })
@@ -43,26 +37,21 @@ try {
     const { authServices, invitationServices, joinServices } = createAuthServices({
       db,
       codeHmacKey: parseAuthCodeHmacKey(process.env.AUTH_CODE_HMAC_KEY),
-      publicWebBaseUrl: process.env.SERVER_PUBLIC_WEB_BASE_URL,
+      publicWebBaseUrl: identity.enabled ? identity.publicOrigin : process.env.SERVER_PUBLIC_WEB_BASE_URL,
       publicAvatarBaseUrl: publicAvatarBaseUrl(process.env.SERVER_PUBLIC_AVATAR_BASE_URL),
     })
     const profileServices = new ProfileService(db, avatarDirectory(process.env.SERVER_AVATAR_DIRECTORY),
       publicAvatarBaseUrl(process.env.SERVER_PUBLIC_AVATAR_BASE_URL))
-    const outlineKey = integrationEnabled ? identityKey('OUTLINE_INTEGRATION_KEY') : undefined
-    const bootstrapKey = integrationEnabled ? identityKey('IDENTITY_BOOTSTRAP_KEY') : undefined
-    const oidcServices = integrationEnabled ? new OidcService({ db, authServices,
-      admin: new HttpHydraAdmin(process.env.HYDRA_ADMIN_URL ?? ''),
-      issuer: 'http://identity.exwebsite.test:8090/',
-      flowKey: Buffer.from(identityKey('IDENTITY_FLOW_KEY'), 'hex'),
-      clients: { 'ex-outline': { name: 'Docs', redirectUri: 'http://exwebsite.test:8090/docs/auth/oidc.callback',
-        scopes: ['openid', 'profile', 'email'] },
-        'ex-oidc-probe': { name: 'OIDC Probe', redirectUri: 'http://127.0.0.1:18765/callback',
-          scopes: ['openid', 'profile', 'email'] } },
+    const oidcServices = identity.enabled ? new OidcService({ db, authServices,
+      admin: new HttpHydraAdmin(identity.hydraAdminUrl),
+      issuer: identity.issuer,
+      flowKey: Buffer.from(identity.keys.flow, 'hex'),
+      clients: identity.approvedClients,
     }) : undefined
     const app = createApp({ authServices, profileServices, joinServices, invitationServices, storageServices,
-      identityKeys: outlineKey ? { clients: { 'ex-outline': outlineKey }, bootstrapKey } : undefined,
+      identityKeys: identity.enabled ? { clients: { [identity.clientId]: identity.keys.outline }, bootstrapKey: identity.keys.bootstrap } : undefined,
       oidcServices, logger: true, corsAllowedOrigins })
-    const outbox = integrationEnabled ? configuredIdentityOutboxWorker(db) : undefined
+    const outbox = identity.enabled ? configuredIdentityOutboxWorker(db, identity) : undefined
     let stopOutbox: (() => void) | undefined
     app.addHook('onClose', async () => { stopOutbox?.(); await db.close() })
     await app.listen({ port: PORT, host: HOST })
@@ -73,7 +62,9 @@ try {
   }
 } catch (error) {
   // 存储配置错误自带安全文案：只列出缺失或非法的变量名分类，不含变量值。
-  if (error instanceof StorageConfigError || error instanceof CorsConfigError) {
+  if (error instanceof IdentityConfigError) {
+    console.error(`[server] ${error.message}; 请核对集成模式配置并显式运行 integration:configure。`)
+  } else if (error instanceof StorageConfigError || error instanceof CorsConfigError) {
     console.error(`[server] 启动失败：${error.message}`)
   } else {
     console.error('[server] 启动失败。请确认 DATABASE_URL 指向 exre，已显式运行 pnpm db:migrate，并配置 AUTH_CODE_HMAC_KEY。')

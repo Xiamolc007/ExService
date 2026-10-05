@@ -1,5 +1,6 @@
 import type { AppDatabase } from '@server/src/db/client.js'
 import { withSidSerial } from './sid-serial.js'
+import { isIdentityClientId, parseIdentityConfig, type IdentityConfig } from './config.js'
 
 type Target = { clientId: string; hydraSid: string; sessionId?: string; deliveryEventId?: string }
 type Delivery = { eventId: string; sessionId: string }
@@ -13,10 +14,11 @@ const delays = [1000, 2000, 4000, 8000, 16000, 30000]
 export class IdentityOutboxWorker {
   constructor(
     private readonly db: AppDatabase,
-    private readonly revokeHydraSid: (sid: string) => Promise<void>,
-    private readonly deliverOutline: (message: Delivery) => Promise<void>,
+    private readonly revokeHydraSid: (target: { clientId: string; hydraSid: string }) => Promise<void>,
+    private readonly deliverOutline: (clientId: string, message: Delivery) => Promise<void>,
     private readonly now: () => number = Date.now,
     private readonly reportError: (code: string) => void = () => undefined,
+    private readonly assertTargetAvailable: (clientId: string) => void = () => undefined,
   ) {}
 
   /** Returns whether a due event was claimed, including a failed retry. */
@@ -31,6 +33,15 @@ export class IdentityOutboxWorker {
       const delivered = new Set(JSON.parse(row.delivered_targets) as string[])
       let failed = false
       for (const target of targets) {
+        if (!isIdentityClientId(target.clientId)) {
+          this.reportError('IDENTITY_OUTBOX_UNKNOWN_CLIENT')
+          failed = true
+          break
+        }
+        // Recheck availability even when earlier delivery keys already exist;
+        // switching configuration must not complete an unconfigured target.
+        try { this.assertTargetAvailable(target.clientId) }
+        catch { failed = true; break }
         // A legacy user event without a captured session cannot safely be
         // delivered after the account is re-enabled. Keep it pending instead
         // of broad-revoking every current Outline session for that user.
@@ -42,21 +53,21 @@ export class IdentityOutboxWorker {
         const hydraKey = `hydra:${target.clientId}:${target.hydraSid}`
         if (!delivered.has(hydraKey)) {
           try {
-            await withSidSerial(target.hydraSid, () => this.revokeHydraSid(target.hydraSid))
+            await withSidSerial(target.hydraSid, () => this.revokeHydraSid({ clientId: target.clientId, hydraSid: target.hydraSid }))
             delivered.add(hydraKey)
           }
-          catch { failed = true; break }
+          catch { this.reportError('IDENTITY_OUTBOX_HYDRA_PENDING'); failed = true; break }
         }
-        if (target.clientId === 'ex-outline') {
+        if (target.clientId !== 'ex-oidc-probe') {
           const outlineKey = `outline:${target.clientId}:${target.hydraSid}`
           if (!delivered.has(outlineKey)) {
             try {
               const sessionId = row.kind === 'session' ? row.session_id : target.sessionId
               if (!sessionId) throw new Error('Outbox target session is missing')
-              await this.deliverOutline({ eventId: row.kind === 'session' ? row.event_id : target.deliveryEventId!,
+              await this.deliverOutline(target.clientId, { eventId: row.kind === 'session' ? row.event_id : target.deliveryEventId!,
                 sessionId })
               delivered.add(outlineKey)
-            } catch { failed = true; break }
+            } catch { this.reportError('IDENTITY_OUTBOX_DELIVERY_PENDING'); failed = true; break }
           }
         }
       }
@@ -72,31 +83,36 @@ export class IdentityOutboxWorker {
   }
 }
 
-function rootUrl(value: string, name: string): URL {
-  const url = new URL(value)
-  if (!['http:', 'https:'].includes(url.protocol) || url.pathname !== '/' ||
-    url.username || url.password || url.search || url.hash) throw new Error(`${name} must be a root URL`)
-  return url
-}
-
 /** External destinations use dedicated internal URLs and one-second calls. */
-export function configuredIdentityOutboxWorker(db: AppDatabase): IdentityOutboxWorker {
-  const hydra = rootUrl(process.env.HYDRA_ADMIN_URL ?? '', 'HYDRA_ADMIN_URL')
-  const outline = rootUrl(process.env.OUTLINE_INTERNAL_URL ?? '', 'OUTLINE_INTERNAL_URL')
-  const key = process.env.IDENTITY_DELIVERY_KEY
-  if (!key || !/^[0-9a-f]{64}$/i.test(key)) throw new Error('IDENTITY_DELIVERY_KEY is invalid')
-  return new IdentityOutboxWorker(db, async sid => {
-    const url = new URL('/admin/oauth2/auth/sessions/login', hydra)
-    url.searchParams.set('sid', sid)
+export function configuredIdentityOutboxWorker(db: AppDatabase,
+  config: IdentityConfig | Readonly<{ enabled: false }> = parseIdentityConfig(),
+  now: () => number = Date.now,
+  reportError: (code: string) => void = code => { console.error(`[identity-outbox] ${code}`) },
+): IdentityOutboxWorker {
+  if (!config.enabled) throw new Error('IDENTITY_OUTBOX_DISABLED')
+  const destination = (clientId: string) => {
+    const target = isIdentityClientId(clientId) ? config.deliveryTargets[clientId] : undefined
+    if (!target) {
+      reportError('IDENTITY_OUTBOX_TARGET_MISSING')
+      throw new Error('IDENTITY_OUTBOX_TARGET_MISSING')
+    }
+    return target
+  }
+  return new IdentityOutboxWorker(db, async ({ clientId, hydraSid }) => {
+    const target = destination(clientId)
+    const url = new URL('/admin/oauth2/auth/sessions/login', target.hydraAdminUrl)
+    url.searchParams.set('sid', hydraSid)
     const response = await fetch(url, { method: 'DELETE', signal: AbortSignal.timeout(1000) })
     if (!response.ok && response.status !== 404) throw new Error('Hydra sid revocation failed')
-  }, async message => {
-    const response = await fetch(new URL('/internal/identity/revoke', outline), {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Identity-Delivery-Key': key },
+  }, async (clientId, message) => {
+    const target = destination(clientId)
+    if (!target.outlineInternalUrl || !target.deliveryKey) throw new Error('IDENTITY_OUTBOX_TARGET_MISSING')
+    const response = await fetch(new URL('/internal/identity/revoke', target.outlineInternalUrl), {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Identity-Delivery-Key': target.deliveryKey },
       body: JSON.stringify(message), signal: AbortSignal.timeout(1000),
     })
     if (!response.ok) throw new Error('Outline revocation delivery failed')
-  }, Date.now, code => { console.error(`[identity-outbox] ${code}`) })
+  }, now, reportError, clientId => { destination(clientId) })
 }
 
 export function startIdentityOutboxWorker(worker: IdentityOutboxWorker): () => void {
