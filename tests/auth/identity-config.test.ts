@@ -6,6 +6,32 @@ const keys = { OUTLINE_INTEGRATION_KEY: 'a'.repeat(64), IDENTITY_DELIVERY_KEY: '
 const local = { WEBSITE_INTEGRATION_ENABLED: 'true', WEBSITE_INTEGRATION_MODE: 'local', ...keys }
 const legacy = { WEBSITE_INTEGRATION_ENABLED: 'true', HYDRA_ADMIN_URL: 'http://hydra:4445/',
   OUTLINE_INTERNAL_URL: 'http://outline:3000/', ...keys }
+const deployment = { ...legacy, WEBSITE_INTEGRATION_MODE: 'deployment', SERVER_PUBLIC_WEB_BASE_URL: 'https://docs.example',
+  HYDRA_PUBLIC_URL: 'https://issuer.example/', WEBSITE_INTERNAL_URL: 'http://server:8080/' }
+
+it('requires explicit HTTPS deployment addresses and grants only the fixed Docs client', () => {
+  const config = parseIdentityConfig(deployment)
+  expect(config).toMatchObject({ enabled: true, mode: 'deployment', publicOrigin: 'https://docs.example',
+    issuer: 'https://issuer.example/', clientId: 'ex-outline', callback: 'https://docs.example/docs/auth/oidc.callback' })
+  if (!config.enabled) throw new Error('expected enabled')
+  expect(Object.keys(config.approvedClients)).toEqual(['ex-outline'])
+  expect(Object.keys(config.deliveryTargets)).toEqual(['ex-outline'])
+})
+it('permits the exact host gateway only for deployment cleanup of the previous local client', () => {
+  const previous = { hydraAdminUrl: 'http://host.docker.internal:24447/', outlineInternalUrl: 'http://host.docker.internal:13102/', deliveryKey: 'e'.repeat(64) }
+  const config = parseIdentityConfig({ ...deployment, IDENTITY_OUTBOX_TARGETS_JSON: JSON.stringify({ 'ex-outline-local': previous }) })
+  if (!config.enabled) throw new Error('expected enabled')
+  expect(config.deliveryTargets['ex-outline-local']).toEqual(previous)
+  expect(Object.keys(config.approvedClients)).toEqual(['ex-outline'])
+})
+it.each([
+  ['SERVER_PUBLIC_WEB_BASE_URL', undefined], ['HYDRA_PUBLIC_URL', undefined], ['WEBSITE_INTERNAL_URL', undefined],
+  ['SERVER_PUBLIC_WEB_BASE_URL', 'http://docs.example'], ['HYDRA_PUBLIC_URL', 'http://issuer.example/'],
+  ['SERVER_PUBLIC_WEB_BASE_URL', 'https://docs.example/a/..'], ['HYDRA_PUBLIC_URL', 'https://issuer.example/?secret=x'],
+  ['OUTLINE_OIDC_CLIENT_ID', 'arbitrary-client'], ['OUTLINE_OIDC_REDIRECT_URI', 'https://docs.example/callback'],
+] as const)('rejects invalid deployment %s without echoing values', (key, value) => {
+  expect(() => parseIdentityConfig({ ...deployment, [key]: value })).toThrow(IdentityConfigError)
+})
 
 it('disables identity explicitly and parses a deeply immutable fixed local layout', () => {
   expect(parseIdentityConfig({})).toEqual({ enabled: false })

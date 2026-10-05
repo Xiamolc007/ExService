@@ -8,7 +8,8 @@ WORKDIR /workspace/website/vendor/exui
 RUN pnpm install --frozen-lockfile && pnpm --filter @exre/exui-tokens build && pnpm --filter @exre/exui build
 WORKDIR /workspace/website
 COPY . .
-RUN pnpm install --frozen-lockfile && pnpm build
+RUN ln -s /workspace/website/vendor/exui /exui
+RUN pnpm install --frozen-lockfile && pnpm --filter @workspace/sdk build && pnpm --filter @workspace/web build && pnpm --filter @workspace/server build
 
 FROM nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236 AS web
 COPY --from=website-build /workspace/website/apps/web/dist /usr/share/nginx/html
@@ -24,6 +25,7 @@ COPY --from=website-build /workspace/website/apps/server/node_modules apps/serve
 COPY --from=website-build /workspace/website/node_modules node_modules
 COPY --from=website-build /workspace/website/api api
 COPY --from=website-build /workspace/website/package.json package.json
+COPY --from=website-build /workspace/website/scripts scripts
 WORKDIR /workspace/website/apps/server
 EXPOSE 8080
 CMD ["node", "dist/server.js"]

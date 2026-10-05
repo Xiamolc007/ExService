@@ -14,6 +14,7 @@ import { CorsConfigError, parseCorsAllowedOrigins } from '@server/src/http/cors.
 import { HttpHydraAdmin, OidcService } from '@server/src/identity/oidc.js'
 import { configuredIdentityOutboxWorker, startIdentityOutboxWorker } from '@server/src/identity/outbox.js'
 import { IdentityConfigError, parseIdentityConfig } from '@server/src/identity/config.js'
+import { assertDeploymentBinding } from '@server/src/identity/deployment-binding.js'
 
 const PORT = Number(process.env.SERVER_PORT ?? '8080')
 const HOST = process.env.SERVER_HOST ?? '127.0.0.1'
@@ -24,6 +25,7 @@ if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
 try {
   // 配置在监听前解析为不可变对象；非法配置直接失败，不输出变量值或底层异常。
   const identity = parseIdentityConfig()
+  assertDeploymentBinding(identity)
   const storageConfig = parseStorageConfig()
   const corsAllowedOrigins = parseCorsAllowedOrigins(process.env.SERVER_CORS_ALLOWED_ORIGINS)
   const storageServices = createStorageModule({ config: storageConfig })

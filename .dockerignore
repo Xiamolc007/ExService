@@ -1,7 +1,14 @@
 .git
 .local
+.notes
+.ai
+.agents
+.codegraph
+.superpowers
+.env.local.command-runtime.tmp
 output
 vendor
+exui
 **/node_modules
 **/dist
 apps/outline/.git

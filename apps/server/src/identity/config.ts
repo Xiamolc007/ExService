@@ -1,4 +1,4 @@
-export type IdentityMode = 'local' | 'dev' | 'full'
+export type IdentityMode = 'local' | 'dev' | 'full' | 'deployment'
 export type IdentityClientId = 'ex-outline-local' | 'ex-outline' | 'ex-oidc-probe'
 export interface IdentityDeliveryTarget {
   readonly hydraAdminUrl: string
@@ -54,7 +54,7 @@ function key(value: string | undefined, variable: string): string {
 }
 
 function cleanupRoot(value: string, variable: string, id: IdentityClientId, mode: IdentityMode): string {
-  if (id === 'ex-outline-local' && mode === 'full' && /^http:\/\/host\.docker\.internal:[1-9]\d{0,4}\/?$/.test(value)) {
+  if (id === 'ex-outline-local' && (mode === 'full' || mode === 'deployment') && /^http:\/\/host\.docker\.internal:[1-9]\d{0,4}\/?$/.test(value)) {
     const parsed = new URL(root(value, variable))
     if (!parsed.port) throw new IdentityConfigError(variable)
     return parsed.href
@@ -99,13 +99,17 @@ export function parseIdentityConfig(env: NodeJS.ProcessEnv = process.env): Ident
   }
   if (env.WEBSITE_INTEGRATION_ENABLED !== 'true') return Object.freeze({ enabled: false })
   const mode = env.WEBSITE_INTEGRATION_MODE ?? 'dev'
-  if (!['local', 'dev', 'full'].includes(mode)) throw new IdentityConfigError('WEBSITE_INTEGRATION_MODE')
+  if (!['local', 'dev', 'full', 'deployment'].includes(mode)) throw new IdentityConfigError('WEBSITE_INTEGRATION_MODE')
   const local = mode === 'local'
+  const deployment = mode === 'deployment'
   const publicOrigin = new URL(root(env.SERVER_PUBLIC_WEB_BASE_URL ??
-    (local ? 'http://127.0.0.1:8080' : 'http://exwebsite.test:8090'), 'SERVER_PUBLIC_WEB_BASE_URL', local)).origin
+    (deployment ? undefined : local ? 'http://127.0.0.1:8080' : 'http://exwebsite.test:8090'), 'SERVER_PUBLIC_WEB_BASE_URL', local)).origin
   const issuer = root(env.HYDRA_PUBLIC_URL ??
-    (local ? 'http://127.0.0.1:14444/' : 'http://identity.exwebsite.test:8090/'), 'HYDRA_PUBLIC_URL', local)
-  if (!local && (publicOrigin !== 'http://exwebsite.test:8090' || issuer !== 'http://identity.exwebsite.test:8090/')) {
+    (deployment ? undefined : local ? 'http://127.0.0.1:14444/' : 'http://identity.exwebsite.test:8090/'), 'HYDRA_PUBLIC_URL', local)
+  if (deployment && (new URL(publicOrigin).protocol !== 'https:' || new URL(issuer).protocol !== 'https:')) {
+    throw new IdentityConfigError('WEBSITE_INTEGRATION_MODE')
+  }
+  if (!local && !deployment && (publicOrigin !== 'http://exwebsite.test:8090' || issuer !== 'http://identity.exwebsite.test:8090/')) {
     throw new IdentityConfigError('WEBSITE_INTEGRATION_MODE')
   }
   const clientId = local ? 'ex-outline-local' : 'ex-outline'
@@ -119,7 +123,7 @@ export function parseIdentityConfig(env: NodeJS.ProcessEnv = process.env): Ident
   const hydraAdminUrl = root(env.HYDRA_ADMIN_URL ?? (local ? 'http://127.0.0.1:14447/' : undefined), 'HYDRA_ADMIN_URL', local)
   const outlineInternalUrl = root(env.OUTLINE_INTERNAL_URL ?? (local ? 'http://127.0.0.1:3102/' : undefined), 'OUTLINE_INTERNAL_URL', local)
   const websiteInternalUrl = root(env.WEBSITE_INTERNAL_URL ??
-    (local ? 'http://127.0.0.1:8082/' : mode === 'full' ? 'http://server:8080/' : 'http://127.0.0.1:18080/'), 'WEBSITE_INTERNAL_URL', local)
+    (deployment ? undefined : local ? 'http://127.0.0.1:8082/' : mode === 'full' ? 'http://server:8080/' : 'http://127.0.0.1:18080/'), 'WEBSITE_INTERNAL_URL', local)
   if (local && new Set([publicOrigin, new URL(issuer).origin, new URL(hydraAdminUrl).origin,
     new URL(outlineInternalUrl).origin, new URL(websiteInternalUrl).origin]).size !== 5) {
     throw new IdentityConfigError('WEBSITE_INTEGRATION_MODE')
@@ -134,7 +138,7 @@ export function parseIdentityConfig(env: NodeJS.ProcessEnv = process.env): Ident
     throw new IdentityConfigError('IDENTITY_OUTBOX_TARGETS_JSON')
   }
   targets[clientId] = current
-  if (!local) {
+  if (!local && !deployment) {
     if (targets['ex-oidc-probe'] && targets['ex-oidc-probe']!.hydraAdminUrl !== hydraAdminUrl) {
       throw new IdentityConfigError('IDENTITY_OUTBOX_TARGETS_JSON')
     }
@@ -144,7 +148,7 @@ export function parseIdentityConfig(env: NodeJS.ProcessEnv = process.env): Ident
   const clients: Record<string, Readonly<{ name: string; redirectUri: string; scopes: readonly string[] }>> = {
     [clientId]: Object.freeze({ name: 'Docs', redirectUri: callback, scopes }),
   }
-  if (!local) clients['ex-oidc-probe'] = Object.freeze({ name: 'OIDC Probe', redirectUri: 'http://127.0.0.1:18765/callback', scopes })
+  if (!local && !deployment) clients['ex-oidc-probe'] = Object.freeze({ name: 'OIDC Probe', redirectUri: 'http://127.0.0.1:18765/callback', scopes })
   return Object.freeze({ enabled: true, mode: mode as IdentityMode, issuer, publicOrigin, callback, clientId,
     hydraAdminUrl, websiteInternalUrl, keys, approvedClients: Object.freeze(clients), deliveryTargets: Object.freeze(targets) })
 }
