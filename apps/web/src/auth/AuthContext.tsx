@@ -2,7 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import type { AuthDisplayState, AuthMode } from '@workspace/components'
 import { api } from '@web/src/api/client'
 import { ExAxiosError } from '@workspace/sdk/http/browser'
-import { readToken, removeMatchingToken, startSessionSync, subscribeSessionChanges } from '@web/src/auth/storage'
+import { clearBrowserSession, readToken, removeMatchingToken, startSessionSync, subscribeSessionChanges } from '@web/src/auth/storage'
+import { bindSettingsToken } from '@web/src/settings/settingsConfig'
 
 interface AuthContextValue {
   state: AuthDisplayState
@@ -81,26 +82,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [restoreSession])
 
-  const logout = useCallback(async () => {
-    let token: string | null
+  const logout = useCallback(() => {
+    let token: string | null = null
     try {
       token = readToken(window.localStorage)
-    } catch {
-      setState({ status: 'unavailable', message: '浏览器无法读取登录信息' })
-      return
-    }
-    if (token === null) {
-      setState({ status: 'anonymous' })
-      return
-    }
-    try {
-      await api.POST('/auth/logout', { alert: false })
-      removeMatchingToken(window.localStorage, token)
-      window.location.reload()
-    } catch (error) {
-      if (error instanceof ExAxiosError && error.code === 'SESSION_INVALID') { removeMatchingToken(window.localStorage, token); window.location.reload(); return }
-      setState({ status: 'unavailable', message: '退出失败，请稍后重试' })
-    }
+    } catch { /* unavailable storage must not block local logout */ }
+    clearBrowserSession()
+    bindSettingsToken(null)
+    generation.current += 1
+    setModalMode(null)
+    setState({ status: 'anonymous' })
+    if (token === null) return
+    // Keep the captured credential for revocation after clearing the shared HTTP token.
+    // Avoid reloading here: it can abort revocation before the server receives it.
+    void api.POST('/auth/logout', {
+      headers: { Authorization: `Bearer ${token}` }, alert: false,
+    }).catch(() => { /* remote failure cannot undo explicit browser logout */ })
   }, [])
 
   return (
@@ -112,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       retrySession: () => void restoreSession(),
       refreshProfile: () => restoreSession(false),
       invalidateSession,
-      logout: () => void logout(),
+      logout,
     }}>
       {children}
     </AuthContext.Provider>

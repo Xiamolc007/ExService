@@ -2,12 +2,25 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import { createApp, serviceHandlers } from '@workspace/server'
 import { createTestAuth, type TestAuth } from '@tests/helpers/auth'
+import { createApiClient } from '@api-client/src/client'
+import { createHttpCore } from '@sdk/src/http/core'
 const fixtures: TestAuth[] = [], apps: Array<ReturnType<typeof createApp>> = []
 afterEach(async () => { await Promise.all(apps.splice(0).map(app => app.close())); await Promise.all(fixtures.splice(0).map(f => f.close())) })
 async function setup() { const f=await createTestAuth(); fixtures.push(f); const app=createApp({...f}); apps.push(app); return {f,app} }
 function reply() { const r={code:()=>r,header:()=>r}; return r as unknown as FastifyReply }
 function request(f: TestAuth,body?:unknown,authSession?:FastifyRequest['authSession']) { return {body,authSession,server:f} as unknown as FastifyRequest }
 describe('authentication regression after invited registration cutover', () => {
+ it.each(['browser', 'node'] as const)('accepts a bodyless logout from the real %s API transport', async environment => {
+  const { f, app } = await setup()
+  await f.seedUser({ email: 'transport@example.com', nickname: 'Transport', password: 'valid password' })
+  const { token } = await f.authServices.login({ email: 'transport@example.com', password: 'valid password' })
+  const origin = await app.listen({ host: '127.0.0.1', port: 0 })
+  const http = createHttpCore({ environment, origin }, { baseUrl: `${origin}/api`, websiteBaseUrl: `${origin}/api`, alert: false })
+  http.setToken(token)
+  const client = createApiClient({ baseUrl: `${origin}/api`, transport: request => http(request) })
+  await expect(client.POST('/auth/logout')).resolves.toEqual({ status: 'signed-out' })
+  expect((await app.inject({ method: 'GET', url: '/api/auth/me', headers: { authorization: `Bearer ${token}` } })).statusCode).toBe(401)
+ })
  it('returns the captcha placeholder over HTTP and from its registered handler', async()=>{
   const {app}=await setup(); const response=await app.inject({method:'POST',url:'/api/auth/captcha/challenges'});expect(response.statusCode).toBe(200);expect(response.headers['cache-control']).toBe('no-store');
   const raw=await serviceHandlers.createCaptchaChallenge({} as FastifyRequest,reply());expect(Object.keys(raw)).toEqual(['challengeId','imageBase64','expiresAt']);expect(raw.challengeId).toMatch(/^[A-Za-z0-9_-]{43}$/);expect(Buffer.from(raw.imageBase64,'base64').subarray(0,8)).toEqual(Buffer.from([137,80,78,71,13,10,26,10]));

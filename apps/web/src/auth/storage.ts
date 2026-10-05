@@ -51,6 +51,13 @@ export function removeMatchingToken(storage: Pick<Storage, 'getItem' | 'removeIt
   }
 }
 
+/** Explicit logout clears browser state before any remote revocation can finish. */
+export function clearBrowserSession(): void {
+  try { window.localStorage.removeItem(AUTH_TOKEN_KEY) } catch { /* still clear in-memory authentication */ }
+  try { window.sessionStorage.removeItem(SSO_SUCCESS_KEY) } catch { /* independent of token cleanup */ }
+  changed(null)
+}
+
 export function writeSsoSuccess(
   storage: Pick<Storage, 'setItem'>,
   record: { ssoRequestId: string; confirmedAt: number },
