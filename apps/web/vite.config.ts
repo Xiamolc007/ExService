@@ -39,6 +39,7 @@ export default defineConfig({
     },
   },
   server: {
+    fs: { allow: [repositoryRoot, resolve(repositoryRoot, 'apps/outline/shared/styles')] },
     host: integrated && !local ? '0.0.0.0' : '127.0.0.1',
     port: INTEGRATION_WEB_PORT,
     strictPort: true,

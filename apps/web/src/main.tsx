@@ -5,10 +5,14 @@ import { ThemeProvider, GlassSeed, ExMessageContext } from '@exre/exui'
 import { api } from '@web/src/api/client'
 import { App } from '@web/src/App'
 import { SettingsThemeProjection } from '@web/src/settings/SettingsThemeProjection'
+import { WebsiteThemePreferenceReconciliation } from '@web/src/settings/WebsiteThemePreferenceReconciliation'
 // ExUI 的组件样式表，已内含 Token CSS 与字体 CSS，每个应用只导入这一次。
 // 它必须排在 `./styles/index.scss` 之前：应用自己的样式要能覆盖库的默认值。
 import '@exre/exui/style.css'
+import '../../outline/shared/styles/websiteTheme.css'
 import '@web/src/styles/index.scss'
+
+document.documentElement.classList.add('website-theme-profile')
 
 const container = document.getElementById('root')
 
@@ -32,6 +36,7 @@ if (!container) {
 createRoot(container).render(
   <StrictMode>
     <ThemeProvider>
+      <WebsiteThemePreferenceReconciliation />
       <SettingsThemeProjection />
       <GlassSeed />
       <ExMessageContext />
