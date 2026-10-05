@@ -34,4 +34,4 @@ _最后更新：2026-10-02_
 
 ## 核对来源
 
-当前行为以 `api/openapi.yaml`、`package.json`、`apps/server/src/`、`apps/server/drizzle/`、`apps/web/src/` 和 `tests/` 为准。数据库目标与显式命令见 `.notes/server-promotion/specs/2026-09-29-server-promotion-design.md` 与 `.notes/server-promotion/rfcs/server-postgresql-migration-rfc.md`。文档不记录一次性任务输出、工作树状态或未经验证的生产能力。
+当前行为以 `api/openapi.yaml`、`package.json`、`apps/server/src/`、`apps/server/drizzle/`、`apps/web/src/` 和 `tests/` 为准。数据库目标与显式命令见 `.notes/archive/server-promotion/specs/2026-09-29-server-promotion-design.md` 与 `.notes/archive/server-promotion/rfcs/server-postgresql-migration-rfc.md`。文档不记录一次性任务输出、工作树状态或未经验证的生产能力。

@@ -49,4 +49,4 @@ _最后更新：2026-09-29_
 - `apps/server/src/errors.ts` 全文，尤其是 `resolvePublicMessage()` 与 `codeForStatus()`。
 - `tests/contract/health.test.ts` 的 `does not leak internal details`。
 - `api/openapi.yaml` 中 `ErrorEnvelope.error.message` 的 description。
-- `.notes/join-registration/rfcs/join-registration-rfc.md` 的错误语义及敏感日志边界。
+- `.notes/archive/join-registration/rfcs/join-registration-rfc.md` 的错误语义及敏感日志边界。

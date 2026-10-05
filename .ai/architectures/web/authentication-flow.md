@@ -2,7 +2,7 @@
 
 本文件说明共享认证 UI、应用流程和浏览器存储之间的边界。HTTP operation 与字段形状以 `api/openapi.yaml` 和生成 Client 类型为准。
 
-_最后更新：2026-10-02_
+_最后更新：2026-10-05_
 
 ## 责任分层
 
@@ -64,11 +64,17 @@ Hero 图片来自 `apps/web/public/images/heros/join/rifling-911/`。构建时�
 
 普通登录成功后，若浏览器仍保存另一账号的 token，先撤销旧会话；明确的 `SESSION_INVALID` 表示旧会话已无效，可继续登录，其他撤销失败保留旧 token 并提供重试。写入前再次核对浏览器 token 未被其他页面替换，再把新 token 写入 `localStorage` 的 `exwebsite.auth.token`；成功写入后才整页导航或继续当前 OIDC challenge。`AuthProvider` 在启动与其他标签页 storage 事件后调用 `/auth/me` 恢复身份；浏览器存储本身不作为身份依据，旧 token 的迟到资料与错误不能覆盖后来保存的新会话。
 
-明确的 `SESSION_INVALID` 只删除仍与本次请求匹配的 token，避免迟到响应清掉较新的登录；资料页读取或修改收到此错误时同步更新顶栏认证状态。临时网络错误保留 token 并显示可重试状态，资料读取失败也结束等待并允许重试。主动退出成功或退出请求收到会话失效后清除匹配 token 并刷新。
+明确的 `SESSION_INVALID` 只删除仍与本次请求匹配的 token，避免迟到响应清掉较新的登录；资料页读取或修改收到此错误时同步更新顶栏认证状态。临时网络错误保留 token 并显示可重试状态，资料读取失败也结束等待并允许重试。
+
+主动退出由 `AuthProvider` 立即完成本地状态切换：删除 `localStorage` 的本站 token、当前标签页 `sessionStorage` 的 SSO 成功展示记录，清除 HTTP 客户端凭证和缓存的本人设置资料，关闭认证容器并切换为匿名。两种 storage 独立尝试清理，存储异常仍清除内存身份。已有身份查询的请求代次失效，不能恢复退出前的资料；主题等非认证偏好保留。
+
+本地清理前捕获的 token 仅用于后台 `/auth/logout` 撤销请求，通过显式 Authorization 传递。API 拒绝、断网、超时或请求未完成均不阻止浏览器退出；请求结束不再修改本地身份，因此迟到结果不能清除后来登录的新会话。此路径不立即刷新页面，以免中断尚未送达服务端的撤销请求。本地退出不等于服务端撤销成功；跨服务会话撤销仍依赖服务端请求成功处理。
 
 ## 文档身份页面
 
 `apps/web/src/App.tsx` 注册 `/identity/login`、`/identity/consent`、`/identity/logout`、`/identity/status` 和 `/identity/signed-out`。挑战页面通过生成的 API Client 检查或接受 Hydra challenge；已有有效本站 Bearer 可直接完成登录与授权，缺少会话时经现有登录 UI。挑战与当前 token 不匹配时重新开始，避免迟到响应将旧身份带入新会话。
+
+文档密码登录将目标服务说明放在共享表单的标题区，通过可选 `description` 展示，并在验证码步骤继续保留；表单显示时不再叠加外围登录标题。页面底部的信息入口通过 `OidcSharingDialog` 打开独立 ExUI Dialog，只描述 challenge 检查返回的 scope：`openid` 为账号身份，`profile` 为基本资料，`email` 为邮箱；每项使用图标、标题与用途说明，原始 scope 收在弹窗内的技术详情。其他 scope 保留原标识，不推断权限。关闭、Esc 或“知道了”返回入口并保留表单输入；该弹窗只供查看，不增加授权确认步骤，已有会话仍按原流程自动继续。
 
 生成 Client 经 ExAxios 直接返回成功数据，失败抛出 `ExAxiosError`，身份页面按其状态码和错误码决定重试、重新开始或拒绝无效入口。身份路由中的会话失效由当前页面继续处理；共享请求层同步浏览器会话后不把该路由跳到普通 `/login`，以保留 challenge 和退出确认流程。
 

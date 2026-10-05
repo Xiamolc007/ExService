@@ -3,7 +3,7 @@
 - 状态：已接受；PostgreSQL 执行细节于 2026-09-29 更新
 - 模块：`server`
 - 原日期：2026-09-16
-- 当前依据：`.notes/server-promotion/rfcs/server-postgresql-migration-rfc.md`
+- 当前依据：`.notes/archive/server-promotion/rfcs/server-postgresql-migration-rfc.md`
 
 ## 决策
 

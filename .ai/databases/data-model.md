@@ -6,7 +6,7 @@ _最后更新：2026-10-01_
 
 ## 适用范围
 
-邀请生命周期依据 `.notes/join-registration/rfcs/join-registration-rfc.md`；完整申请与一次申请规则依据 `.notes/join-registration/rfcs/join-application-pages-rfc.md`。PostgreSQL 从空库建立当前有效模型，不导入旧 SQLite 记录；版本 0 历史简版的读取兼容规则仍保留在应用行为中。
+邀请生命周期依据 `.notes/archive/join-registration/rfcs/join-registration-rfc.md`；完整申请与一次申请规则依据 `.notes/archive/join-registration/rfcs/join-application-pages-rfc.md`。PostgreSQL 从空库建立当前有效模型，不导入旧 SQLite 记录；版本 0 历史简版的读取兼容规则仍保留在应用行为中。
 
 下文“身份与会话集成模型”记录已写入 Website schema 和 migration 的数据职责；实际物理结构以 `apps/server/src/db/schema.ts` 和 `apps/server/drizzle/` 为准。跨服务身份控制流见 `.ai/architectures/docs-integration/integration-boundaries.md`。
 

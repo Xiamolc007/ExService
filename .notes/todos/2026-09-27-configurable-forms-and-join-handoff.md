@@ -174,13 +174,13 @@ const fields = [
 
 ## 8. 与当前申请实现的接线边界
 
-目标仓库的 `api/openapi.yaml` 已声明 `submitJoinApplication`，当前申请请求是邮箱、名字与 QQ。其 `.notes/join-registration/rfcs/join-registration-rfc.md` 仍描述三字段申请、整页分步表单及拒绝后重新申请。上述内容尚不能完整承载此次确认的两套表单、Modal、全历史邮箱去重与公开申请状态查询。
+目标仓库的 `api/openapi.yaml` 已声明 `submitJoinApplication`，当前申请请求是邮箱、名字与 QQ。其 `.notes/archive/join-registration/rfcs/join-registration-rfc.md` 仍描述三字段申请、整页分步表单及拒绝后重新申请。上述内容尚不能完整承载此次确认的两套表单、Modal、全历史邮箱去重与公开申请状态查询。
 
 本 handoff 记录新的产品要求，不能静默覆盖目标仓库正在进行的申请后端工作。开发时分开完成以下工作。
 
 1. 先交付不依赖 API 的通用表单组件，并以组件测试和静态示例证明字段、校验和分步行为。
 2. 用两个独立的业务 schema／字段配置实现全新与经验玩家表单。共享基础字段定义、控件与错误处理，不复制整套组件。
-3. 再协调申请业务设计，修订 `.notes/join-registration/` 中的设计及 RFC，明确完整字段、承诺、附件、去重与状态查询。
+3. 再协调申请业务设计，修订 `.notes/archive/join-registration/` 中的设计及 RFC，明确完整字段、承诺、附件、去重与状态查询。
 4. 按仓库规则先更新并评审 `.ai/databases/data-model.md`，然后修改物理 schema 与新增 migration。
 5. 先改 `api/openapi.yaml`、执行 `pnpm api:lint` 与 `pnpm api:generate`，再接入后端 handler 和 `apps/web/` 的生成 Client。不能把表单配置或客户端 Zod 当作第二份 HTTP Contract，也不能发送 Contract 未接受的字段。
 
@@ -204,7 +204,7 @@ const fields = [
 
 ## 10. 证据与下一步决定
 
-本站参考：`.ai/rules/frontend-forms.md`、`packages/components/package.json`、`packages/components/src/auth/LoginForm.tsx`、`packages/components/src/profileValidation.ts`、`api/openapi.yaml`、`.notes/join-registration/rfcs/join-registration-rfc.md`。这些文件分别说明已有表单栈、依赖、输入处理及申请接线边界。
+本站参考：`.ai/rules/frontend-forms.md`、`packages/components/package.json`、`packages/components/src/auth/LoginForm.tsx`、`packages/components/src/profileValidation.ts`、`api/openapi.yaml`、`.notes/archive/join-registration/rfcs/join-registration-rfc.md`。这些文件分别说明已有表单栈、依赖、输入处理及申请接线边界。
 
 旧内容来源为 `ex-face` 仓库，以该仓库根目录为基准：`src/Pages/Join/Newbie/index.tsx`、`src/Pages/Join/Senior/index.tsx`、`src/Pages/Join/index.tsx`、`src/Pages/Join/Result/index.tsx`、`src/Pages/Join/manager.ts`。这里只沿用内容与业务参考，不沿用其请求、任意 details 文本拼接、字段状态或上传实现。
 

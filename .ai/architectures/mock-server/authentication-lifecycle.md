@@ -8,7 +8,7 @@ _最后更新：2026-10-01_
 
 `apps/server/src/server.ts` 连接独立的 PostgreSQL `exre`，检查迁移和必需结构，校验验证码密钥与邮件链接配置，再向 `createApp()` 注入认证、资料、申请和邀请服务。集成模式还组装 Hydra OIDC 服务、内部身份调用方密钥及撤销 outbox worker；普通 Website 模式不启用这些集成入口。启动只检查，不迁移或创建文档管理员。`apps/server/src/auth/create-services.ts` 组装服务并共享 ScryptPasswordHasher；密码计算和邮件发送留在事务外。跨服务身份流程见 `.ai/architectures/docs-integration/integration-boundaries.md`。
 
-JoinService 与 InvitationService 共享数据库访问边界。业务事务内查询使用同一个 PostgreSQL 客户端；跨多语句的只读状态查询使用一致快照。申请、审核、邀请和完善注册仍依赖数据库约束、行锁与条件更新处理并发。细节与测试范围见 `.notes/server-promotion/rfcs/server-postgresql-migration-rfc.md`。
+JoinService 与 InvitationService 共享数据库访问边界。业务事务内查询使用同一个 PostgreSQL 客户端；跨多语句的只读状态查询使用一致快照。申请、审核、邀请和完善注册仍依赖数据库约束、行锁与条件更新处理并发。细节与测试范围见 `.notes/archive/server-promotion/rfcs/server-postgresql-migration-rfc.md`。
 
 受保护 operation 的 Bearer security handler 等待异步会话校验，才把身份写入请求。退出、SSO 会话确认与异步头像处理在写入前复查会话；邀请完善只使用自己的短期凭证，不能用本站会话 token 代替。密码队列最多并行两项、等待十六项，仍由共享组装边界协调。
 

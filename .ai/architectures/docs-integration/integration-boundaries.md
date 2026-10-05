@@ -85,6 +85,14 @@ full override 选择忽略的 `.local/docs-integration/Dockerfile.website-runtim
 
 旧 `infra/docs-integration/postgres/init.sh` 与原 Compose 保留；`.local/docs-integration/runtime-init.sh` 只派生 CRLF→LF，经受控 PG override 挂载，SQL/角色/库语义不变。仅 PostgreSQL entrypoint 首次初始化执行，不对已有卷重跑非幂等 SQL，也不删真实卷修复不完整初始化。既有不完整目标拒绝并另行限定诊断修复。新 local `infra/docs-integration/postgres/init-local.sh` 由 `.gitattributes` 精确限定 LF，不扩到旧脚本。
 
+## 浏览器主题与界面语言
+
+集成 Outline 与 Website 在同一浏览器存储分区、同一 origin 使用原始字符串 `localStorage.theme`，合法值为 `light`、`dark`、`system`；缺失或非法值解析为 `system`。Outline 不迁移 `UI_STORE.theme`，保存侧栏等属性时保留旧主题供独立模式使用。根级订阅重读当前存储并处理页面恢复，收到事件不反向写入；Website 通过 ExUI 公开 API 补偿迟到事件与恢复。跨 origin、跨设备同步不在此协议内，存储不可访问时 Outline 只保证本页切换。
+
+`apps/outline/shared/styles/websiteTheme.css` 是 Website 已有黑白品牌覆盖的唯一来源，主站在 ExUI 样式之后导入它。集成 Outline 在布局阶段解析这份 CSS 的受覆盖变量，先应用有效 token，再解析 legacy 字段、语义字段和 recipe；不使用工作区品牌、交互页面查询参数或手机纯黑主题。打印使用局部浅色并恢复，不持久化。`website-theme-profile` 标记限制覆盖作用域；独立 Outline 保留原偏好和品牌行为。Website 构建须包含该 submodule 样式资源，Outline 构建不依赖父仓库文件。
+
+集成有效默认语言为 `zh_CN`，新账号创建显式写入该语言，已有账号资料同步不改语言。根级语言投影只采用 `auth.info` 已验证账号的语言；缓存账号不作为语言权威，匿名和退出回到默认中文。语言切换串行收敛并更新 HTML `lang`/`dir`；独立模式仍沿用浏览器检测与原配置。公共页面复用已有翻译键，项目特有提示通过局部 `defaultValue` 与 `fallbackLng: []` 提供中文/英文回退，避免英文 fallback 遮蔽中文；locale catalog 只能由提取流程生成，文档正文与用户内容不翻译。
+
 ## 身份、自动登录与撤销
 
 Website/Outline 各自解析不可变模式配置。local 固定 `ex-outline-local`、经校验回环 HTTP issuer/origin、精确 `<publicOrigin>/docs/auth/oidc.callback`、退出 `<publicOrigin>/identity/signed-out`；dev/full 保留 `ex-outline`、8090 issuer/callback 和旧 Hydra-only `ex-oidc-probe`。不允许 wildcard/任意 client 注册。Outline `URL` 带 `/docs`，`WEBSITE_URL` 是 Logo/身份页面返回主站的根地址，不可互换。

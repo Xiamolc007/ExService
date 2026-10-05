@@ -1,6 +1,6 @@
 # RFC：共享认证表单与本地认证闭环
 
-> 迁移说明（2026-09-29）：本文件保留当时的业务与实现决定；其中旧 `apps/mock-server/` 路径、本地 SQLite Mock 与未来 PHP/MySQL 接管的基础设施描述，已由 `.notes/server-promotion/specs/2026-09-29-server-promotion-design.md` 和 `.notes/server-promotion/rfcs/server-postgresql-migration-rfc.md` 取代。当前唯一 Server 位于 `apps/server/`，使用独立 PostgreSQL `exre`；正文中的旧路径和目标仅作历史记录。
+> 迁移说明（2026-09-29）：本文件保留当时的业务与实现决定；其中旧 `apps/mock-server/` 路径、本地 SQLite Mock 与未来 PHP/MySQL 接管的基础设施描述，已由 `.notes/archive/server-promotion/specs/2026-09-29-server-promotion-design.md` 和 `.notes/archive/server-promotion/rfcs/server-postgresql-migration-rfc.md` 取代。当前唯一 Server 位于 `apps/server/`，使用独立 PostgreSQL `exre`；正文中的旧路径和目标仅作历史记录。
 
 > 2026-09-23 后续调整：用户已确认删除注册 QQ 号和确认密码，将昵称文案改为“用户名”（仅显示名称，允许重复，仍用邮箱登录）。下文相关旧字段与校验条款已被 Contract 0.3.0 取代；实现与迁移边界见 认证生命周期 `.ai/architectures/mock-server/authentication-lifecycle.md`。其余认证流程保持原设计。
 

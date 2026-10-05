@@ -3,7 +3,7 @@
 - 状态：已接受并实现于开发环境
 - 模块：`server`
 - 日期：2026-09-29
-- 来源：`.notes/server-promotion/specs/2026-09-29-server-promotion-design.md` 与 `.notes/server-promotion/rfcs/server-postgresql-migration-rfc.md`
+- 来源：`.notes/archive/server-promotion/specs/2026-09-29-server-promotion-design.md` 与 `.notes/archive/server-promotion/rfcs/server-postgresql-migration-rfc.md`
 - 取代：`.ai/databases/decisions/02-fixed-local-sqlite-database.md`
 
 ## 背景

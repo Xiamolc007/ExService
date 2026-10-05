@@ -25,4 +25,4 @@ Busboy 的头部限制可能截断而非拒绝输入，实际 header 字节/对�
 - `apps/server/src/join/transport.ts` 与 `apps/server/src/handlers/join.ts`。
 - `tests/contract/join-upload.test.ts`：生成 Client 真实互通、原始 handler、字节/头部及存储失败。
 - `tests/contract/join-upload-sockets.test.ts`：容量、chunked、断开与期限回收。
-- `.notes/join-registration/rfcs/join-application-pages-implementation-notes.md`：编码规范修正。
+- `.notes/archive/join-registration/rfcs/join-application-pages-implementation-notes.md`：编码规范修正。
