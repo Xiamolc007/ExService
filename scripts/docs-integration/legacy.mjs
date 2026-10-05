@@ -59,11 +59,11 @@ export function devProcesses(values, options = {}) {
   ]
 }
 export function assertModeAvailable(prior, next, runningServices, hostAlive) {
-  if (hostAlive || (prior.mode !== next && runningServices)) throw new Error(`当前 ${prior.mode} 模式仍在运行；先执行 pnpm integration:down。`)
+  if (hostAlive || (prior.mode !== next && runningServices)) throw new Error(`当前 ${prior.mode} 模式仍在运行；先执行 node scripts/docs-integration/command.mjs down。`)
 }
 function valuesFor(mode) {
   const path = join(localRoot, `${mode}.env`)
-  if (!existsSync(path)) throw new LocalError('LEGACY_NOT_CONFIGURED', 'pnpm integration:configure')
+  if (!existsSync(path)) throw new LocalError('LEGACY_NOT_CONFIGURED', 'node scripts/docs-integration/command.mjs configure')
   let values
   try { values = parseEnv(readFileSync(path, 'utf8')) } catch { throw new LocalError('LEGACY_CONFIG_INVALID') }
   for (const name of ['POSTGRES_PASSWORD', 'EXRE_PASSWORD', 'OUTLINE_PASSWORD', 'HYDRA_PASSWORD', 'AUTH_CODE_HMAC_KEY',
@@ -74,7 +74,7 @@ function valuesFor(mode) {
   if (mode === 'dev') {
     const ports = ['WEBSITE_SERVER_UPSTREAM', 'WEBSITE_WEB_UPSTREAM', 'OUTLINE_BACKEND_UPSTREAM', 'OUTLINE_DIRECT_UPSTREAM', 'OUTLINE_STATIC_UPSTREAM'].map(key => hostPort(values[key]))
     if (values.OUTLINE_HTTP_PORT !== ports[2] || new Set(ports).size !== ports.length || ports.some(port => ['8090', '16432', '16379', '14445'].includes(port)))
-      throw new LocalError('LEGACY_HTTP_TRANSPORT_CONFIG_INVALID', 'pnpm integration:configure; optionally set INTEGRATION_OUTLINE_HTTP_PORT explicitly')
+      throw new LocalError('LEGACY_HTTP_TRANSPORT_CONFIG_INVALID', 'node scripts/docs-integration/command.mjs configure; optionally set INTEGRATION_OUTLINE_HTTP_PORT explicitly')
   }
   return values
 }
@@ -103,8 +103,13 @@ function writeGateway(ready, mode = 'full') {
 }
 export function websiteRuntimeRecipe(source) {
   const anchor = 'COPY --from=exui . vendor/exui'
-  if (source.split(anchor).length !== 2 || !source.includes('WORKDIR /workspace/website/vendor/exui') || source.includes('RUN ln -s /workspace/website/vendor/exui /exui'))
+  const link = 'RUN ln -s /workspace/website/vendor/exui /exui'
+  if (source.split(anchor).length !== 2 || !source.includes('WORKDIR /workspace/website/vendor/exui') || source.split(link).length > 2)
     throw new LocalError('FULL_DOCKERFILE_ANCHOR_CHANGED', 'review the Website Dockerfile before regenerating the local runtime recipe')
+  if (source.includes(link)) {
+    if (!source.includes(`COPY . .\n${link}\nRUN pnpm install --frozen-lockfile`)) throw new LocalError('FULL_DOCKERFILE_ANCHOR_CHANGED')
+    return source
+  }
   return source.replace(anchor, `${anchor}\nRUN ln -s /workspace/website/vendor/exui /exui`)
 }
 function runtimeRecipe(generate) {
@@ -181,7 +186,7 @@ function externalCheck(prior) {
 function initialized(state) {
   const record = readJson(initializedPath, 'LEGACY_NOT_INITIALIZED')
   // Init is shared by both old modes, while runtime port/mode fingerprints stay separate.
-  if (record.secretFingerprint !== secretFingerprint(state.values)) throw new LocalError('LEGACY_PREPARED_TARGET_CHANGED', 'pnpm integration:init')
+  if (record.secretFingerprint !== secretFingerprint(state.values)) throw new LocalError('LEGACY_PREPARED_TARGET_CHANGED', 'node scripts/docs-integration/command.mjs init')
   transitionStoppedApplications(state, readJsonOptional(modePath), record.volumes)
   state.foundation.preflight(true, record.volumes)
   return record

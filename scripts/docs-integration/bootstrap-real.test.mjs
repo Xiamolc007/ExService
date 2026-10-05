@@ -28,6 +28,7 @@ test('real disposable bootstrap uses only an explicit fixture UUID and always cl
   try {
     // Runtime files are copied so Website storage startup cannot touch host data directories.
     for (const path of ['apps/server/src', 'apps/server/dist', 'apps/server/drizzle', 'apps/server/package.json', 'apps/server/tsconfig.json',
+      'scripts/runtime', 'scripts/docs-integration',
       'tsconfig.base.json', 'tsconfig.json', 'api', 'compose.local-dev.yaml', 'infra/docs-integration/images.lock.json', 'infra/docs-integration/postgres/init-local.sh'])
       copy(join(root, path), join(workspace, path))
     link(join(root, 'node_modules'), join(workspace, 'node_modules'))

@@ -6,18 +6,20 @@ export async function ensureHydraClient(options) { return checkHydraClient(optio
 export async function verifyHydraClient(options) { return checkHydraClient(options, false) }
 async function checkHydraClient({ adminUrl, publicUrl = 'http://identity.exwebsite.test:8090/', clientSecret,
   clientId = 'ex-outline', mode = 'dev', publicOrigin = 'http://exwebsite.test:8090', callback, tokenUrl }, create) {
-  if (!['local', 'dev', 'full'].includes(mode)) throw new Error('Invalid Hydra bootstrap configuration')
+  if (!['local', 'dev', 'full', 'deployment'].includes(mode)) throw new Error('Invalid Hydra bootstrap configuration')
   const origin = new URL(publicOrigin), issuer = new URL(publicUrl)
   if (tokenUrl !== undefined && (mode !== 'full' || tokenUrl !== 'http://hydra:4444/')) throw new Error('Invalid Hydra bootstrap configuration')
-  if (origin.href !== `${publicOrigin}/` || issuer.pathname !== '/' || issuer.search || issuer.hash || issuer.username || issuer.password ||
+  if (origin.href !== `${publicOrigin}/` || origin.username || origin.password || issuer.pathname !== '/' || issuer.search || issuer.hash || issuer.username || issuer.password ||
       (mode === 'local' ? (origin.protocol !== 'http:' || origin.hostname !== '127.0.0.1' || !origin.port ||
         issuer.protocol !== 'http:' || issuer.hostname !== '127.0.0.1' || !issuer.port || clientId !== 'ex-outline-local') :
+        mode === 'deployment' ? (origin.protocol !== 'https:' || issuer.protocol !== 'https:' || clientId !== 'ex-outline' ||
+          !/^https:\/\/[^/\s\\]+$/.test(publicOrigin) || !/^https:\/\/[^/\s\\]+\/?$/.test(publicUrl)) :
         (publicOrigin !== 'http://exwebsite.test:8090'))) throw new Error('Invalid Hydra bootstrap configuration')
   const clients = {
     'ex-outline-local': { name: 'Docs Local', callback: `${publicOrigin}/docs/auth/oidc.callback`,
       logout: `${publicOrigin}/identity/signed-out` },
-    'ex-outline': { name: 'Docs', callback: 'http://exwebsite.test:8090/docs/auth/oidc.callback',
-      logout: 'http://exwebsite.test:8090/identity/signed-out' },
+    'ex-outline': { name: 'Docs', callback: `${publicOrigin}/docs/auth/oidc.callback`,
+      logout: `${publicOrigin}/identity/signed-out` },
     'ex-oidc-probe': { name: 'OIDC Probe', callback: 'http://127.0.0.1:18765/callback',
       logout: 'http://127.0.0.1:18765/signed-out' },
   }

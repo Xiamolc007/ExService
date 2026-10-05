@@ -112,7 +112,7 @@ export class Foundation {
     for (const [name, volume] of Object.entries(volumes)) {
       const result = this.call(['volume', 'inspect', volume.name], true)
       if (result.status !== 0) {
-        if (required) throw new LocalError('LOCAL_VOLUME_MISSING', 'pnpm integration:init -- --mode local')
+        if (required) throw new LocalError('LOCAL_VOLUME_MISSING', 'pnpm infra init')
         const inventory = this.call(['volume', 'ls', '--format', '{{.Name}}'])
         if (typeof inventory.stdout !== 'string') throw new LocalError('DOCKER_VOLUME_INVENTORY_INVALID')
         const names = inventory.stdout.trim() ? inventory.stdout.trim().split(/\r?\n/) : []

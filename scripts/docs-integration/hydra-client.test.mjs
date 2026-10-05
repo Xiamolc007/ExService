@@ -105,3 +105,24 @@ test('local issuer client callbacks and metadata are fixed to the validated loca
   await assert.rejects(ensureHydraClient({ ...options, callback: 'http://127.0.0.1:8081/wrong' }), /configuration/)
   await assert.rejects(ensureHydraClient({ ...options, publicOrigin: 'http://localhost:8080' }), /configuration/)
 }))
+
+test('deployment registration pins HTTPS issuer and exact callbacks without granting the probe client', async t => fixture(async state => {
+  const originalFetch = globalThis.fetch, requested = []
+  t.mock.method(globalThis, 'fetch', (url, options) => {
+    requested.push(String(url))
+    const address = new URL(url)
+    return originalFetch(address.origin === 'https://issuer.example' ? new URL(address.pathname, state.publicUrl) : url, options)
+  })
+  const options = { ...state, mode: 'deployment', publicOrigin: 'https://site.example', publicUrl: 'https://issuer.example/' }
+  await ensureHydraClient(options)
+  await verifyHydraClient(options)
+  assert.deepEqual(state.getClient().redirect_uris, ['https://site.example/docs/auth/oidc.callback'])
+  assert.deepEqual(state.getClient().post_logout_redirect_uris, ['https://site.example/identity/signed-out'])
+  assert.equal(state.getClient().metadata.issuer, options.publicUrl)
+  assert.ok(requested.includes('https://issuer.example/oauth2/token'))
+  const before = state.calls.length
+  for (const override of [{ clientId: 'ex-oidc-probe' }, { publicOrigin: 'http://site.example' }, { publicUrl: 'http://issuer.example/' },
+    { callback: 'https://site.example/wrong' }, { publicOrigin: 'https://site.example/a/..' }])
+    await assert.rejects(ensureHydraClient({ ...options, ...override }), /configuration/)
+  assert.equal(state.calls.length, before)
+}))

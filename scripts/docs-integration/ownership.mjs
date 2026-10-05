@@ -58,19 +58,19 @@ export function acquireLock({ mode, fingerprint, directory = localRoot, name = '
       const prior = readJson(path, 'MODE_LOCK_INVALID')
       const protectedCleanup = prior.cleanupRequired || prior.state === 'cleanup-failed' ||
         (prior.mode === 'local' && prior.state !== 'stopped' && (prior.resources?.started?.length > 0 || prior.resources?.createdStopped?.length > 0))
-      if (protectedCleanup && !recoverCleanup) throw new LocalError('MODE_CLEANUP_REQUIRED', `pnpm integration:down -- --mode ${prior.mode}`)
+      if (protectedCleanup && !recoverCleanup) throw new LocalError('MODE_CLEANUP_REQUIRED', `node scripts/docs-integration/command.mjs down --mode ${prior.mode}`)
       if (recoverCleanup && (prior.version !== 1 || prior.mode !== mode || prior.fingerprint !== fingerprint || !prior.runId))
         throw new LocalError('MODE_RECOVERY_PROVENANCE_CONFLICT')
       if (prior.persistent && !recoverCleanup) {
         externalCheck(prior)
-        throw new LocalError('MODE_ACTIVE', `pnpm integration:down -- --mode ${prior.mode}`)
+        throw new LocalError('MODE_ACTIVE', `node scripts/docs-integration/command.mjs down --mode ${prior.mode}`)
       }
-      if (identityAlive(prior.identity, inspect)) throw new LocalError('MODE_ACTIVE', `pnpm integration:down -- --mode ${prior.mode}`)
+      if (identityAlive(prior.identity, inspect)) throw new LocalError('MODE_ACTIVE', `node scripts/docs-integration/command.mjs down --mode ${prior.mode}`)
       if (Array.isArray(prior.children) && prior.children.some(child => identityAlive(child.identity, inspect)))
         throw new LocalError('MODE_CHILDREN_STILL_ACTIVE', 'inspect the original run; no stale PIDs were killed')
       if (!recoverCleanup && prior.mode === 'local' && prior.state === 'preflight' && !prior.resources &&
           (mode !== prior.mode || fingerprint !== prior.fingerprint))
-        throw new LocalError('MODE_CLEANUP_REQUIRED', 'pnpm integration:down -- --mode local')
+        throw new LocalError('MODE_CLEANUP_REQUIRED', 'node scripts/docs-integration/command.mjs down --mode local')
       if (recoverCleanup) {
         recovery = recoverCleanup(prior)
         // Intent precedes external proof/archive writes: if they fail, ordinary

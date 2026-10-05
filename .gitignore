@@ -19,6 +19,7 @@ apps/mock-server/data/
 # Local environment overrides
 .env.local
 .env.*.local
+.env.local.command-runtime.tmp
 
 # Logs
 *.log

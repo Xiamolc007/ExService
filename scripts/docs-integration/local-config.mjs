@@ -13,7 +13,7 @@ export const secretNames = Object.freeze(['POSTGRES_PASSWORD', 'OUTLINE_PASSWORD
   'OUTLINE_SECRET_KEY', 'OUTLINE_UTILS_SECRET', 'HYDRA_SYSTEM_SECRET', 'OUTLINE_INTEGRATION_KEY',
   'IDENTITY_BOOTSTRAP_KEY', 'IDENTITY_DELIVERY_KEY', 'IDENTITY_FLOW_KEY', 'OUTLINE_OIDC_CLIENT_SECRET'])
 export class LocalError extends Error {
-  constructor(code, next = 'pnpm integration:configure -- --mode local') {
+  constructor(code, next = 'pnpm infra configure') {
     super(`${code}; next: ${next}`); this.code = code
   }
 }
@@ -52,7 +52,7 @@ export async function verifyWebsiteDatabase(environment) {
     const result = await client.query('SELECT current_database() AS name')
     if (result.rows[0]?.name !== 'exre') throw new Error()
     await client.query('ROLLBACK')
-  } catch { throw new LocalError('WEBSITE_DATABASE_UNAVAILABLE', 'check original Website DATABASE_URL; then pnpm integration:configure -- --mode local') }
+  } catch { throw new LocalError('WEBSITE_DATABASE_UNAVAILABLE', 'check original Website DATABASE_URL; then pnpm infra configure') }
   finally { await client.end().catch(() => {}) }
 }
 export function validateConfig(config, workspace = root, directory = localDirectory) {
@@ -180,6 +180,7 @@ export function otherOutboxTargets(currentMode, workspace = root, inherited = pr
   return Object.keys(targets).length ? JSON.stringify(targets) : undefined
 }
 export function localEnvironments(state, inherited = process.env) {
+  if (state.environments) return state.environments
   const { config: c, secrets: s, website: w } = state, p = c.ports
   const common = { ...inherited, ...s, WEBSITE_INTEGRATION_ENABLED: 'true', WEBSITE_INTEGRATION_MODE: 'local',
     HYDRA_PUBLIC_URL: c.issuer, HYDRA_ADMIN_URL: `http://127.0.0.1:${p.hydraAdmin}/`,

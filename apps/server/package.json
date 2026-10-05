@@ -8,18 +8,18 @@
     ".": "./src/app.ts"
   },
   "scripts": {
-    "dev": "node --env-file-if-exists=.env.local --import tsx --watch src/server.ts",
-    "start": "node --env-file-if-exists=.env.local dist/server.js",
+    "dev": "node ../../scripts/runtime/server.mjs dev",
+    "start": "node ../../scripts/runtime/server.mjs start",
     "build": "tsc -p tsconfig.json && node ../../scripts/rewrite-server-imports.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "db:migrate": "node --env-file-if-exists=.env.local --import tsx src/db/migrate.ts",
-    "db:reset": "node --env-file-if-exists=.env.local --import tsx src/db/reset.ts",
+    "db:migrate": "node ../../scripts/runtime/server.mjs db:migrate",
+    "db:reset": "node ../../scripts/runtime/server.mjs db:reset",
     "db:generate": "drizzle-kit generate",
-    "sso:create": "node --env-file-if-exists=.env.local --import tsx src/cli/sso-create.ts",
-    "sso:inspect": "node --env-file-if-exists=.env.local --import tsx src/cli/sso-inspect.ts",
-    "auth:disable": "node --env-file-if-exists=.env.local --import tsx src/cli/auth-disable.ts",
-    "auth:enable": "node --env-file-if-exists=.env.local --import tsx src/cli/auth-enable.ts",
-    "integration:check": "node --env-file-if-exists=.env.local --import tsx src/cli/integration-check.ts"
+    "sso:create": "node ../../scripts/runtime/server.mjs sso:create",
+    "sso:inspect": "node ../../scripts/runtime/server.mjs sso:inspect",
+    "auth:disable": "node ../../scripts/runtime/server.mjs auth:disable",
+    "auth:enable": "node ../../scripts/runtime/server.mjs auth:enable",
+    "integration:check": "node ../../scripts/runtime/server.mjs integration:check"
   },
   "dependencies": {
     "@fastify/multipart": "10.1.2",

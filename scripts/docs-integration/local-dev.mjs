@@ -3,7 +3,7 @@ import { request as httpRequest } from 'node:http'
 import { request as httpsRequest } from 'node:https'
 import { Readable } from 'node:stream'
 import { existsSync, appendFileSync, readdirSync, readFileSync, rmSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { join, resolve, dirname, delimiter } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -18,7 +18,7 @@ export function preparedState(state, requireBootstrap = false) {
   if (record.version !== 1 || record.fingerprint !== state.fingerprint || !Array.isArray(record.volumes) || !record.volumes.length || !record.stages?.initialized ||
       (requireBootstrap && (!record.stages.bootstrap || !validUuid(record.adminUserId))))
     throw new LocalError('LOCAL_NOT_PREPARED', requireBootstrap
-      ? 'pnpm integration:bootstrap -- --mode local --admin-user-id <Website UUID>' : 'pnpm integration:init -- --mode local')
+      ? 'pnpm infra bootstrap --admin-user-id <Website UUID>' : 'pnpm infra init')
   return record
 }
 export function savePrepared(state, extra) {
@@ -93,7 +93,7 @@ export async function httpReady(url, { children = [], expected, timeout = 120000
   throw new LocalError('APPLICATION_NOT_READY', 'inspect this run\'s redacted logs and explicit prepared stages')
 }
 export function specifications(state, tools = toolchain()) {
-  const env = localEnvironments(state)
+  const env = applicationEnvironments(state, tools)
   return [
     { name: 'server', cwd: state.workspace, command: tools.node,
       args: [tools.corepack, 'pnpm', '--filter', '@workspace/server', 'dev'], environment: env.server },
@@ -104,10 +104,19 @@ export function specifications(state, tools = toolchain()) {
   ]
 }
 export function cliSpecification(state, tools, service, args) {
-  const env = localEnvironments(state)
+  const env = applicationEnvironments(state, tools)
   return { name: service, command: tools.node, cwd: service === 'outline' ? join(state.workspace, 'apps/outline') : state.workspace,
     args: [tools.corepack, service === 'outline' ? 'yarn' : 'pnpm', ...(service === 'outline' ? [] : ['--filter', '@workspace/server']), ...args],
     environment: env[service] }
+}
+function applicationEnvironments(state, tools) {
+  const environments = localEnvironments(state)
+  if (!state.environments) return environments
+  return Object.fromEntries(Object.entries(environments).map(([service, environment]) => {
+    const path = Object.entries(environment).find(([key]) => key.toUpperCase() === 'PATH')?.[1] ?? ''
+    return [service, { ...Object.fromEntries(Object.entries(environment).filter(([key]) => key.toUpperCase() !== 'PATH')),
+      PATH: `${dirname(tools.node)}${delimiter}${path}` }]
+  }))
 }
 export function hydraOptions(state) {
   const c = state.config
@@ -141,7 +150,7 @@ export async function verifyFoundationSchemas(state, { bootstrap = false } = {})
         if (!tables.some(row => row.tablename === 'hydra_client') || !tables.some(row => /migration/.test(row.tablename))) throw new Error()
       }
       await client.query('ROLLBACK')
-    } catch { throw new LocalError('LOCAL_SCHEMA_NOT_READY', 'pnpm integration:migrate -- --mode local; then explicit bootstrap if needed') }
+    } catch { throw new LocalError('LOCAL_SCHEMA_NOT_READY', 'pnpm infra migrate; then explicit bootstrap if needed') }
     finally { await client.end().catch(() => {}) }
   }
 }
@@ -158,7 +167,7 @@ export function refuseLegacyOwnership(prior) {
     const legacy = readJson(modeFile, 'LEGACY_MODE_INVALID')
     if (!legacy.stoppedAt) {
       if (legacy.identity && !identityAlive(legacy.identity)) { /* verified exited supervisor; containers checked below */ }
-      else throw new LocalError('LEGACY_MODE_ACTIVE', 'pnpm integration:down in the original verified mode')
+      else throw new LocalError('LEGACY_MODE_ACTIVE', 'node scripts/docs-integration/command.mjs down in the original verified mode')
     }
   }
   const result = docker(['ps', '--filter', 'label=com.docker.compose.project=exwebsite-docs-integration', '--format', '{{.Label "com.docker.compose.service"}}'])
@@ -178,12 +187,12 @@ function validJournal(state, value) {
 /** Runtime is authoritative, with preparation-owned IDs retained separately from independent pre-running IDs. */
 export function localRecovery(state, prior) {
   const read = name => existsSync(join(state.directory, name)) ? validJournal(state, readJson(join(state.directory, name))) : undefined
-  const preparation = read('foundation.json'), runtime = read('run.json'), retired = read('retired-run.json')
-  const latest = prior ? validJournal(state, prior.recovery ?? prior) : runtime ?? retired ?? preparation
+  const preparation = read('foundation.json'), runtime = read('run.json'), retired = read('retired-run.json'), dependencies = read('dependencies.json')
+  const latest = prior ? validJournal(state, prior.recovery ?? prior) : dependencies ?? runtime ?? retired ?? preparation
   if (!latest) throw new LocalError('FOUNDATION_JOURNAL_MISSING')
   const started = new Map(), preRunning = new Map(), proofs = new Map(), createdStopped = new Map()
   // Later records must carry the same original proof for a shared exact ID.
-  for (const journal of [preparation, retired, runtime, latest].filter(Boolean)) {
+  for (const journal of [preparation, retired, runtime, dependencies, latest].filter(Boolean)) {
     for (const item of journal.resources.containerProofs) {
       if (proofs.has(item.id) && digest(proofs.get(item.id)) !== digest(item)) throw new LocalError('FOUNDATION_PROOF_HISTORY_CONFLICT')
       proofs.set(item.id, item)
@@ -219,6 +228,7 @@ export function preparationJournal(state, lock, resources, persist = atomicJson,
 }
 export function localOwnershipCheck(state, foundation, { externalCheck = refuseLegacyOwnership, legacyFoundation } = {}) {
   return prior => {
+    if (prior?.temporary && identityAlive(prior.temporary)) throw new LocalError('MODE_CHILDREN_STILL_ACTIVE', 'stop the original preparation child in its own terminal')
     externalCheck(prior)
     if (prior && prior.mode !== 'local') {
       if (prior.version !== 1 || !['dev', 'full'].includes(prior.mode) || !validUuid(prior.runId) || !prior.fingerprint ||
@@ -248,7 +258,7 @@ export function localOwnershipCheck(state, foundation, { externalCheck = refuseL
       atomicJson(join(state.directory, 'retired-legacy-run.json'), prior)
       prior = undefined
     }
-    const exists = ['foundation.json', 'run.json', 'retired-run.json'].some(name => existsSync(join(state.directory, name)))
+    const exists = ['foundation.json', 'run.json', 'retired-run.json', 'dependencies.json'].some(name => existsSync(join(state.directory, name)))
     if (!exists && !prior) {
       foundation.verifyVolumeInventory()
       if (foundation.containers().length || foundation.verifyVolumes(false).length) throw new LocalError('FOUNDATION_OWNER_UNKNOWN')
@@ -264,7 +274,7 @@ export function localOwnershipCheck(state, foundation, { externalCheck = refuseL
 export async function initializeLocal(state, { migrateOnly = false, foundation = new Foundation(state), lock, directory = localRoot,
   inspect = processIdentity, externalCheck = refuseLegacyOwnership, persist = atomicJson, execute = runOwned,
   verifySchemas = verifyFoundationSchemas } = {}) {
-  const tools = toolchain({ workspace: state.workspace })
+  const tools = toolchain({ workspace: state.workspace, inherited: state.values ?? process.env })
   const occupancy = existsSync(join(directory, 'mode-lock.json')) ? readJson(join(directory, 'mode-lock.json')) : undefined
   const needsRecovery = !occupancy || occupancy.mode === 'local'
   const recoverPreparation = prior => {
@@ -329,9 +339,9 @@ export async function initializeLocal(state, { migrateOnly = false, foundation =
     throw error
   } finally { scope.close(); if (completed) lock.release() }
 }
-export async function bootstrapLocal(state, adminUserId, { lock, foundation, onLog = (name, line) => console.log(`[${name}] ${line}`) } = {}) {
-  if (!validUuid(adminUserId)) throw new LocalError('BOOTSTRAP_UUID_REQUIRED', 'pnpm integration:bootstrap -- --mode local --admin-user-id <Website UUID>')
-  const tools = toolchain({ workspace: state.workspace }), ownLock = !lock
+export async function bootstrapLocal(state, adminUserId, { lock, foundation, preserveDependencies = false, onLog = (name, line) => console.log(`[${name}] ${line}`) } = {}) {
+  if (!validUuid(adminUserId)) throw new LocalError('BOOTSTRAP_UUID_REQUIRED', 'pnpm infra bootstrap --admin-user-id <Website UUID>')
+  const tools = toolchain({ workspace: state.workspace, inherited: state.values ?? process.env }), ownLock = !lock
   foundation ??= new Foundation(state)
   lock ??= acquireLock({ mode: 'local', fingerprint: state.fingerprint, externalCheck: localOwnershipCheck(state, foundation) })
   const scope = signalScope()
@@ -347,7 +357,7 @@ export async function bootstrapLocal(state, adminUserId, { lock, foundation, onL
       code: 'WEBSITE_NOT_READY', next: 'pnpm db:migrate; then explicit bootstrap with an active Website UUID' })
     const environment = localEnvironments(state).server
     temporary = await spawnOwned({ name: 'temporary-server', command: tools.node, cwd: join(state.workspace, 'apps/server'),
-      args: ['--env-file-if-exists=.env.local', '--import', 'tsx', 'src/server.ts'], environment }, { onLog, signal: scope.signal })
+      args: [...(state.environments ? [] : ['--env-file-if-exists=.env.local']), '--import', 'tsx', 'src/server.ts'], environment }, { onLog, signal: scope.signal })
     lock.update({ temporary: temporary.identity })
     await httpReady(`http://127.0.0.1:${state.config.ports.api}/api/health`, { children: [temporary], timeout: 30000 })
     const response = await fetch(`http://127.0.0.1:${state.config.ports.api}/api/internal/identity/user/inspect`, {
@@ -367,7 +377,7 @@ export async function bootstrapLocal(state, adminUserId, { lock, foundation, onL
     scope.close()
     if (temporary) await stopOwned([temporary])
     lock.update({ temporary: null })
-    if (ownLock) { await foundation.stopStarted(); lock.release() }
+    if (ownLock) { if (!preserveDependencies) await foundation.stopStarted(); lock.release() }
   }
 }
 
@@ -379,7 +389,8 @@ export async function supervise({ mode, fingerprint, directory, specifications: 
   const runPath = join(directory, 'run.json'), requestPath = join(controlDirectory, 'control-request.json')
   const persist = () => {
     const value = { version: 1, mode, runId: lock.record.runId, fingerprint, identity: lock.record.identity, state,
-      children: children.map(child => ({ name: child.specification.name, identity: child.identity })), resources: foundation?.snapshot() }
+      children: children.map(child => ({ name: child.specification.name, identity: child.identity })),
+      resources: foundation?.snapshot() ?? { started: [], preRunning: [], createdStopped: [], containerProofs: [] } }
     atomicJson(runPath, value); lock.update(value)
   }
   const stopSignal = () => { stopping = true }
@@ -441,8 +452,8 @@ export async function supervise({ mode, fingerprint, directory, specifications: 
     } catch (error) { state = 'cleanup-failed'; try { lock.update({ state, cleanupRequired: true }) } catch {}; persist(); throw error }
   }
 }
-export async function runLocal({ service } = {}) {
-  const state = loadLocal(), tools = toolchain(), prepared = preparedState(state, true), foundation = new Foundation(state)
+export async function runLocal({ service, state = loadLocal(), tools = toolchain(), independentDependencies = false } = {}) {
+  const prepared = preparedState(state, true), foundation = new Foundation(state)
   const lock = acquireLock({ mode: 'local', fingerprint: state.fingerprint, externalCheck: localOwnershipCheck(state, foundation) })
   const scope = signalScope()
   let handedOff = false
@@ -451,17 +462,20 @@ export async function runLocal({ service } = {}) {
   try {
     foundation.preflight(true, prepared.volumes)
     for (const port of [state.config.ports.public, state.config.ports.web, state.config.ports.api, state.config.ports.outline, state.config.ports.outlineVite]) await assertPortFree(port)
-    await foundation.start(['postgres', 'redis', 'hydra'], { onChange: resources => {
+    if (independentDependencies) {
+      const running = foundation.containers().filter(item => item.State.Running).map(item => item.Config.Labels['com.docker.compose.service'])
+      if (!['postgres', 'redis', 'hydra'].every(name => running.includes(name))) throw new LocalError('DEPENDENCIES_NOT_RUNNING', 'pnpm start')
+    } else await foundation.start(['postgres', 'redis', 'hydra'], { onChange: resources => {
       lock.update({ resources }); atomicJson(join(state.directory, 'run.json'), { ...lock.record, state: 'preflight', resources })
     } })
     scope.check()
     await verifyFoundationSchemas(state, { bootstrap: true }); await foundationReady(state, foundation)
     await runOwned(cliSpecification(state, tools, 'server', ['integration:check', '--admin-user-id', prepared.adminUserId]), { onLog, signal: scope.signal, code: 'WEBSITE_NOT_READY', next: 'pnpm db:migrate' })
-    await runOwned(cliSpecification(state, tools, 'outline', ['integration:check', '--admin-user-id', prepared.adminUserId]), { onLog, signal: scope.signal, code: 'OUTLINE_NOT_READY', next: 'pnpm integration:bootstrap -- --mode local --admin-user-id <Website UUID>' })
+    await runOwned(cliSpecification(state, tools, 'outline', ['integration:check', '--admin-user-id', prepared.adminUserId]), { onLog, signal: scope.signal, code: 'OUTLINE_NOT_READY', next: 'pnpm infra bootstrap --admin-user-id <Website UUID>' })
     await verifyHydraClient(hydraOptions(state))
     scope.check(); scope.close()
     handedOff = true
-    await supervise({ mode: 'local', fingerprint: state.fingerprint, directory: state.directory, lock, foundation,
+    await supervise({ mode: 'local', fingerprint: state.fingerprint, directory: state.directory, lock, foundation: independentDependencies ? undefined : foundation,
       specifications: specifications(state, tools).filter(spec => !service || spec.name === service), onLog,
       banner: service ? `LOCAL_SERVICE_READY ${service}` : `LOCAL_READY ${state.config.publicOrigin}/`,
       readiness: async children => {
@@ -475,9 +489,9 @@ export async function runLocal({ service } = {}) {
           await httpReady(`${state.config.publicOrigin}/docs/`, { children })
         } else if (service === 'web') await httpReady(`${state.config.publicOrigin}/`, { children })
       },
-      prepare: adminUserId => bootstrapLocal(state, adminUserId, { lock, foundation, onLog }),
+      prepare: independentDependencies ? undefined : adminUserId => bootstrapLocal(state, adminUserId, { lock, foundation, onLog }),
     })
-  } finally { scope.close(); if (!handedOff) { await foundation.stopStarted(); lock.release() } }
+  } finally { scope.close(); if (!handedOff) { if (!independentDependencies) await foundation.stopStarted(); lock.release() } }
 }
 function sameRun(left, right) {
   return left && right && left.runId === right.runId && left.mode === right.mode &&
@@ -494,7 +508,7 @@ export async function controlRequest(action, mode, adminUserId, { directory = lo
   if (record.mode !== mode) throw new LocalError('MODE_CONTROL_CONFLICT')
   if (record.cleanupRequired || record.state === 'cleanup-failed') {
     if (action === 'stop') return false
-    throw new LocalError('MODE_CLEANUP_REQUIRED', `pnpm integration:down -- --mode ${mode}`)
+    throw new LocalError('MODE_CLEANUP_REQUIRED', `node scripts/docs-integration/command.mjs down --mode ${mode}`)
   }
   if (record.persistent) return false
   if (!identityAlive(record.identity, inspect)) return false
