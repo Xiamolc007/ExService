@@ -2,7 +2,7 @@
 
 本索引记录已接受决策及被取代的历史选择。数据库专属决策集中于 `.ai/databases/decisions/`；当前结构见 `.ai/architectures/overview.md`，文档集成结构见 `.ai/architectures/docs-integration/integration-boundaries.md`。本次集成没有另建决定条目，运行边界以源码和上述架构页为准。
 
-_最后更新：2026-10-02_
+_最后更新：2026-10-06_
 
 | 决策 | 模块 | 状态 |
 | --- | --- | --- |
@@ -27,5 +27,7 @@ _最后更新：2026-10-02_
 | `.ai/decisions/contract-tests/02-contract-as-sole-schema-source.md` | 测试 | 已接受。 |
 
 存储与 SDK 的运行约束集中于 `.ai/knowledge/storage/lifecycle-traps.md`，本索引不重复记录。
+
+EXS 团队的职责、已授权审查边界与交互设计交付规则集中于 `.ai/architectures/monica-team/workflow.md`，本索引不重复记录。
 
 过时决策保留当时理由，但其旧运行指令不适用于当前 Server。公网部署、共享头像和限流、真实邮件、人机验证、备份恢复与监控仍需后续独立设计。
