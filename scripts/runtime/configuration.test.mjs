@@ -30,7 +30,7 @@ function fixture(t) {
 const acquire = () => ({ record: { runId: '00000000-0000-4000-8000-000000000000', identity: {} }, release() {}, update() {} })
 test('root exposes only the agreed commands while Server maintenance tools remain available', () => {
   const scripts = JSON.parse(readFileSync(join(root, 'package.json'))).scripts
-  assert.deepEqual(Object.keys(scripts).sort(), ['start', 'dev', 'stop', 'infra', 'api:lint', 'api:generate', 'typecheck', 'test', 'build', 'db:migrate', 'db:reset'].sort())
+  assert.deepEqual(Object.keys(scripts).sort(), ['service:start', 'dev', 'service:stop', 'infra', 'api:lint', 'api:generate', 'typecheck', 'test', 'build', 'db:migrate', 'db:reset'].sort())
   const server = JSON.parse(readFileSync(join(root, 'apps/server/package.json'))).scripts
   for (const name of ['sso:create', 'sso:inspect', 'auth:disable', 'auth:enable']) assert.ok(server[name].includes(`server.mjs ${name}`))
 })

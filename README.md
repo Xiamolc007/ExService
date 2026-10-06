@@ -19,7 +19,7 @@ ExWebsite 使用单份 OpenAPI Contract 连接 Web、生成式 API Client 与唯
 
 ```bash
 pnpm infra configure --import-existing
-pnpm start
+pnpm service:start
 pnpm dev
 ```
 
@@ -44,23 +44,23 @@ pnpm dev
 
    ```bash
    pnpm infra bootstrap --admin-user-id <Website-UUID>
-   pnpm start
+   pnpm service:start
    pnpm dev
    ```
 
 ### 日常使用
 
-依赖已准备后，运行 `pnpm start` 启动 PostgreSQL、Redis、Hydra，等待就绪后该命令退出；再运行 `pnpm dev` 监督 Website 和 Outline 应用。`dev` 只读检查准备状态，不隐式迁移、reset、登记客户端或初始化管理员。
+依赖已准备后，运行 `pnpm service:start` 启动 PostgreSQL、Redis、Hydra，等待就绪后该命令退出；再运行 `pnpm dev` 监督 Website 和 Outline 应用。`dev` 只读检查准备状态，不隐式迁移、reset、登记客户端或初始化管理员。
 
-默认访问 `http://127.0.0.1:8080/` 与 `http://127.0.0.1:8080/docs/`，使用与配置一致的 public origin，不以 `localhost` 或直接 Vite origin 替代。开发终端 Ctrl+C 只清理本次应用进程；随后运行 `pnpm stop` 停止受管依赖，不删除卷或附件。
+默认访问 `http://127.0.0.1:8080/` 与 `http://127.0.0.1:8080/docs/`，使用与配置一致的 public origin，不以 `localhost` 或直接 Vite origin 替代。开发终端 Ctrl+C 只清理本次应用进程；随后运行 `pnpm service:stop` 停止受管依赖，不删除卷或附件。
 
 ## 常用命令
 
 | 命令 | 用途 |
 | --- | --- |
-| `pnpm start` | 启动已准备且归属已验证的 PostgreSQL/Redis/Hydra，等待就绪后退出。 |
+| `pnpm service:start` | 启动已准备且归属已验证的 PostgreSQL/Redis/Hydra，等待就绪后退出。 |
 | `pnpm dev` | 只读核对依赖和准备状态，监督 Website/Outline 应用。 |
-| `pnpm stop` | 无活跃应用时停止受管依赖，不删除持久数据。 |
+| `pnpm service:stop` | 无活跃应用时停止受管依赖，不删除持久数据。 |
 | `pnpm infra configure` | 校验根配置、工具、依赖及原 Website 数据源；新安装填补缺少的文档秘密。 |
 | `pnpm infra configure --import-existing` | 显式导入既有 v1 local 配置，保留秘密、资源指纹与准备阶段。 |
 | `pnpm infra init` / `pnpm infra migrate` | 显式准备或迁移独立 Outline/Hydra，不创建 Website `exre`。 |

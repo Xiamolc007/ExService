@@ -464,7 +464,7 @@ export async function runLocal({ service, state = loadLocal(), tools = toolchain
     for (const port of [state.config.ports.public, state.config.ports.web, state.config.ports.api, state.config.ports.outline, state.config.ports.outlineVite]) await assertPortFree(port)
     if (independentDependencies) {
       const running = foundation.containers().filter(item => item.State.Running).map(item => item.Config.Labels['com.docker.compose.service'])
-      if (!['postgres', 'redis', 'hydra'].every(name => running.includes(name))) throw new LocalError('DEPENDENCIES_NOT_RUNNING', 'pnpm start')
+      if (!['postgres', 'redis', 'hydra'].every(name => running.includes(name))) throw new LocalError('DEPENDENCIES_NOT_RUNNING', 'pnpm service:start')
     } else await foundation.start(['postgres', 'redis', 'hydra'], { onChange: resources => {
       lock.update({ resources }); atomicJson(join(state.directory, 'run.json'), { ...lock.record, state: 'preflight', resources })
     } })

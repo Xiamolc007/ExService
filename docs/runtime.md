@@ -2,7 +2,7 @@
 
 ## 日常命令
 
-根目录 `pnpm start` 只启动已初始化的 PostgreSQL、Redis、Hydra；就绪后命令退出，依赖继续运行。`pnpm dev` 只读检查依赖、schema、client 和工作区，监督 Website Server/Web 与 Outline。开发终端 Ctrl+C 只清理本次应用进程。随后 `pnpm stop` 停止依赖；应用仍运行时它拒绝，不删除卷、容器文件或附件。
+根目录 `pnpm service:start` 只启动已初始化的 PostgreSQL、Redis、Hydra；就绪后命令退出，依赖继续运行。`pnpm dev` 只读检查依赖、schema、client 和工作区，监督 Website Server/Web 与 Outline。开发终端 Ctrl+C 只清理本次应用进程。随后 `pnpm service:stop` 停止依赖；应用仍运行时它拒绝，不删除卷、容器文件或附件。
 
 `pnpm build` 构建 SDK、Website Web/Server 和定制 Outline client/server/static。构建不需要数据库、Docker、准备 receipt 或后端秘密。Outline 从已有 locale catalog 打包，不运行翻译提取，避免覆写译者改动。前端 API 默认为同源 `/api`；更改跨域 `VITE_API_BASE_URL` 需要重新构建。
 
@@ -14,7 +14,7 @@
 
 ```bash
 pnpm infra configure --import-existing
-pnpm start
+pnpm service:start
 pnpm dev
 ```
 
@@ -30,7 +30,7 @@ pnpm db:migrate
 pnpm infra init
 # 注册 Website 账号并由操作者选择一个已有 active 用户 UUID
 pnpm infra bootstrap --admin-user-id <Website-UUID>
-pnpm start
+pnpm service:start
 pnpm dev
 ```
 
@@ -42,7 +42,7 @@ Outline 隔离测试入口为 `pnpm infra test <server/plugins test file> <liter
 
 11 个文档 secret 键为 `POSTGRES_PASSWORD`、`OUTLINE_PASSWORD`、`HYDRA_PASSWORD`、`OUTLINE_SECRET_KEY`、`OUTLINE_UTILS_SECRET`、`HYDRA_SYSTEM_SECRET`、`OUTLINE_INTEGRATION_KEY`、`IDENTITY_BOOTSTRAP_KEY`、`IDENTITY_DELIVERY_KEY`、`IDENTITY_FLOW_KEY`、`OUTLINE_OIDC_CLIENT_SECRET`，均为 64 hex。Website HMAC 与 COS/存储键沿用 Server parser，不能丢失原值。
 
-配置 receipt 分开记录 configurationFingerprint 与 resourceFingerprint；前者绑定有效 root 设置，后者绑定原资源授权。显式 configure 可以核验非资源设置变更，不自动改密码、卷标签、issuer 或原 proof。`dependencies.json` 记录真实依赖阶段，`run.json` 记录应用进程；失败只回收本次新启动且可证明归属的容器，事先运行的依赖保留。失败的依赖 start 须显式 `pnpm stop` 恢复。
+配置 receipt 分开记录 configurationFingerprint 与 resourceFingerprint；前者绑定有效 root 设置，后者绑定原资源授权。显式 configure 可以核验非资源设置变更，不自动改密码、卷标签、issuer 或原 proof。`dependencies.json` 记录真实依赖阶段，`run.json` 记录应用进程；失败只回收本次新启动且可证明归属的容器，事先运行的依赖保留。失败的依赖 start 须显式 `pnpm service:stop` 恢复。
 
 旧 dev/full 不在根日常命令表。其恢复仍使用 `node scripts/docs-integration/command.mjs down --mode dev` 或 `--mode full`；旧 local v1 使用 `--mode local`。保留原 mode 和历史配置，不把新 root stop 当成旧 full down。
 

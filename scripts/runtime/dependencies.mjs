@@ -29,7 +29,7 @@ export async function startDependencies(state, { foundation = new Foundation(sta
   validate(state)
   const volumes = prepared(state).volumes, file = join(state.directory, 'dependencies.json')
   if (existsSync(file) && !['dependencies-ready', 'stopped'].includes(readJson(file).state))
-    throw new LocalError('DEPENDENCY_CLEANUP_REQUIRED', 'pnpm stop')
+    throw new LocalError('DEPENDENCY_CLEANUP_REQUIRED', 'pnpm service:stop')
   const lock = dependencyLock(state, foundation, acquire)
   try {
     foundation.preflight(true, volumes)

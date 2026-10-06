@@ -11,7 +11,7 @@ import { testSelection } from '../docs-integration/test-outline.mjs'
 export function parseRuntimeArguments(input) {
   const args = [...input]; if (args[0] === '--') args.shift()
   const command = args.shift()
-  if (!['start', 'dev', 'stop', 'infra'].includes(command)) throw new LocalError('RUNTIME_COMMAND_INVALID', 'pnpm start | dev | stop | infra <action>')
+  if (!['start', 'dev', 'stop', 'infra'].includes(command)) throw new LocalError('RUNTIME_COMMAND_INVALID', 'pnpm service:start | dev | service:stop | infra <action>')
   if (args[0] === '--') args.shift()
   if (command !== 'infra') {
     if (args.length) throw new LocalError('RUNTIME_ARGUMENTS_INVALID')
@@ -38,7 +38,7 @@ export async function main(input = process.argv.slice(2)) {
     environment: { ...operatingEnvironment(), ...Object.fromEntries(['INTEGRATION_NODE_BIN', 'INTEGRATION_COREPACK_JS'].filter(key => process.env[key] !== undefined).map(key => [key, process.env[key]])) }, cwd: resolve('.') })
   if (options.action === 'configure') {
     await (options.importExisting ? importExisting() : configureRuntime())
-    console.log('RUNTIME_CONFIGURED; next: explicit pnpm infra init when needed; pnpm start; pnpm dev'); return
+    console.log('RUNTIME_CONFIGURED; next: explicit pnpm infra init when needed; pnpm service:start; pnpm dev'); return
   }
   const state = readRuntimeConfiguration({ profile: 'local' }); validateReceipt(state)
   if (options.command === 'start') await startDependencies(state)
