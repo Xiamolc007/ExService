@@ -11,16 +11,12 @@ services:
       context: .
       dockerfile: Dockerfile
       target: web
-      additional_contexts:
-        exui: ${EXUI_BUILD_CONTEXT:?configure first}
 
   server:
     build:
       context: .
       dockerfile: Dockerfile
       target: server
-      additional_contexts:
-        exui: ${EXUI_BUILD_CONTEXT:?configure first}
     environment:
       WEBSITE_INTEGRATION_ENABLED: 'true'
       DATABASE_URL: postgres://exre:${EXRE_PASSWORD:?configure first}@postgres:5432/exre
@@ -46,8 +42,6 @@ services:
     build:
       context: .
       dockerfile: apps/outline/Dockerfile.integration
-      additional_contexts:
-        exui: ${EXUI_BUILD_CONTEXT:?configure first}
     command: [node, build/server/index.js, --no-migrate]
     environment:
       NODE_ENV: production

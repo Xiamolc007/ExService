@@ -44,15 +44,13 @@ test('awaiting gateway preserves API and internal denial blocks with exact LF an
   assert.throws(() => awaitingGatewayTemplate(source.replace('location ^~ /docs/ {', 'location ^~ /new-docs/ {')), /TEMPLATE_CHANGED/)
   assert.throws(() => awaitingGatewayTemplate(source + '\n  location ^~ /docs/ {\n  }'), /TEMPLATE_CHANGED/)
 })
-test('full recipe preserves the frozen local ExUI links through one exact build-only anchor', () => {
+test('full recipe uses frozen registry dependencies without an ExUI source context', () => {
   const source = readFileSync('Dockerfile', 'utf8'), recipe = websiteRuntimeRecipe(source)
   assert.equal(recipe, source)
-  assert.equal(recipe.split('RUN ln -s /workspace/website/vendor/exui /exui').length, 2)
+  assert.doesNotMatch(recipe, /vendor\/exui|COPY --from=exui/)
   assert.throws(() => websiteRuntimeRecipe(source + '\nCOPY --from=exui . vendor/exui'), /ANCHOR_CHANGED/)
-  assert.throws(() => websiteRuntimeRecipe(source.replace('COPY --from=exui . vendor/exui', 'COPY new-layout vendor/exui')), /ANCHOR_CHANGED/)
+  assert.throws(() => websiteRuntimeRecipe(source.replace('RUN pnpm install --frozen-lockfile', 'RUN pnpm install')), /ANCHOR_CHANGED/)
   assert.equal(websiteRuntimeRecipe(recipe), recipe)
-  const old = source.replace('\nRUN ln -s /workspace/website/vendor/exui /exui', '')
-  assert.equal(websiteRuntimeRecipe(old).replace('\nRUN ln -s /workspace/website/vendor/exui /exui', ''), old)
 })
 test('legacy initializer runtime recipe changes only CRLF and rejects malformed shell headers', () => {
   const source = readFileSync('infra/docs-integration/postgres/init.sh', 'utf8')

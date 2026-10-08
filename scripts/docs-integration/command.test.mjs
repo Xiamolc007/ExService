@@ -27,11 +27,10 @@ test('host apps listen on the same configured ports used by the gateway', () => 
   assert.equal(processes.find(item => item.name === 'outline').environment.INTEGRATION_OUTLINE_VITE_PORT, '14101')
 })
 
-test('development starts the linked ExUI watcher rather than watching a copied build context', () => {
+test('development uses installed ExUI without starting a source watcher', () => {
   const processes = command.devProcesses?.(values, options)
   const watcher = processes?.find(item => item.name === 'exui')
-  assert.deepEqual(watcher && { cwd: watcher.cwd, args: watcher.args },
-    { cwd: 'D:/fixtures/exui', args: ['pnpm', 'exec', 'node', join(options.root, 'scripts', 'docs-integration', 'watch-exui.mjs')] })
+  assert.equal(watcher, undefined)
 })
 
 test('legacy preserves direct TLS backend while gateway and outbox share the explicitly persisted HTTP transport', () => {

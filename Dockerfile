@@ -3,12 +3,7 @@ ARG NODE_IMAGE=node:26.3.0-slim@sha256:95a34da32a840bd9b3b09a5b773591c16923e3501
 FROM ${NODE_IMAGE} AS website-build
 WORKDIR /workspace/website
 RUN npm install -g corepack@0.34.5 && corepack enable
-COPY --from=exui . vendor/exui
-WORKDIR /workspace/website/vendor/exui
-RUN pnpm install --frozen-lockfile && pnpm --filter @exre/exui-tokens build && pnpm --filter @exre/exui build
-WORKDIR /workspace/website
 COPY . .
-RUN ln -s /workspace/website/vendor/exui /exui
 RUN pnpm install --frozen-lockfile && pnpm --filter @workspace/sdk build && pnpm --filter @workspace/web build && pnpm --filter @workspace/server build
 
 FROM nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236 AS web

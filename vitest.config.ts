@@ -7,7 +7,7 @@ const webNodeModules = resolve(repositoryRoot, 'apps/web/node_modules')
 
 export default defineConfig({
   resolve: {
-    // 本地 @exre/exui link 可能带着自己的 React；测试与浏览器一样必须共享单一实例。
+    // 共享包与应用必须使用同一个 React 和 ExUI 实例。
     dedupe: ['react', 'react-dom', '@exre/exui'],
     alias: [
       { find: '@web', replacement: resolve(repositoryRoot, 'apps/web') },

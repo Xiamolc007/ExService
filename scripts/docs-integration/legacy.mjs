@@ -33,7 +33,6 @@ export function devProcesses(values, options = {}) {
   const targets = otherOutboxTargets('dev', workspace, inherited)
   if (targets) common.IDENTITY_OUTBOX_TARGETS_JSON = targets
   return [
-    { name: 'exui', cwd: values.EXUI_SOURCE_DIR, args: ['pnpm', 'exec', 'node', join(workspace, 'scripts/docs-integration/watch-exui.mjs')], environment: common },
     { name: 'server', cwd: workspace, args: ['pnpm', '--filter', '@workspace/server', 'dev'], environment: {
       ...common, DATABASE_URL: `postgres://exre:${values.EXRE_PASSWORD}@127.0.0.1:16432/exre`,
       AUTH_CODE_HMAC_KEY: values.AUTH_CODE_HMAC_KEY, SERVER_PUBLIC_WEB_BASE_URL: 'http://exwebsite.test:8090',
@@ -102,15 +101,9 @@ function writeGateway(ready, mode = 'full') {
   return digest(template)
 }
 export function websiteRuntimeRecipe(source) {
-  const anchor = 'COPY --from=exui . vendor/exui'
-  const link = 'RUN ln -s /workspace/website/vendor/exui /exui'
-  if (source.split(anchor).length !== 2 || !source.includes('WORKDIR /workspace/website/vendor/exui') || source.split(link).length > 2)
+  if (!source.includes('RUN pnpm install --frozen-lockfile') || /vendor\/exui|COPY --from=exui/.test(source))
     throw new LocalError('FULL_DOCKERFILE_ANCHOR_CHANGED', 'review the Website Dockerfile before regenerating the local runtime recipe')
-  if (source.includes(link)) {
-    if (!source.includes(`COPY . .\n${link}\nRUN pnpm install --frozen-lockfile`)) throw new LocalError('FULL_DOCKERFILE_ANCHOR_CHANGED')
-    return source
-  }
-  return source.replace(anchor, `${anchor}\nRUN ln -s /workspace/website/vendor/exui /exui`)
+  return source
 }
 function runtimeRecipe(generate) {
   const path = join(localRoot, 'Dockerfile.website-runtime')

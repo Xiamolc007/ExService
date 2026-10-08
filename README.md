@@ -7,7 +7,7 @@ ExWebsite 使用单份 OpenAPI Contract 连接 Web、生成式 API Client 与唯
 - Node.js 22.12+，同时满足 `apps/outline/package.json` 的 engines；pnpm 11.9.0、可用的 Corepack/Yarn 和 Docker Compose。
 - 已有独立 Website PostgreSQL `exre`。文档基础设施不创建 Website 数据库或账号。
 - 安装根 pnpm 依赖及 `apps/outline/` 的独立 Yarn 依赖；Outline 是 Git submodule，不属于 pnpm workspace。
-- 准备现有 ExUI checkout、链接及构建产物，不为启动改写链接或 lockfile。Node/Corepack 可通过 `INTEGRATION_NODE_BIN`、`INTEGRATION_COREPACK_JS` 显式指定。
+- ExUI 使用 registry 发布包，由各自 lockfile 锁定版本，不需要本地 ExUI checkout 或构建。Node/Corepack 可通过 `INTEGRATION_NODE_BIN`、`INTEGRATION_COREPACK_JS` 显式指定。
 
 普通运行配置只读取根 `.env.local`，受支持的进程变量优先，示例见 `.env.example`。不要提交凭据，也不要用示例默认值覆盖既有数据库、HMAC、存储或头像配置。
 
@@ -27,7 +27,7 @@ pnpm dev
 
 ### 全新环境
 
-1. 安装根依赖，并在 `apps/outline/` 中使用其 Corepack Yarn 安装依赖，准备 ExUI 产物。
+1. 安装根依赖，并在 `apps/outline/` 中使用 Corepack Yarn 安装独立依赖；ExUI 随依赖安装。
 2. 显式创建独立 Website `exre`，复制 `.env.example` 到根 `.env.local`，填写数据库、`AUTH_CODE_HMAC_KEY` 等配置。
 3. 在仓库根目录校验 Contract、生成 Client，并显式准备数据库及文档基础设施：
 

@@ -20,7 +20,7 @@ _最后更新：2026-10-06_
 
 `compose.local-dev.yaml` 使用独立项目 `exwebsite-local-dev` 和锁定镜像，专用 PostgreSQL 仅准备 `outline`、`hydra`，不创建 Website `exre`。文档附件在 `.local/docs-integration/local-dev/data/outline/`，与旧模式隔离。Website 继续使用原 `DATABASE_URL`、`AUTH_CODE_HMAC_KEY`、业务存储和头像目录，进程环境优先于 `apps/server/.env.local`；编排只派生监听、公开地址和身份参数，不复制原 Website 凭据或替换已有账号库。
 
-`apps/outline/` 是独立 Git submodule/Yarn 应用，不参加 pnpm workspace。Outline 的 React 17/portal ExUI 与 Website 的 React 19/ExUI 依赖分别安装和构建。需要根 Node 22.12+ 并满足 Outline engines、pnpm 11.9.0、Corepack/Yarn、两套已安装依赖、现有 ExUI checkout/链接/产物及 Docker Compose。`INTEGRATION_NODE_BIN`、`INTEGRATION_COREPACK_JS` 可显式指定工具；local 默认当前 Node，旧 dev 工具策略要求 Node v26.3.0，不能混用两种策略。
+`apps/outline/` 是独立 Git submodule/Yarn 应用，不参加 pnpm workspace。两套依赖树统一使用 registry `@exre/exui` 发布包，由各自 lockfile 锁定。Outline 的 React 17 应用只消费框架无关 Tokens 与 CSS，Website 的 React 19 应用消费 React 组件；不能在 Outline 中使用要求 React 19 的包根组件。需要根 Node 22.12+ 并满足 Outline engines、pnpm 11.9.0、Corepack/Yarn、两套已安装依赖及 Docker Compose，不再要求 ExUI checkout、链接或源码构建。`INTEGRATION_NODE_BIN`、`INTEGRATION_COREPACK_JS` 可显式指定工具；local 默认当前 Node，旧 dev 工具策略要求 Node v26.3.0，不能混用两种策略。
 
 ## 显式准备与只读运行
 
@@ -81,7 +81,7 @@ full `up` 部分失败清理成功后，先保存完整 stopped 容器/资源 pr
 
 ## 派生产物与首次初始化
 
-full override 选择忽略的 `.local/docs-integration/Dockerfile.website-runtime`，build stage 将 `/exui` 链接到复制的 `vendor/exui`，支持根 frozen `link:` 依赖；保留原 `Dockerfile`、消费 manifest、根 lockfile。生成器要求唯一原 anchor，冲突产物拒绝。镜像构建证据不替代完整产品 runtime 验收。
+Website 与 Outline 镜像使用各自 lockfile 安装 registry ExUI，不复制源码 context 或创建 ExUI 链接。旧 full override 仍选择忽略的 `.local/docs-integration/Dockerfile.website-runtime`，生成器保留 frozen install 并拒绝旧本地源码依赖；冲突产物继续拒绝，不能直接覆盖已有运行来源。镜像构建证据不替代完整产品 runtime 验收。
 
 旧 `infra/docs-integration/postgres/init.sh` 与原 Compose 保留；`.local/docs-integration/runtime-init.sh` 只派生 CRLF→LF，经受控 PG override 挂载，SQL/角色/库语义不变。仅 PostgreSQL entrypoint 首次初始化执行，不对已有卷重跑非幂等 SQL，也不删真实卷修复不完整初始化。既有不完整目标拒绝并另行限定诊断修复。新 local `infra/docs-integration/postgres/init-local.sh` 由 `.gitattributes` 精确限定 LF，不扩到旧脚本。
 

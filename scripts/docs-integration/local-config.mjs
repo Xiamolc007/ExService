@@ -1,10 +1,10 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { parseEnv } from 'node:util'
-import { root, localRoot, resolveExuiSource } from './configure.mjs'
+import { root, localRoot, assertInstalledExui } from './configure.mjs'
 
 export const localDirectory = join(localRoot, 'local-dev')
 export const defaults = Object.freeze({ public: 8080, web: 8081, api: 8082, outline: 3102,
@@ -123,11 +123,9 @@ export function toolchain({ workspace = root, inherited = process.env, legacy = 
     throw new LocalError('LOCAL_DEPENDENCIES_MISSING', 'pnpm install; then install apps/outline with Corepack Yarn')
   if (spawnSync(node, [corepack, 'yarn', '--version'], { cwd: join(workspace, 'apps/outline'), encoding: 'utf8', shell: false }).status !== 0)
     throw new LocalError('LOCAL_COREPACK_UNAVAILABLE')
-  const link = join(workspace, 'vendor/exui')
-  const consumer = join(workspace, 'apps/outline/node_modules/@exre/exui')
-  const source = inherited.EXUI_SOURCE_DIR || (existsSync(link) ? undefined :
-    existsSync(consumer) ? resolve(realpathSync(consumer), '../..') : undefined)
-  try { resolveExuiSource(source, link) } catch { throw new LocalError('LOCAL_EXUI_ARTIFACTS_MISSING', 'build the existing ExUI checkout; preserve its links') }
+  try { assertInstalledExui(workspace) } catch {
+    throw new LocalError('LOCAL_EXUI_ARTIFACTS_MISSING', 'pnpm install; then corepack yarn install in apps/outline; use the registry package')
+  }
   return Object.freeze({ node, corepack })
 }
 export async function configureLocal({ ports = {}, workspace = root, directory = localDirectory, inherited = process.env,

@@ -22,7 +22,7 @@ pnpm dev
 
 ## 全新 local 环境
 
-安装根 pnpm 与独立 `apps/outline/` Yarn 依赖、准备现有 ExUI 产物及独立 Website `exre`。复制 `.env.example` 到根 `.env.local`，填写已有数据库与 `AUTH_CODE_HMAC_KEY`。普通 configure 仅为新安装填补不存在的文档 secret 键；显式空值非法，已有值不轮换。
+安装根 pnpm 与独立 `apps/outline/` Yarn 依赖，并准备独立 Website `exre`。ExUI 使用 registry 发布包，无需源码 checkout、链接或额外构建；启动检查已安装包声明的公开产物。复制 `.env.example` 到根 `.env.local`，填写已有数据库与 `AUTH_CODE_HMAC_KEY`。普通 configure 仅为新安装填补不存在的文档 secret 键；显式空值非法，已有值不轮换。
 
 ```bash
 pnpm infra configure
@@ -48,12 +48,11 @@ Outline 隔离测试入口为 `pnpm infra test <server/plugins test file> <liter
 
 ## Linux 镜像
 
-Website 与 Outline 使用独立依赖树。现有本地 ExUI link/portal 和 lockfile不变；镜像内提供匹配路径。先从现有 ExUI checkout 创建全新、不含 host modules/env/data 的 source context：
+Website 与 Outline 使用独立依赖树，构建分别按 pnpm 与 Yarn lockfile 安装 registry ExUI，无需额外源码 build context：
 
 ```bash
-node scripts/runtime/image-context.mjs <existing-ExUI-checkout> output/command-runtime/exui-context
-docker build --target server --build-context exui=output/command-runtime/exui-context -t <website-server:version> .
-docker build -f apps/outline/Dockerfile.integration --build-context exui=output/command-runtime/exui-context -t <outline:version> .
+docker build --target server -t <website-server:version> .
+docker build -f apps/outline/Dockerfile.integration -t <outline:version> .
 ```
 
 后端镜像包含编译代码、运行依赖、Contract、migration 文件和 runtime 脚本；Linux build stage 安装原生依赖。Outline 镜像含定制 build/public/plugin metadata，启动使用 `--no-migrate`。Website 静态文件为 `apps/web/dist/`，独立 Nginx/CDN 托管。镜像不含真实 root 环境文件、本机数据库或附件。

@@ -71,5 +71,5 @@ OpenAPI 3.1 schema 仅使用 JSON Schema Draft-07 兼容子集；引入 Draft 20
 
 - 普通 runtime 只读取根 `.env.local`，受支持的进程变量优先；已有环境须显式导入，保留原数据库、账号、秘密、存储与头像，不用示例默认值覆写。
 - 日常运行只核对准备状态；数据库创建、迁移、客户端登记和管理员初始化须显式执行。bootstrap 必须使用用户明确选择的已有启用账号 UUID。
-- 不为启动改写现有 ExUI 链接、lockfile 或依赖树；停止只清理可证明归属的运行资源，不删除持久数据。
+- ExUI 使用 registry 发布包，由 pnpm 与 Outline Yarn lockfile 分别锁定；不恢复本地 link/portal。日常启动不改写 lockfile 或依赖树；停止只清理可证明归属的运行资源，不删除持久数据。
 - 文档身份、代理与资源归属规则见 `.ai/architectures/docs-integration/integration-boundaries.md`。当前仍是单实例开发阶段，部署材料不代表公网生产验收；本阶段不部署上线。

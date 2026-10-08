@@ -8,6 +8,25 @@ export const localRoot = join(root, '.local', 'docs-integration')
 export const linkPath = join(root, 'vendor', 'exui')
 const contextPath = join(localRoot, 'exui-context')
 
+/** Verify the installed package's declared public files, without requiring an ExUI checkout. */
+export function assertInstalledExui(workspace = root) {
+  const publicFiles = value => typeof value === 'string' ? [value]
+    : value && typeof value === 'object' ? Object.values(value).flatMap(publicFiles) : []
+  for (const consumer of ['apps/web', 'packages/components', 'packages/sdk', 'apps/outline']) {
+    const packageRoot = join(workspace, consumer, 'node_modules/@exre/exui')
+    let packageJson
+    try { packageJson = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')) }
+    catch { throw new Error(`${consumer}: install @exre/exui from the registry with its package manager.`) }
+    if (packageJson.name !== '@exre/exui' || !packageJson.exports?.['.'] || !packageJson.exports?.['./tokens'])
+      throw new Error(`${consumer}: @exre/exui public exports missing.`)
+    for (const entry of new Set([...publicFiles(packageJson.exports), ...publicFiles(packageJson.types)])) {
+      const absolute = resolve(packageRoot, entry)
+      if (!absolute.startsWith(packageRoot + sep) || !existsSync(absolute))
+        throw new Error(`${consumer}: @exre/exui public artifact missing: ${entry}`)
+    }
+  }
+}
+
 function packageExists(source) {
   return existsSync(join(source, 'packages', 'components', 'package.json')) &&
     existsSync(join(source, 'packages', 'tokens', 'package.json'))
@@ -100,16 +119,14 @@ function readEntries(path) {
   }))
 }
 
-export function configure(sourceInput = process.env.EXUI_SOURCE_DIR) {
-  const source = resolveExuiSource(sourceInput)
-  ensureExuiLink(source)
+export function configure() {
+  assertInstalledExui()
   if (!existsSync(join(root, 'apps', 'outline', 'package.json'))) {
     throw new Error('apps/outline submodule 缺失；先运行 git submodule update --init。')
   }
   mkdirSync(localRoot, { recursive: true })
   mkdirSync(join(localRoot, 'data', 'avatars'), { recursive: true })
   mkdirSync(join(localRoot, 'data', 'outline'), { recursive: true })
-  const cleanContext = prepareExuiContext(source)
   const basePath = join(localRoot, 'secrets.env')
   const entries = readEntries(basePath)
   const keys = ['POSTGRES_PASSWORD', 'EXRE_PASSWORD', 'OUTLINE_PASSWORD', 'HYDRA_PASSWORD',
@@ -120,12 +137,8 @@ export function configure(sourceInput = process.env.EXUI_SOURCE_DIR) {
     if (!entries.has(key)) entries.set(key, randomBytes(32).toString('hex'))
   }
   writeFileSync(basePath, [...entries].map(([key, value]) => `${key}=${value}`).join('\n') + '\n', { mode: 0o600 })
-  const sourcePath = source.split(sep).join('/')
-  const cleanContextPath = cleanContext.split(sep).join('/')
   const full = [
     ...entries,
-    ['EXUI_SOURCE_DIR', sourcePath],
-    ['EXUI_BUILD_CONTEXT', cleanContextPath],
     ['WEBSITE_SERVER_UPSTREAM', 'server:8080'],
     ['WEBSITE_WEB_UPSTREAM', 'web:80'],
     ['OUTLINE_BACKEND_UPSTREAM', 'outline:3000'],
@@ -134,8 +147,6 @@ export function configure(sourceInput = process.env.EXUI_SOURCE_DIR) {
   ]
   const dev = [
     ...entries,
-    ['EXUI_SOURCE_DIR', sourcePath],
-    ['EXUI_BUILD_CONTEXT', cleanContextPath],
     ['WEBSITE_SERVER_UPSTREAM', `host.docker.internal:${process.env.INTEGRATION_SERVER_PORT ?? '18180'}`],
     ['WEBSITE_WEB_UPSTREAM', `host.docker.internal:${process.env.INTEGRATION_WEB_PORT ?? '18181'}`],
     ['OUTLINE_DIRECT_UPSTREAM', `host.docker.internal:${process.env.INTEGRATION_OUTLINE_PORT ?? '13100'}`],
@@ -147,7 +158,7 @@ export function configure(sourceInput = process.env.EXUI_SOURCE_DIR) {
   for (const [name, values] of [['full.env', full], ['dev.env', dev]]) {
     writeFileSync(join(localRoot, name), values.map(([key, value]) => `${key}=${value}`).join('\n') + '\n', { mode: 0o600 })
   }
-  return { source, localRoot }
+  return { localRoot }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
