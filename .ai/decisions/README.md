@@ -12,11 +12,11 @@ _最后更新：2026-10-06_
 | `.ai/decisions/api/04-separate-local-session-and-sso-completion.md` | API | 已接受。 |
 | `.ai/decisions/api-client/01-generated-types-committed-and-read-only.md` | Client | 已接受。 |
 | `.ai/decisions/components/01-app-level-shared-component-package.md` | UI | 已接受。 |
-| `.ai/decisions/mock-server/01-contract-driven-route-registration.md` | Server | 已接受，原目录名保留。 |
+| `.ai/decisions/server/01-contract-driven-route-registration.md` | Server | 已接受。 |
 | `.ai/databases/decisions/02-fixed-local-sqlite-database.md` | 数据库 | 已被 PostgreSQL 决策取代。 |
 | `.ai/databases/decisions/03-database-changes-only-by-explicit-command.md` | 数据库 | 已接受，执行细节已更新。 |
-| `.ai/decisions/mock-server/04-safe-error-messages.md` | Server | 已接受。 |
-| `.ai/decisions/mock-server/05-normalize-new-avatars-to-512-square.md` | Server | 已实现。 |
+| `.ai/decisions/server/04-safe-error-messages.md` | Server | 已接受。 |
+| `.ai/decisions/server/05-normalize-new-avatars-to-512-square.md` | Server | 已实现。 |
 | `.ai/databases/decisions/06-implicit-ordinary-explicit-admin-membership.md` | 数据库 | 已接受。 |
 | `.ai/databases/decisions/07-independent-postgresql-exre-database.md` | 数据库 | 已接受并在开发环境实现。 |
 | `.ai/decisions/web/01-shared-client-with-configurable-base-url.md` | Web | Client 配置原则继续适用。 |

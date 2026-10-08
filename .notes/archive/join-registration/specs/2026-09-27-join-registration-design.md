@@ -227,7 +227,7 @@ Contract 进行一次显式破坏性切换，版本由 `0.3.0` 升至 `0.4.0`。
 - `apps/web/src/App.tsx`、`apps/web/src/auth/AuthFlow.tsx`、`apps/web/src/pages/AuthPage/index.tsx`：当前认证路由与流程。
 - `packages/components/src/AuthArea.tsx`、`packages/components/src/SiteHeader.tsx`、`packages/components/src/auth/LoginForm.tsx`：桌面、移动端与登录表单的注册入口。
 - `apps/mock-server/src/auth/service.ts`、`apps/mock-server/src/db/schema.ts`：当前验证码服务、账号事务、身份组数据及投递适配点。
-- `.ai/rules/frontend-forms.md`、`.ai/architectures/web/authentication-flow.md`、`.ai/architectures/mock-server/authentication-lifecycle.md`、`.ai/databases/data-model.md`：仓库边界和当前业务规则。
+- `.ai/rules/frontend-forms.md`、`.ai/architectures/web/authentication-flow.md`、`.ai/architectures/server/authentication-lifecycle.md`、`.ai/databases/data-model.md`：仓库边界和当前业务规则。
 - `.ai/rules/frontend-notifications.md`：本次错误与完成通知的 ExMessage 接入规范。
 - `tests/contract/auth.test.ts`、`.ai/architectures/contract-tests/test-layers.md`：HTTP 与原始 handler 双层测试约定。
 - `.superpowers/brainstorm/336-1790245329/content/join-wizard-v2.html`：已确认的 Join 页分步布局。

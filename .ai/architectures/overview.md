@@ -1,6 +1,6 @@
 # 跨模块架构总览
 
-本文件说明 ExWebsite 当前开发拓扑。HTTP 形状以 `api/openapi.yaml` 为准；Server 请求与数据库生命周期见 `.ai/architectures/mock-server/request-lifecycle.md`，数据规则见 `.ai/databases/data-model.md`。
+本文件说明 ExWebsite 当前开发拓扑。HTTP 形状以 `api/openapi.yaml` 为准；Server 请求与数据库生命周期见 `.ai/architectures/server/request-lifecycle.md`，数据规则见 `.ai/databases/data-model.md`。
 
 _最后更新：2026-10-05_
 
@@ -51,8 +51,8 @@ api/openapi.yaml ──api:generate──▶ packages/api-client ──▶ apps/
 
 ## 新增 operation
 
-先修改 `api/openapi.yaml`，运行 `pnpm api:lint` 与 `pnpm api:generate`；再更新 `apps/server/src/app.ts` 的 `serviceHandlers`、对应 handler 和 `tests/contract/` 的 HTTP 与原始输出断言。前端经 `@workspace/api-client` 调用，最后运行 `pnpm typecheck`、`pnpm test`、`pnpm build`。覆盖原因见 `.ai/knowledge/mock-server/operation-registration-gaps.md` 和 `.ai/knowledge/mock-server/serialization-masks-handler-regressions.md`。
+先修改 `api/openapi.yaml`，运行 `pnpm api:lint` 与 `pnpm api:generate`；再更新 `apps/server/src/app.ts` 的 `serviceHandlers`、对应 handler 和 `tests/contract/` 的 HTTP 与原始输出断言。前端经 `@workspace/api-client` 调用，最后运行 `pnpm typecheck`、`pnpm test`、`pnpm build`。覆盖原因见 `.ai/knowledge/server/operation-registration-gaps.md` 和 `.ai/knowledge/server/serialization-masks-handler-regressions.md`。
 
 ## 数据库边界
 
-`DATABASE_URL` 必须指向独立的 PostgreSQL `exre`。启动只验证目标身份、migration journal 和必需结构；显式 `pnpm db:migrate` 才应用迁移。开发专用 `db:reset` 要求 `--confirm exre`，校验回环地址和对象归属。自动测试使用独立 PostgreSQL 容器及逐用例 schema，不连接开发库。详见 `.ai/architectures/mock-server/request-lifecycle.md` 与 `.ai/databases/knowledge/database-lifecycle-traps.md`。
+`DATABASE_URL` 必须指向独立的 PostgreSQL `exre`。启动只验证目标身份、migration journal 和必需结构；显式 `pnpm db:migrate` 才应用迁移。开发专用 `db:reset` 要求 `--confirm exre`，校验回环地址和对象归属。自动测试使用独立 PostgreSQL 容器及逐用例 schema，不连接开发库。详见 `.ai/architectures/server/request-lifecycle.md` 与 `.ai/databases/knowledge/database-lifecycle-traps.md`。

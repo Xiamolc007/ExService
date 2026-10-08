@@ -32,7 +32,7 @@ Web 继续通过唯一共享 `api` 访问本站，由应用入口注入 ExAxios�
 | SDK 已有独立 browser/Node 构建和声明内联 | `packages/sdk/vite.config.ts`、`packages/sdk/rollup.config.dts.mjs`；增加 HTTP 入口并保持类型与环境隔离 |
 | Server 已有统一错误与上传/下载资源截止时间 | `apps/server/src/errors.ts`、`apps/server/src/join/transport.ts`、`apps/server/src/modules/storage/transport.ts`；不替换资源管理 |
 
-仓库规则继续适用：`.ai/rules/frontend-forms.md`、`.ai/rules/frontend-notifications.md`、`.ai/architectures/api/contract-layout.md`、`.ai/architectures/mock-server/request-lifecycle.md`、`.ai/knowledge/storage/lifecycle-traps.md` 与 `CONTRIBUTING.md`。没有 `TESTING.md`，测试沿用现有 Vitest、Contract 和 Testcontainers 约定。
+仓库规则继续适用：`.ai/rules/frontend-forms.md`、`.ai/rules/frontend-notifications.md`、`.ai/architectures/api/contract-layout.md`、`.ai/architectures/server/request-lifecycle.md`、`.ai/knowledge/storage/lifecycle-traps.md` 与 `CONTRIBUTING.md`。没有 `TESTING.md`，测试沿用现有 Vitest、Contract 和 Testcontainers 约定。
 
 ## 3. 组件与依赖方向
 

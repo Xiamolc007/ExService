@@ -1,11 +1,11 @@
 # 只对外回显安全的错误消息
 
 - 状态：已接受
-- 模块：`server`（原文档目录名保留）
+- 模块：`server`
 - 日期：2026-09-16
 - 来源：`.notes/archive/backend-sandbox/rfcs/2026-09-16-contract-first-backend-sandbox-scaffold-rfc.md`「安全与运行边界」
 
-_最后更新：2026-09-29_
+_最后更新：2026-10-08_
 
 ## 背景
 

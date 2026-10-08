@@ -1,11 +1,11 @@
 # 新上传头像统一为 512×512 WebP
 
 - 状态：已实现
-- 模块：`server`（原文档目录名保留）
+- 模块：`server`
 - 日期：2026-09-24
 - 来源：用户设置面板设计 `.notes/archive/backend-sandbox/user-settings/specs/2026-09-24-user-settings-panel-design.md` 与技术 RFC `.notes/archive/backend-sandbox/user-settings/rfcs/user-settings-panel-rfc.md`
 
-_最后更新：2026-09-29_
+_最后更新：2026-10-08_
 
 ## 背景
 

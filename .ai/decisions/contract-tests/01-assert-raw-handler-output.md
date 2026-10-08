@@ -19,7 +19,7 @@ Contract Test 除 HTTP 断言外，**必须**同时校验 `serviceHandlers` 中�
 
 ## 理由
 
-序列化会主动改写 handler 的输出，因此只断言 HTTP 响应体无法覆盖 handler 的回归。被掩盖的具体漂移类型、实测结果与它的边界见 `.ai/knowledge/mock-server/serialization-masks-handler-regressions.md`。
+序列化会主动改写 handler 的输出，因此只断言 HTTP 响应体无法覆盖 handler 的回归。被掩盖的具体漂移类型、实测结果与它的边界见 `.ai/knowledge/server/serialization-masks-handler-regressions.md`。
 
 被否决的方案就是「只断言 HTTP 响应体」：它看起来在验证 Contract，实际验证的是序列化后的结果。这层原始返回值断言的存在理由就是补上这个缺口。
 

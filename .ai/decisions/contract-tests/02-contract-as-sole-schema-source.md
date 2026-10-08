@@ -22,7 +22,7 @@ _最后更新：2026-09-29_
 ## 理由
 
 - schema 只有一个来源：Contract 变了测试自动跟着变，不会出现「测试通过但 Contract 已经不是这样」。
-- 双向覆盖是唯一能发现漏登记与残留 handler 的手段；两个方向的漂移形态与为什么既有断言抓不到它们，见 `.ai/knowledge/mock-server/operation-registration-gaps.md`。
+- 双向覆盖是唯一能发现漏登记与残留 handler 的手段；两个方向的漂移形态与为什么既有断言抓不到它们，见 `.ai/knowledge/server/operation-registration-gaps.md`。
 - 用真实 app 而非单测 handler，使「路由注册 + schema 兼容性」也进入验证范围：schema 超出运行时校验器可接受范围时，测试会在注册阶段失败。
 
 ## 影响

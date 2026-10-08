@@ -1,6 +1,6 @@
 # Contract Test 与 PostgreSQL 测试层次
 
-Contract Test 对真实 Fastify app 的 HTTP 行为、Glue 映射和原始 handler 输出分别断言；数据库行为测试使用独立 PostgreSQL 容器。单条断言的失败模式见 `.ai/knowledge/mock-server/serialization-masks-handler-regressions.md` 与 `.ai/knowledge/contract-tests/contract-parsing-constraints.md`。
+Contract Test 对真实 Fastify app 的 HTTP 行为、Glue 映射和原始 handler 输出分别断言；数据库行为测试使用独立 PostgreSQL 容器。单条断言的失败模式见 `.ai/knowledge/server/serialization-masks-handler-regressions.md` 与 `.ai/knowledge/contract-tests/contract-parsing-constraints.md`。
 
 _最后更新：2026-10-01_
 

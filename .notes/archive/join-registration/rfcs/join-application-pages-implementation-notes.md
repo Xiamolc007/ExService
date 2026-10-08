@@ -14,7 +14,7 @@
 
 ## 传输实现接缝
 
-源 RFC 的 preParsing 计数流需要额外适配：安装的 `@fastify/multipart` 10.1.2 从 request.raw 消费 parts。仅返回计数流不能保证 request.parts 经过预算。现行接线在 parts 读取期间使用计数 Transform，结束恢复原 IncomingMessage，并始终在原连接/响应监听断开及超时。失败、事务异常和响应完成都释放容量与请求私有 Buffer。长期维护陷阱见 `.ai/knowledge/mock-server/multipart-lifecycle-traps.md`。
+源 RFC 的 preParsing 计数流需要额外适配：安装的 `@fastify/multipart` 10.1.2 从 request.raw 消费 parts。仅返回计数流不能保证 request.parts 经过预算。现行接线在 parts 读取期间使用计数 Transform，结束恢复原 IncomingMessage，并始终在原连接/响应监听断开及超时。失败、事务异常和响应完成都释放容量与请求私有 Buffer。长期维护陷阱见 `.ai/knowledge/server/multipart-lifecycle-traps.md`。
 
 ## 社区链接与邀请基线
 

@@ -2,11 +2,11 @@
 
 本文件描述 `apps/server/` 从创建应用到返回响应，以及 PostgreSQL 的显式迁移边界。业务数据规则见 `.ai/databases/data-model.md`。
 
-_最后更新：2026-10-01_
+_最后更新：2026-10-08_
 
 ## 组装与请求
 
-`apps/server/src/app.ts` 读取 `api/openapi.yaml`，注入认证、资料、申请和邀请服务，以及可选的集成身份服务，以 `fastify-openapi-glue` 注册 `/api` 前缀、`serviceHandlers` 与 Bearer/服务间密钥 security handler。`createApp()` 可供测试使用而不监听端口；`apps/server/src/server.ts` 拥有连接池、可选 outbox worker 和监听生命周期。Contract Test 直接读取导出的 `serviceHandlers`，校验序列化前的原始结果。Fastify 的 schema 序列化可能掩盖 handler 漂移，见 `.ai/knowledge/mock-server/serialization-masks-handler-regressions.md`。
+`apps/server/src/app.ts` 读取 `api/openapi.yaml`，注入认证、资料、申请和邀请服务，以及可选的集成身份服务，以 `fastify-openapi-glue` 注册 `/api` 前缀、`serviceHandlers` 与 Bearer/服务间密钥 security handler。`createApp()` 可供测试使用而不监听端口；`apps/server/src/server.ts` 拥有连接池、可选 outbox worker 和监听生命周期。Contract Test 直接读取导出的 `serviceHandlers`，校验序列化前的原始结果。Fastify 的 schema 序列化可能掩盖 handler 漂移，见 `.ai/knowledge/server/serialization-masks-handler-regressions.md`。
 
 Glue 的 Bearer handler 等待异步会话验证后才把身份交给受保护 operation；服务间 operation 另用明确配置的调用方密钥。HTTP handler 等待服务结果后再设置响应状态与附件 header。错误统一由 `apps/server/src/errors.ts` 构造 envelope，未知数据库错误不回显 SQL、连接串或驱动消息。普通开发模式默认监听 `127.0.0.1:8080`；集成开发模式由 `SERVER_HOST` 和 `SERVER_PORT` 配置容器可达地址，公共 gateway 不暴露内部身份路径。
 

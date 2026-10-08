@@ -47,7 +47,7 @@
 1. 实现 API 调用前读取 `api/openapi.yaml`；不得臆造 endpoint、方法、参数或字段。
 2. API 变更先改 Contract，再运行 `pnpm api:lint` 和 `pnpm api:generate`。`packages/api-client/src/generated/schema.d.ts` 禁止手改，Contract 变更须同时提交重新生成的结果。
 3. 在 `apps/server/src/app.ts` 的 `serviceHandlers` 中显式登记 `operationId`，实现 handler，并通过共享 Client 接入前端。Contract 与登记表必须双向一致；文件名不参与映射。Glue 的 `/api` 前缀须显式配置，`servers[].url` 不能替代它。
-4. 新增或修改 operation 时同步更新 `tests/contract/`：校验真实 HTTP 响应及注册 handler 的原始返回值，防止序列化掩盖回归。原因见 `.ai/knowledge/mock-server/serialization-masks-handler-regressions.md` 与 `.ai/knowledge/mock-server/operation-registration-gaps.md`。
+4. 新增或修改 operation 时同步更新 `tests/contract/`：校验真实 HTTP 响应及注册 handler 的原始返回值，防止序列化掩盖回归。原因见 `.ai/knowledge/server/serialization-masks-handler-regressions.md` 与 `.ai/knowledge/server/operation-registration-gaps.md`。
 5. 完成 API 变更后运行 `pnpm typecheck`、`pnpm test`、`pnpm build`；自动检查、真实浏览器验收和部署验收分别报告。
 
 OpenAPI 3.1 schema 仅使用 JSON Schema Draft-07 兼容子集；引入 Draft 2020-12 专有语义前，须单独设计并确认 validator/serializer compiler。破坏性 Contract 变更须显式评审与版本化；不要自行发明版本策略或兼容层。
@@ -65,7 +65,7 @@ OpenAPI 3.1 schema 仅使用 JSON Schema Draft-07 兼容子集；引入 Draft 20
 - `DATABASE_URL` 与连接后的 `current_database()` 必须核验为独立 `exre`。Server 监听前检查数据库身份、migration 和必需结构；缺失时拒绝启动，提示显式迁移，不创建数据库、不隐式迁移或 reset。
 - 自动数据库测试使用 PostgreSQL Testcontainers 与逐用例 schema；Docker 不可用时明确失败，不回退本机开发库。
 - `apps/server/src/db/migrate.ts`、`apps/server/src/db/reset.ts` 是 CLI 入口，禁止 import；复用逻辑位于 `apps/server/src/db/migration-runner.ts`、`apps/server/src/db/reset-plan.ts`、`apps/server/src/db/client.ts`。
-- 头像位于 `apps/server/data/avatars/`，不得提交；启动和 reset 不删除头像，清理须显式核对数据库引用。数据库生命周期细节见 `.ai/architectures/mock-server/request-lifecycle.md`。
+- 头像位于 `apps/server/data/avatars/`，不得提交；启动和 reset 不删除头像，清理须显式核对数据库引用。数据库生命周期细节见 `.ai/architectures/server/request-lifecycle.md`。
 
 ## 运行与交付边界
 
