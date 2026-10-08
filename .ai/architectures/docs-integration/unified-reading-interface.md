@@ -2,7 +2,7 @@
 
 公共阅读与成员工作区共用 Outline 的布局、导航和正文呈现。共用组件不提供身份或授权；公共页面仍由当前公开可见性决定内容，成员页面仍由原工作区 policy 决定能力。
 
-_最后更新：2026-10-07_
+_最后更新：2026-10-08_
 
 ## 共用呈现
 
@@ -11,8 +11,8 @@ _最后更新：2026-10-07_
 | 页面框架 | `apps/outline/app/components/DocsLayout.tsx` 接收侧栏和内容插槽，集中拥有右侧栏、Portal 及可选 DocumentContext provider；不要求 User 或 Team。 |
 | 导航 | `apps/outline/app/components/Sidebar/DocsNavigation.tsx` 接收只包含标签、地址、子节点和选中/展开状态的投影。集合展开按钮与链接分开；成员个人功能通过受保护插槽提供。 |
 | 正文 | `apps/outline/app/scenes/Document/components/DocumentReadingFrame.tsx` 共用标题、正文宽度与目录位置。公共目录只接收 headings 和导航回调，不构造成员 Document。 |
-| 搜索 | `apps/outline/app/components/DocsSearch.tsx` 共用输入和结果呈现；成员与公共 adapter 分别处理自己的 DTO 和查询。 |
-| 状态 | `apps/outline/app/components/DocsStatus.tsx` 显示 Icon、Title、Content。加载图标遵守减少动态效果设置；失败使用错误图标、安全文案和真实 Retry callback。 |
+| 搜索 | `apps/outline/app/components/DocsSearch.tsx` 共用成员搜索的胶囊输入、筛选行、页面间距、无结果提示和结果呈现；两种页面使用同一个 Scene，成员与公共 adapter 分别处理自己的 DTO 和查询。公共文档集筛选只投影 PublicDocsStore 数据，不挂成员筛选或 Model；已就绪搜索页独自拥有 Header，公共外层在配置等待或失败时提供 Header。 |
+| 状态 | `apps/outline/app/components/DocsStatus.tsx` 显示 Icon、Title、Content。空状态以 Lucide Files 图标作为 Hero，说明补充标题而不重复；加载图标遵守减少动态效果设置；失败使用错误图标、安全文案和真实 Retry callback。 |
 
 `AuthenticatedLayout` 保留原用户/团队 hook、拖拽、快捷键、通知与个人工作区行为。`WebsitePublic` 不挂载这些身份专属组件。集成公共路由在 `apps/outline/app/routes/index.tsx` 登记，独立 Outline 的登录与共享路由仍保留原分支。
 
