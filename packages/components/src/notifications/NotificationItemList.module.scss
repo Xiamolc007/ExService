@@ -1,0 +1,108 @@
+/**
+ * 通知条目列表。
+ *
+ * 条目在 Popup 与历史 Modal 中共用同一套结构，只有容器宽度不同；
+ * 因此这里不写宽度，只写条目内部的排版与状态。
+ */
+
+.group {
+  gap: 0;
+}
+
+.item {
+  gap: 0;
+  padding: 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--exui-border-default);
+}
+
+.item:last-child {
+  border-bottom: 0;
+}
+
+/* 未读不只靠颜色：左侧色条 + meta 里的可读文本同时表达。 */
+.unread {
+  background: var(--exui-surface-secondary);
+  box-shadow: inset 3px 0 0 0 var(--exui-control-primary);
+}
+
+.selected {
+  background: var(--exui-surface-secondary);
+}
+
+.content {
+  min-width: 0;
+  gap: 0.3rem;
+  padding: 0.85rem 1.1rem;
+}
+
+.titleButton {
+  display: block;
+  width: 100%;
+  min-height: 2.25rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.title {
+  display: -webkit-box;
+  overflow: hidden;
+  font-weight: 600;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.titleButton:hover .title {
+  color: var(--exui-text-link);
+}
+
+.summary {
+  margin: 0;
+  color: var(--exui-text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--exui-text-secondary);
+  font-size: 0.7rem;
+}
+
+.tag {
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--exui-border-default);
+  border-radius: var(--exui-radius-full);
+}
+
+.state,
+.unreadState,
+.time {
+  white-space: nowrap;
+}
+
+.unreadState {
+  color: var(--exui-control-primary);
+  font-weight: 600;
+}
+
+.emptySlot {
+  min-width: 0;
+}
+
+@media (max-width: 42rem) {
+  .content {
+    padding: 0.8rem;
+  }
+}

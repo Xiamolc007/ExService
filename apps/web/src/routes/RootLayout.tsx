@@ -4,6 +4,9 @@ import { AuthModal, SiteHeader } from '@workspace/components'
 import type { SettingsCategory } from '@workspace/components'
 import { AuthFlow } from '@web/src/auth/AuthFlow'
 import { useAuth } from '@web/src/auth/AuthContext'
+import {
+  NotificationBellSlot, NotificationHistoryModalSlot, NotificationsProvider,
+} from '@web/src/notifications/NotificationsExperience'
 import { SettingsModal } from '@web/src/settings/SettingsExperience'
 import { InvitationRegistrationFlow } from '@web/src/invitations/InvitationRegistrationFlow'
 
@@ -36,19 +39,21 @@ export function RootLayout({ glassAtTop = false }: { glassAtTop?: boolean }) {
   }
 
   return (
-    <>
-      <SiteHeader glassAtTop={glassAtTop} mobileMenuButtonRef={mobileMenuButton} auth={{
-        state: auth.state,
-        onLogin: () => { authTrigger.current = 'login'; setLoginEmail(''); auth.openModal('login') },
-        onRegister: () => { authTrigger.current = 'register'; setLoginEmail(''); auth.openModal('register') },
-        onRetry: auth.retrySession,
-        onLogout: auth.logout,
-        onProfile: () => setSettingsCategory('profile'),
-        onSettings: () => setSettingsCategory('general'),
-        menuButtonRef: menuButton,
-        registerButtonRef: registerButton,
-        loginButtonRef: loginButton,
-      }} />
+    // 通知状态与 API 归 `apps/web`；铃铛只是顶栏的一个槽位，Modal 由门户挂载。
+    <NotificationsProvider>
+      <SiteHeader glassAtTop={glassAtTop} mobileMenuButtonRef={mobileMenuButton}
+        notifications={<NotificationBellSlot />} auth={{
+          state: auth.state,
+          onLogin: () => { authTrigger.current = 'login'; setLoginEmail(''); auth.openModal('login') },
+          onRegister: () => { authTrigger.current = 'register'; setLoginEmail(''); auth.openModal('register') },
+          onRetry: auth.retrySession,
+          onLogout: auth.logout,
+          onProfile: () => setSettingsCategory('profile'),
+          onSettings: () => setSettingsCategory('general'),
+          menuButtonRef: menuButton,
+          registerButtonRef: registerButton,
+          loginButtonRef: loginButton,
+        }} />
       <Outlet />
       {settingsCategory !== null && auth.state.status !== 'anonymous' &&
         <SettingsModal key={settingsCategory} initialCategory={settingsCategory}
@@ -76,6 +81,7 @@ export function RootLayout({ glassAtTop = false }: { glassAtTop?: boolean }) {
           />}
         </AuthModal>
       )}
-    </>
+      <NotificationHistoryModalSlot />
+    </NotificationsProvider>
   )
 }

@@ -130,6 +130,7 @@ export function createAppWithStorage(fixture: TestAuth, storage: StorageServices
     joinServices: fixture.joinServices,
     invitationServices: fixture.invitationServices,
     storageServices: storage,
+    notifications: fixture.notifications,
   })
 }
 

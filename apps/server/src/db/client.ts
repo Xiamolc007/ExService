@@ -53,10 +53,21 @@ const millisecondColumns = new Set([
   'failure_window_started_at', 'started_at', 'finished_at', 'n',
 ])
 
+/**
+ * 持久通知的时间戳列。node-postgres 把 `bigint` 作为字符串返回，
+ * 与账号/申请模块的做法一致：按列名显式转成安全整数。
+ */
+const notificationMillisecondColumns = new Set([
+  'occurred_at', 'available_at', 'withdrawn_at', 'delivered_at', 'read_at', 'cleared_at',
+  'decided_at', 'projection_lease_expires_at', 'projection_next_attempt_at',
+  'projection_completed_at', 'preview_expires_at', 'applied_at', 'restored_at', 'updated_at',
+])
+
 function convertRows<Row extends QueryResultRow>(rows: Row[]): Row[] {
   for (const row of rows) {
     for (const [key, value] of Object.entries(row)) {
-      if (value !== null && value !== undefined && millisecondColumns.has(key) &&
+      if (value !== null && value !== undefined &&
+          (millisecondColumns.has(key) || notificationMillisecondColumns.has(key)) &&
           (typeof value === 'string' || typeof value === 'number')) {
         ;(row as QueryResultRow)[key] = safeInteger(value, key)
       }

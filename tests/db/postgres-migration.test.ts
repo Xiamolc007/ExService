@@ -4,9 +4,52 @@ import { openDatabase } from '@server/src/db/client'
 import { resetDatabase } from '@server/src/db/reset-plan'
 import { isolatedPostgres } from '@tests/helpers/postgres'
 import { Client } from 'pg'
+import { readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 
 const resources: Array<{ close(): Promise<void> }> = []
 afterEach(async () => { await Promise.all(resources.splice(0).map(resource => resource.close())) })
+
+async function installMigrationPrefix(isolated: Awaited<ReturnType<typeof isolatedPostgres>>, count: number) {
+  const folder = new URL('../../apps/server/drizzle/', import.meta.url)
+  const journal = JSON.parse(readFileSync(new URL('meta/_journal.json', folder), 'utf8')) as {
+    entries: Array<{ tag: string; when: number }>
+  }
+  await isolated.db.transaction(async tx => {
+    await tx.query('CREATE TABLE __drizzle_migrations (id serial PRIMARY KEY, hash text NOT NULL, created_at bigint)')
+    for (const migration of journal.entries.slice(0, count)) {
+      const source = readFileSync(new URL(`${migration.tag}.sql`, folder), 'utf8')
+      for (const sql of source.split('--> statement-breakpoint')) await tx.query(sql)
+      await tx.query('INSERT INTO __drizzle_migrations (hash, created_at) VALUES ($1, $2)',
+        [createHash('sha256').update(source).digest('hex'), migration.when])
+    }
+  })
+}
+
+it.each([1, 2])('upgrades the complete %i-migration historical schema without replacing data', async count => {
+  const isolated = await isolatedPostgres({ migrate: false })
+  resources.push(isolated)
+  await installMigrationPrefix(isolated, count)
+  await isolated.db.query("INSERT INTO auth_users (id,email,nickname,password_hash,created_at) VALUES ('retained','retained@example.com','Retained','hash',1)")
+  const before = (await isolated.db.query('SELECT id,email,nickname,password_hash,created_at FROM auth_users')).rows
+  await runMigrations({ connectionString: isolated.connectionString, searchPath: isolated.schema, migrationsSchema: isolated.schema })
+  expect((await isolated.db.query('SELECT id,email,nickname,password_hash,created_at FROM auth_users')).rows).toEqual(before)
+  expect((await isolated.db.query('SELECT count(*)::integer AS n FROM notification_receipts')).rows).toEqual([{ n: 0 }])
+  expect((await isolated.db.query('SELECT count(*)::integer AS n FROM __drizzle_migrations')).rows).toEqual([{ n: 3 }])
+})
+
+it('refuses a historical schema with a substituted table before applying pending migrations', async () => {
+  const isolated = await isolatedPostgres({ migrate: false })
+  resources.push(isolated)
+  await installMigrationPrefix(isolated, 2)
+  await isolated.db.query('DROP TABLE auth_identity_outbox')
+  await isolated.db.query('CREATE TABLE notification_contents (content_id text PRIMARY KEY)')
+  const before = (await isolated.db.query('SELECT * FROM __drizzle_migrations ORDER BY id')).rows
+  await expect(runMigrations({ connectionString: isolated.connectionString, searchPath: isolated.schema, migrationsSchema: isolated.schema }))
+    .rejects.toThrow('部分迁移')
+  expect((await isolated.db.query('SELECT * FROM __drizzle_migrations ORDER BY id')).rows).toEqual(before)
+  expect((await isolated.db.query("SELECT to_regclass('notification_receipts') AS name")).rows).toEqual([{ name: null }])
+})
 
 it('migrates an empty isolated exre schema and leaves its baseline intact on rerun', async () => {
   const isolated = await isolatedPostgres({ migrate: false })

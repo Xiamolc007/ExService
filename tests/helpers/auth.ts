@@ -9,6 +9,7 @@ import type { InvitationMail } from '@server/src/invitations/mail'
 import { JoinService } from '@server/src/join/service'
 import { createStorageModule } from '@server/src/modules/storage/factory'
 import { parseStorageConfig } from '@server/src/modules/storage/config'
+import { createNotificationModule } from '@server/src/modules/notifications/factory'
 import { isolatedPostgres } from './postgres'
 
 export const testPasswordHasher: PasswordHasher = {
@@ -58,8 +59,12 @@ export async function createTestAuth(overrides: Partial<AuthServiceDependencies 
   // 存储模块默认只启用本地介质，并写入临时目录，不触碰开发 data。
   const storageDirectory = mkdtempSync(resolve(tmpdir(), 'exwebsite-storage-'))
   const storageServices = createStorageModule({ config: parseStorageConfig({}, { dataRoot: storageDirectory }) })
+  // 通知模块使用同一隔离 schema 与注入的时钟/ID，不启动后台 worker，
+  // 测试需要投影时显式调用一次 runRound。
+  const notifications = createNotificationModule({ db, tokenKey: Buffer.alloc(32, 3), now })
   return { db, connectionString: isolated.connectionString, schema: isolated.schema,
-    authServices, invitationServices, joinServices, profileServices, storageServices, avatarDirectory, deliveries, now,
+    authServices, invitationServices, joinServices, profileServices, storageServices, notifications,
+    avatarDirectory, deliveries, now,
     async seedUser(input: { email: string; nickname: string; password: string }) {
       const id = createUserId(), hash = await passwordHasher.hash(input.password)
       await db.query('INSERT INTO auth_users (id, email, nickname, password_hash, created_at) VALUES ($1, $2, $3, $4, $5)',

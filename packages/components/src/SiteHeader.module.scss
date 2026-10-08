@@ -68,9 +68,23 @@
   display: none;
 }
 
+.notificationsSlot {
+  display: flex;
+  align-items: center;
+}
+
+/* 未登录时槽位是空的，不能因为空节点在 flex 里留出一份 gap。 */
+.notificationsSlot:empty {
+  display: none;
+}
+
+.desktopAuth {
+  display: contents;
+}
+
 @media (max-width: 52rem) {
   .inner {
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
     gap: 0;
     padding-inline: 1rem;
   }
@@ -84,7 +98,14 @@
     display: none;
   }
 
+  /* 窄屏保留通知入口，只把桌面账号区换成下面的 Select。 */
   .end {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+  }
+
+  .desktopAuth {
     display: none;
   }
 
@@ -97,7 +118,7 @@
 
   .mobileAccount {
     display: block;
-    grid-column: 3;
+    grid-column: 4;
     grid-row: 1;
     justify-self: end;
   }

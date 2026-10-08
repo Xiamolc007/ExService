@@ -590,6 +590,210 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the authenticated user's own persistent notifications
+         * @description Keyset pagination over the personal sequence, newest first. `view=unread` applies the unread predicate (uncleared, unread, not expired); `view=history` returns every uncleared receipt including read and expired ones. Neither view includes cleared, withdrawn or unauthorized content, and no view writes state. Filters never change the global unread count, which always comes from `GET /notifications/summary`. The cursor is signed and bound to the user, view, filters and an upper sequence bound, so a later page may return fewer rows when authorization or lifecycle changes; the caller deduplicates by `receiptId`.
+         */
+        get: operations["listNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the authenticated user's global unread count
+         * @description Counts the unread predicate over the whole personal history, never the current filter or a loaded page only. Pending projection, cleared, expired, withdrawn and unauthorized receipts are excluded. `stateVersion` is a hint that personal state changed; it is not a cache key for the count because expiry and withdrawal do not always bump it.
+         */
+        get: operations["getNotificationSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/{notificationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one own notification with its safe body and resolved actions
+         * @description Read-only. Returns the canonical safe HTML body only when the content schema and policy are still renderable; otherwise `content` is null and the plain-text fallback carries the safe text. A receipt that is no longer visible returns a neutral 404 without leaking the title. Reading does not mark the notification read.
+         */
+        get: operations["getNotification"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/{notificationId}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Mark one own notification read or unread
+         * @description Only the read flag is writable; there is no archive, no arbitrary resource and no body update. `expectedRevision` is the receipt state revision returned by the list or detail call. A stale revision returns 409 without changing state, a no-op does not increment the revision, and a failed write leaves the notification unread.
+         */
+        patch: operations["updateNotificationState"];
+        trace?: never;
+    };
+    "/notifications/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark every currently unread notification read, up to a signed bound
+         * @description Global in scope and independent of any list filter. Only receipts that satisfy the unread predicate at execution time and sit at or below `readThroughToken`'s bound are changed; newly arrived or late-projected receipts with a larger sequence stay unread. Cleared, expired and already-read receipts are not rewritten. `requestId` is the idempotency key: replaying it returns the original terminal result without writing state again, and reusing it with a different body returns 409.
+         */
+        post: operations["markNotificationsReadThrough"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/clear-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview a recoverable clear of the whole personal history
+         * @description Snapshots every uncleared receipt the caller could see at preview time, regardless of the current filter or of which pages were loaded, and records the exact receipt set with each receipt's clear revision. The body is closed and empty. The returned token is bound to the caller and expires in 10 minutes; a preview that was never submitted stops being executable when it expires and never stores a body.
+         */
+        post: operations["previewNotificationClear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/clear-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clear exactly the previewed personal history, recoverably
+         * @description Applies the snapshot recorded by `previewNotificationClear`. Only receipts that still belong to the caller, are still visible, are still uncleared and still carry the previewed clear revision are cleared; a receipt that was restored, cleared again or cleared later from another device is skipped rather than overwritten. Clearing sets the personal clear state only: it never writes `readAt`, never deletes the source content, event or business record, and never emits a business event or webhook. The result is idempotent per `requestId`.
+         */
+        post: operations["clearNotificationsSnapshot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/clear-batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the authenticated user's own clear batches
+         * @description Returns clear-batch metadata only: date, counts, status and how many of that batch's items are currently restorable. It never lists preview-only batches, never returns notification bodies or titles and never mixes cleared notifications into the notification list.
+         */
+        get: operations["listNotificationClearBatches"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/clear-batches/{batchId}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore the items one clear batch actually cleared
+         * @description Restores only the receipts that this batch cleared and that are still cleared by this same batch at the same applied clear revision; receipts cleared again later are not swept in. Each receipt is re-checked against the current read predicate: withdrawn or unauthorized items are skipped without returning private content, and expired items return to history without becoming unread again. Unread and unexpired receipts therefore re-enter the unread count. A partial restore is a normal outcome. `requestId` is the idempotency key for this restore intent.
+         */
+        post: operations["restoreNotificationClearBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notification-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the authenticated user's notification preferences
+         * @description Returns the effective preferences, including defaults for a user with no stored row. Necessary notices are fixed by the catalog and cannot be switched off, so they are reported as explanation only and are never writable. Preferences are independent of `GET /auth/me`.
+         */
+        get: operations["getNotificationPreferences"];
+        /**
+         * Replace the authenticated user's optional notification preferences
+         * @description A complete replacement of the optional categories, not a patch. `expectedRevision` must match the stored revision; a stale revision returns 409 and the caller re-reads before retrying. Turning a category off stops future optional projection of that category and never deletes already-delivered history; turning it back on does not re-deliver suppressed events.
+         */
+        put: operations["updateNotificationPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1037,6 +1241,189 @@ export interface components {
             /** @constant */
             status: "completed";
             ssoRequestId: components["schemas"]["OpaqueIdentifier"];
+        };
+        /** @enum {string} */
+        NotificationView: "unread" | "history";
+        /** @enum {string} */
+        NotificationScopeFilter: "all" | "community" | "personal";
+        /** @enum {string} */
+        NotificationCategory: "announcement" | "personal_update" | "service_notice";
+        /** @description 服务端签名的分页游标，绑定本人、视图、筛选与上界；不透明、不可猜测、不可跨身份或跨视图复用。 */
+        NotificationCursor: string;
+        /** @description 服务端签名的短时令牌，绑定本人、用途与到期时间；不可跨身份或跨用途复用。 */
+        NotificationToken: string;
+        NotificationItem: {
+            receiptId: components["schemas"]["Uuid"];
+            title: string;
+            summaryText: string;
+            /** @enum {string} */
+            scope: "community" | "personal";
+            category: components["schemas"]["NotificationCategory"];
+            /** @enum {string} */
+            necessity: "optional" | "necessary";
+            sequence: number;
+            deliveredAt: components["schemas"]["SafeTimestamp"];
+            readAt: number | null;
+            expired: boolean;
+            stateRevision: number;
+        };
+        NotificationList: {
+            items: components["schemas"]["NotificationItem"][];
+            nextCursor: string | null;
+            unreadCount: number;
+            upperSequence: number;
+            readThroughToken: components["schemas"]["NotificationToken"];
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        NotificationSummary: {
+            unreadCount: number;
+            stateVersion: number;
+            upperSequence: number;
+            readThroughToken: components["schemas"]["NotificationToken"];
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        NotificationContent: {
+            /** @constant */
+            format: "html";
+            /** @constant */
+            schemaVersion: 1;
+            /** @constant */
+            policyVersion: "notification-html-v1";
+            /** @description 已按当前策略规范化并重新校验的安全 HTML；正文不含脚本、事件属性、样式、内嵌资源或可执行组件。 */
+            html: string;
+            /** @description 由安全树派生的完整纯文本，供格式不可用时回退展示。 */
+            text: string;
+        };
+        NotificationAction: {
+            actionId: string;
+            /** @enum {string} */
+            kind: "navigate" | "command";
+            label: string;
+            /** @enum {string} */
+            emphasis: "primary" | "secondary";
+            enabled: boolean;
+            unavailableReason: null | ("unsupported" | "expired" | "forbidden" | "state_changed");
+            navigationTarget: {
+                /** @constant */
+                kind: "internal";
+                path: string;
+            } | null;
+        };
+        NotificationDetail: {
+            receiptId: components["schemas"]["Uuid"];
+            title: string;
+            /** @enum {string} */
+            scope: "community" | "personal";
+            category: components["schemas"]["NotificationCategory"];
+            /** @enum {string} */
+            necessity: "optional" | "necessary";
+            sequence: number;
+            deliveredAt: components["schemas"]["SafeTimestamp"];
+            readAt: number | null;
+            clearedAt: number | null;
+            /** @enum {string} */
+            lifecycle: "active" | "expired";
+            stateRevision: number;
+            clearRevision: number;
+            contentAvailable: boolean;
+            /** @description 当前策略下可安全渲染的正文；不可用时为 null，调用方必须改用 contentFallbackText，不得展示原始 HTML。 */
+            content: (components["schemas"]["NotificationContent"] | null) & components["schemas"]["NotificationContent"];
+            contentFallbackText: string | null;
+            actions: components["schemas"]["NotificationAction"][];
+            actionsAvailable: boolean;
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        NotificationState: {
+            receiptId: components["schemas"]["Uuid"];
+            read: boolean;
+            stateRevision: number;
+            unreadCount: number;
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        NotificationStateUpdateRequest: {
+            read: boolean;
+            expectedRevision: number;
+        };
+        NotificationReadAllRequest: {
+            requestId: components["schemas"]["Uuid"];
+            readThroughToken: components["schemas"]["NotificationToken"];
+        };
+        NotificationReadAllResult: {
+            requestId: components["schemas"]["Uuid"];
+            affectedCount: number;
+            watermarkSequence: number;
+            unreadCount: number;
+            replayed: boolean;
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        /** @description 封闭且为空；清理范围永远由服务端按当时全局未清理历史决定，不接受客户端筛选、行数或时间推断。 */
+        NotificationClearPreviewRequest: Record<string, never>;
+        NotificationClearPreview: {
+            batchId: components["schemas"]["Uuid"];
+            itemCount: number;
+            upperSequence: number;
+            clearSnapshotToken: components["schemas"]["NotificationToken"];
+            expiresAt: components["schemas"]["SafeTimestamp"];
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        NotificationClearAllRequest: {
+            requestId: components["schemas"]["Uuid"];
+            clearSnapshotToken: components["schemas"]["NotificationToken"];
+        };
+        NotificationClearResult: {
+            requestId: components["schemas"]["Uuid"];
+            batchId: components["schemas"]["Uuid"];
+            affectedCount: number;
+            skippedCount: number;
+            unreadCount: number;
+            replayed: boolean;
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        NotificationClearBatchItem: {
+            batchId: components["schemas"]["Uuid"];
+            itemCount: number;
+            affectedCount: number;
+            skippedCount: number;
+            restorableCount: number;
+            /** @enum {string} */
+            status: "applied" | "restored" | "partial";
+            createdAt: components["schemas"]["SafeTimestamp"];
+            appliedAt: number | null;
+            restoredAt: number | null;
+        };
+        NotificationClearBatchList: {
+            items: components["schemas"]["NotificationClearBatchItem"][];
+            nextCursor: string | null;
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        NotificationRestoreRequest: {
+            requestId: components["schemas"]["Uuid"];
+        };
+        NotificationRestoreResult: {
+            requestId: components["schemas"]["Uuid"];
+            batchId: components["schemas"]["Uuid"];
+            affectedCount: number;
+            skippedCount: number;
+            unreadCount: number;
+            replayed: boolean;
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        NotificationPreferences: {
+            revision: number;
+            optionalCategories: {
+                announcement: boolean;
+                personal_update: boolean;
+            };
+            /** @description 由 catalog 固定的必要类别，展示说明用，不可写入也不可关闭。 */
+            necessaryCategories: components["schemas"]["NotificationCategory"][];
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        NotificationPreferencesUpdateRequest: {
+            expectedRevision: number;
+            optionalCategories: {
+                announcement: boolean;
+                personal_update: boolean;
+            };
         };
         HealthResponse: {
             /** @constant */
@@ -2168,6 +2555,339 @@ export interface operations {
             400: components["responses"]["ErrorResponse"];
             404: components["responses"]["ErrorResponse"];
             408: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    listNotifications: {
+        parameters: {
+            query: {
+                /** @description Which personal predicate to read. */
+                view: components["schemas"]["NotificationView"];
+                /** @description Optional scope filter. Omitted means all scopes. */
+                scope?: components["schemas"]["NotificationScopeFilter"];
+                /** @description Optional closed category filter. Omitted means all categories. */
+                category?: components["schemas"]["NotificationCategory"];
+                /** @description Page size. Defaults to 20. */
+                limit?: number;
+                /** @description Opaque signed cursor returned by a previous page of the same view and filters. */
+                cursor?: components["schemas"]["NotificationCursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of notification metadata, without bodies. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationList"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            410: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    getNotificationSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Global unread count and a fresh read-through token. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSummary"];
+                };
+            };
+            401: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    getNotification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The caller's own receipt id. */
+                notificationId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The notification, its content and its resolved actions. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationDetail"];
+                };
+            };
+            401: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    updateNotificationState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The caller's own receipt id. */
+                notificationId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationStateUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated receipt state. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationState"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    markNotificationsReadThrough: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationReadAllRequest"];
+            };
+        };
+        responses: {
+            /** @description The terminal result for this request id. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationReadAllResult"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            410: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    previewNotificationClear: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationClearPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description The previewed clear scope and its signed token. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationClearPreview"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    clearNotificationsSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationClearAllRequest"];
+            };
+        };
+        responses: {
+            /** @description The terminal result for this request id. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationClearResult"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            410: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    listNotificationClearBatches: {
+        parameters: {
+            query?: {
+                /** @description Page size. Defaults to 20. */
+                limit?: number;
+                /** @description Opaque signed cursor returned by a previous page. */
+                cursor?: components["schemas"]["NotificationCursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of clear batches. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationClearBatchList"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            410: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    restoreNotificationClearBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The caller's own clear batch id. */
+                batchId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationRestoreRequest"];
+            };
+        };
+        responses: {
+            /** @description The terminal result for this request id. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationRestoreResult"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    getNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's effective notification preferences. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferences"];
+                };
+            };
+            401: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    updateNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationPreferencesUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description The stored preferences after the update. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferences"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
             default: components["responses"]["ErrorResponse"];
         };
     };

@@ -2,7 +2,7 @@
 
 本文件记录表的业务职责、关系和必须保留的数据规则。它是修改模型前的设计入口，不代替可执行结构：PostgreSQL 结构以 `apps/server/src/db/schema.ts` 和 `apps/server/drizzle/` 为准；HTTP 字段与行为以 `api/openapi.yaml` 为准。
 
-_最后更新：2026-10-01_
+_最后更新：2026-10-08_
 
 ## 适用范围
 
@@ -78,6 +78,40 @@ binding 创建使用同一会话锁并复核有效性。会话到期清理先为
 审批事务先提交同意结果、邀请和投递记录，再在事务外调用适配器；投递失败不回滚审批。当前公开临时审核、审核人为空，不具备公网生产权限方案。
 
 PostgreSQL 基线从空库一次创建当前有效表及 `admin` 社区组，不回放 SQLite migration，也不导入旧注册材料。迁移与重置的操作边界见 `.ai/databases/knowledge/database-lifecycle-traps.md` 和 `.ai/databases/decisions/03-database-changes-only-by-explicit-command.md`。
+
+## 持久通知模型
+
+持久通知使用「事件 → 共享内容 → 本人收件状态」三层结构，全部落在 `exre` 数据库。设计入口为 `.notes/notifications/specs/2026-10-08-persistent-notifications-v2.1-design.md`；HTTP 字段与行为仍以 `api/openapi.yaml` 为准。
+
+```mermaid
+erDiagram
+    auth_users ||--o{ notification_events : "可作为发布 actor"
+    auth_users ||--o{ notification_event_recipients : "受众快照"
+    auth_users ||--o{ notification_receipts : "本人收件"
+    auth_users ||--o| notification_user_streams : "本人序列"
+    auth_users ||--o| notification_preferences : "本人偏好"
+    auth_users ||--o{ notification_mutations : "本人命令去重"
+    auth_users ||--o{ notification_clear_batches : "本人清理批次"
+    notification_contents ||--o{ notification_events : "被发布事件引用"
+    notification_contents ||--o{ notification_receipts : "共享给每个收件人"
+    notification_events ||--o{ notification_event_recipients : "提交时固定受众"
+    notification_clear_batches ||--o{ notification_clear_batch_items : "精确预览集合"
+    notification_receipts ||--o{ notification_clear_batch_items : "被预览记录"
+```
+
+| PostgreSQL 表 | 职责 | 关键标识与约束 |
+| --- | --- | --- |
+| `notification_events` | 保存已提交的业务事实：事件类型/版本、源与 revision、scope、actor、去重键、规范化摘要和封闭 data，以及站内投影的进度。 | `eventId` 主键；`dedupeKey` 唯一。同 key 同摘要重放返回原事实，异摘要为冲突，由唯一约束裁决。投影状态为 pending、completed、failed；lease 与下次时间只服务单实例 worker 的认领与恢复，不代表已投递。 |
+| `notification_event_recipients` | 保存提交时精确的账号受众快照，不按昵称、邮箱或后来的成员关系推断。 | `(eventId, userId)` 唯一；状态为 pending、delivered、suppressed_preference、skipped_disabled、expired、withdrawn。终态不重投，suppressed 不算 delivered。 |
+| `notification_contents` | 保存单个 publication 的标题与规范化受限 HTML、纯文本、派生摘要，以及模板/策略版本、scope、类别、catalog 必要性、结构化 actions 与生效/过期/撤回时间。 | `contentId` 主键；内容为不可变 publication，修正产生新 publication 而非原地改写。只保存已通过安全策略的规范化 HTML，不保存不受控原始输入。 |
+| `notification_user_streams` | 保存每人序列分配与状态版本，供 keyset 分页、清理上界和投影串行化使用。 | `userId` 主键；`lastSequence` 在同事务内分配，`stateVersion` 只用于状态变化提示，不保存易漂移的未读计数。 |
+| `notification_receipts` | 保存本人的收件状态：投递、已读、可恢复清理与个人状态版本。 | `receiptId` 主键；`(contentId, userId)` 唯一保证同一内容不重复投影，`(userId, sequence)` 唯一保证序列稳定。外键限制删除。清理只改本人行，不删源内容、事件或业务记录；不含 `archivedAt`。 |
+| `notification_preferences` | 保存本人可选类别的站内开关与 revision。 | `userId` 主键；无行按默认值处理。必要通知由 catalog 决定，不接受关闭，也不接受未启用渠道或服务器字段。 |
+| `notification_mutations` | 保存本人命令的终态结果，供 read-all、clear、restore 按 `(userId, requestId)` 去重重放。 | `(userId, requestId)` 唯一；保存输入摘要与终态结果，不保存正文或凭据。 |
+| `notification_clear_batches` | 保存本人清理预览与执行事实：快照标识、上界序列、预览到期、状态和计数。 | `batchId` 主键；状态为 preview、applied、restored。它不是内容历史列表，不保存正文。 |
+| `notification_clear_batch_items` | 保存预览时的精确 receipt 集合及各 `expectedClearRevision`，执行时记录 `appliedClearRevision`。 | `(batchId, receiptId)` 唯一；用于避免后到、已恢复或已被再次清理的项被旧命令覆盖。 |
+
+规则：源事实、受众快照与内容在一次短写事务中提交，任一步失败全部回滚；投影只消费已提交事实，不扩大受众。服务级通知、活动/报名表、真实第三方 webhook 表与业务 Action 命令表都没有真实业务或授权模型支撑，当前不建表、不注册可用能力。N1 不自动物理删除，清理是本人可恢复的软清理。
 
 ## 头像与社区身份
 

@@ -21,7 +21,42 @@ export type { ProfileEditorProps, ProfileTextValues } from '@components/src/Prof
 export { ContentAreaState, SettingsContentSkeleton } from '@components/src/ContentAreaState'
 export type { ContentAreaStateProps } from '@components/src/ContentAreaState'
 export { SettingsPanel } from '@components/src/SettingsPanel'
-export type { SettingsPanelProps, SettingsCategory, SettingsTheme, SettingsField } from '@components/src/SettingsPanel'
+export type {
+  SettingsPanelProps, SettingsCategory, SettingsTheme, SettingsField, SettingsNotificationsSlice,
+} from '@components/src/SettingsPanel'
+
+// 持久通知：共享 UI 只收 props/callback，API 与状态归 `apps/web`。
+export { NotificationBell } from '@components/src/notifications/NotificationBell'
+export type { NotificationBellProps, NotificationPopupStatus } from '@components/src/notifications/NotificationBell'
+export { NotificationBody, hasRenderableNotificationBody } from '@components/src/notifications/NotificationBody'
+export type { NotificationBodyProps } from '@components/src/notifications/NotificationBody'
+export { NotificationItemList } from '@components/src/notifications/NotificationItemList'
+export type { NotificationItemListProps } from '@components/src/notifications/NotificationItemList'
+export { NotificationHistoryModal } from '@components/src/notifications/NotificationHistoryModal'
+export type {
+  NotificationHistoryModalProps, NotificationAsyncStatus, NotificationListSlice,
+  NotificationDetailSlice, NotificationBulkSlice, NotificationRecordsSlice,
+  NotificationConfirmSlice,
+} from '@components/src/notifications/NotificationHistoryModal'
+export { NotificationPreferencesForm } from '@components/src/notifications/NotificationPreferencesForm'
+export type {
+  NotificationPreferencesFormProps, NotificationPreferencesDraft,
+} from '@components/src/notifications/NotificationPreferencesForm'
+export {
+  parseNotificationContent, NOTIFICATION_CONTENT_POLICY_VERSION, NOTIFICATION_CONTENT_SCHEMA_VERSION,
+} from '@components/src/notifications/notificationContent'
+export type {
+  NotificationContentInput, SafeContentNode, SafeElementNode, SafeTextNode, SafeContentTag,
+} from '@components/src/notifications/notificationContent'
+export {
+  formatClearBatchTime, formatNotificationTime, formatUnreadBadge, isNotificationUnread,
+  notificationActionReasonLabel, notificationCategoryLabel, notificationStateLabel,
+} from '@components/src/notifications/notificationsView'
+export type {
+  NotificationActionView, NotificationCategory, NotificationClearBatchView, NotificationCountState,
+  NotificationDetailView, NotificationHistoryFilter, NotificationItemView, NotificationLifecycle,
+  NotificationNecessity, NotificationScope, NotificationActionUnavailableReason,
+} from '@components/src/notifications/notificationsView'
 export { AuthForm } from '@components/src/auth/AuthForm'
 export type {
   AuthFormErrors,

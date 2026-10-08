@@ -19,6 +19,8 @@ tags:
     description: Hydra 登录确认与受控服务间会话核验。
   - name: storage
     description: 通用内容存储的上传、直传确认与本地公开读取。
+  - name: notifications
+    description: 站内持久通知的收件箱、已读、可恢复清理与通知偏好。
 paths:
   /health:
     get:
@@ -1164,6 +1166,414 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
         '408':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /notifications:
+    get:
+      operationId: listNotifications
+      summary: List the authenticated user's own persistent notifications
+      description: 'Keyset pagination over the personal sequence, newest first. `view=unread` applies the unread predicate (uncleared, unread, not expired); `view=history` returns every uncleared receipt including read and expired ones. Neither view includes cleared, withdrawn or unauthorized content, and no view writes state. Filters never change the global unread count, which always comes from `GET /notifications/summary`. The cursor is signed and bound to the user, view, filters and an upper sequence bound, so a later page may return fewer rows when authorization or lifecycle changes; the caller deduplicates by `receiptId`.'
+      security:
+        - bearerAuth: []
+      tags: [notifications]
+      parameters:
+        - name: view
+          in: query
+          required: true
+          description: 'Which personal predicate to read.'
+          schema:
+            $ref: '#/components/schemas/NotificationView'
+        - name: scope
+          in: query
+          required: false
+          description: 'Optional scope filter. Omitted means all scopes.'
+          schema:
+            $ref: '#/components/schemas/NotificationScopeFilter'
+        - name: category
+          in: query
+          required: false
+          description: 'Optional closed category filter. Omitted means all categories.'
+          schema:
+            $ref: '#/components/schemas/NotificationCategory'
+        - name: limit
+          in: query
+          required: false
+          description: 'Page size. Defaults to 20.'
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+        - name: cursor
+          in: query
+          required: false
+          description: 'Opaque signed cursor returned by a previous page of the same view and filters.'
+          schema:
+            $ref: '#/components/schemas/NotificationCursor'
+      responses:
+        '200':
+          description: 'One page of notification metadata, without bodies.'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationList'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '410':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /notifications/summary:
+    get:
+      operationId: getNotificationSummary
+      summary: Read the authenticated user's global unread count
+      description: 'Counts the unread predicate over the whole personal history, never the current filter or a loaded page only. Pending projection, cleared, expired, withdrawn and unauthorized receipts are excluded. `stateVersion` is a hint that personal state changed; it is not a cache key for the count because expiry and withdrawal do not always bump it.'
+      security:
+        - bearerAuth: []
+      tags: [notifications]
+      responses:
+        '200':
+          description: 'Global unread count and a fresh read-through token.'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationSummary'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /notifications/{notificationId}:
+    get:
+      operationId: getNotification
+      summary: Read one own notification with its safe body and resolved actions
+      description: 'Read-only. Returns the canonical safe HTML body only when the content schema and policy are still renderable; otherwise `content` is null and the plain-text fallback carries the safe text. A receipt that is no longer visible returns a neutral 404 without leaking the title. Reading does not mark the notification read.'
+      security:
+        - bearerAuth: []
+      tags: [notifications]
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          description: 'The caller''s own receipt id.'
+          schema:
+            $ref: '#/components/schemas/Uuid'
+      responses:
+        '200':
+          description: 'The notification, its content and its resolved actions.'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationDetail'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /notifications/{notificationId}/state:
+    patch:
+      operationId: updateNotificationState
+      summary: Mark one own notification read or unread
+      description: 'Only the read flag is writable; there is no archive, no arbitrary resource and no body update. `expectedRevision` is the receipt state revision returned by the list or detail call. A stale revision returns 409 without changing state, a no-op does not increment the revision, and a failed write leaves the notification unread.'
+      security:
+        - bearerAuth: []
+      tags: [notifications]
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          description: 'The caller''s own receipt id.'
+          schema:
+            $ref: '#/components/schemas/Uuid'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationStateUpdateRequest'
+      responses:
+        '200':
+          description: 'The updated receipt state.'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationState'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /notifications/read-all:
+    post:
+      operationId: markNotificationsReadThrough
+      summary: Mark every currently unread notification read, up to a signed bound
+      description: 'Global in scope and independent of any list filter. Only receipts that satisfy the unread predicate at execution time and sit at or below `readThroughToken`''s bound are changed; newly arrived or late-projected receipts with a larger sequence stay unread. Cleared, expired and already-read receipts are not rewritten. `requestId` is the idempotency key: replaying it returns the original terminal result without writing state again, and reusing it with a different body returns 409.'
+      security:
+        - bearerAuth: []
+      tags: [notifications]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationReadAllRequest'
+      responses:
+        '200':
+          description: 'The terminal result for this request id.'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationReadAllResult'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '410':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /notifications/clear-preview:
+    post:
+      operationId: previewNotificationClear
+      summary: Preview a recoverable clear of the whole personal history
+      description: 'Snapshots every uncleared receipt the caller could see at preview time, regardless of the current filter or of which pages were loaded, and records the exact receipt set with each receipt''s clear revision. The body is closed and empty. The returned token is bound to the caller and expires in 10 minutes; a preview that was never submitted stops being executable when it expires and never stores a body.'
+      security:
+        - bearerAuth: []
+      tags: [notifications]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationClearPreviewRequest'
+      responses:
+        '200':
+          description: 'The previewed clear scope and its signed token.'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationClearPreview'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /notifications/clear-all:
+    post:
+      operationId: clearNotificationsSnapshot
+      summary: Clear exactly the previewed personal history, recoverably
+      description: 'Applies the snapshot recorded by `previewNotificationClear`. Only receipts that still belong to the caller, are still visible, are still uncleared and still carry the previewed clear revision are cleared; a receipt that was restored, cleared again or cleared later from another device is skipped rather than overwritten. Clearing sets the personal clear state only: it never writes `readAt`, never deletes the source content, event or business record, and never emits a business event or webhook. The result is idempotent per `requestId`.'
+      security:
+        - bearerAuth: []
+      tags: [notifications]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationClearAllRequest'
+      responses:
+        '200':
+          description: 'The terminal result for this request id.'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationClearResult'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '410':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /notifications/clear-batches:
+    get:
+      operationId: listNotificationClearBatches
+      summary: List the authenticated user's own clear batches
+      description: 'Returns clear-batch metadata only: date, counts, status and how many of that batch''s items are currently restorable. It never lists preview-only batches, never returns notification bodies or titles and never mixes cleared notifications into the notification list.'
+      security:
+        - bearerAuth: []
+      tags: [notifications]
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: 'Page size. Defaults to 20.'
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+        - name: cursor
+          in: query
+          required: false
+          description: 'Opaque signed cursor returned by a previous page.'
+          schema:
+            $ref: '#/components/schemas/NotificationCursor'
+      responses:
+        '200':
+          description: 'One page of clear batches.'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationClearBatchList'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '410':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /notifications/clear-batches/{batchId}/restore:
+    post:
+      operationId: restoreNotificationClearBatch
+      summary: Restore the items one clear batch actually cleared
+      description: 'Restores only the receipts that this batch cleared and that are still cleared by this same batch at the same applied clear revision; receipts cleared again later are not swept in. Each receipt is re-checked against the current read predicate: withdrawn or unauthorized items are skipped without returning private content, and expired items return to history without becoming unread again. Unread and unexpired receipts therefore re-enter the unread count. A partial restore is a normal outcome. `requestId` is the idempotency key for this restore intent.'
+      security:
+        - bearerAuth: []
+      tags: [notifications]
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          description: 'The caller''s own clear batch id.'
+          schema:
+            $ref: '#/components/schemas/Uuid'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationRestoreRequest'
+      responses:
+        '200':
+          description: 'The terminal result for this request id.'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRestoreResult'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /notification-preferences:
+    get:
+      operationId: getNotificationPreferences
+      summary: Read the authenticated user's notification preferences
+      description: 'Returns the effective preferences, including defaults for a user with no stored row. Necessary notices are fixed by the catalog and cannot be switched off, so they are reported as explanation only and are never writable. Preferences are independent of `GET /auth/me`.'
+      security:
+        - bearerAuth: []
+      tags: [notifications]
+      responses:
+        '200':
+          description: 'The caller''s effective notification preferences.'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPreferences'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+    put:
+      operationId: updateNotificationPreferences
+      summary: Replace the authenticated user's optional notification preferences
+      description: 'A complete replacement of the optional categories, not a patch. `expectedRevision` must match the stored revision; a stale revision returns 409 and the caller re-reads before retrying. Turning a category off stops future optional projection of that category and never deletes already-delivered history; turning it back on does not re-deliver suppressed events.'
+      security:
+        - bearerAuth: []
+      tags: [notifications]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationPreferencesUpdateRequest'
+      responses:
+        '200':
+          description: 'The stored preferences after the update.'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPreferences'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
           $ref: '#/components/responses/ErrorResponse'
         default:
           $ref: '#/components/responses/ErrorResponse'
@@ -2444,6 +2854,306 @@ components:
       properties:
         status: {type: string, const: completed}
         ssoRequestId: {$ref: '#/components/schemas/OpaqueIdentifier'}
+    NotificationView:
+      type: string
+      enum: [unread, history]
+    NotificationScopeFilter:
+      type: string
+      enum: [all, community, personal]
+    NotificationCategory:
+      type: string
+      enum: [announcement, personal_update, service_notice]
+    NotificationCursor:
+      type: string
+      minLength: 16
+      maxLength: 512
+      pattern: '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
+      description: '服务端签名的分页游标，绑定本人、视图、筛选与上界；不透明、不可猜测、不可跨身份或跨视图复用。'
+    NotificationToken:
+      type: string
+      minLength: 16
+      maxLength: 512
+      pattern: '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
+      description: '服务端签名的短时令牌，绑定本人、用途与到期时间；不可跨身份或跨用途复用。'
+    NotificationItem:
+      type: object
+      additionalProperties: false
+      required: [receiptId, title, summaryText, scope, category, necessity, sequence, deliveredAt, readAt, expired, stateRevision]
+      properties:
+        receiptId: {$ref: '#/components/schemas/Uuid'}
+        title: {type: string, minLength: 1, maxLength: 240}
+        summaryText: {type: string, minLength: 0, maxLength: 320}
+        scope: {type: string, enum: [community, personal]}
+        category: {$ref: '#/components/schemas/NotificationCategory'}
+        necessity: {type: string, enum: [optional, necessary]}
+        sequence: {type: integer, minimum: 1, maximum: 9007199254740991}
+        deliveredAt: {$ref: '#/components/schemas/SafeTimestamp'}
+        readAt:
+          type: [integer, 'null']
+          minimum: 0
+          maximum: 9007199254740991
+        expired: {type: boolean}
+        stateRevision: {type: integer, minimum: 0, maximum: 9007199254740991}
+    NotificationList:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor, unreadCount, upperSequence, readThroughToken, serverTime]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items: {$ref: '#/components/schemas/NotificationItem'}
+        nextCursor:
+          type: [string, 'null']
+          minLength: 16
+          maxLength: 512
+          pattern: '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
+        unreadCount: {type: integer, minimum: 0, maximum: 9007199254740991}
+        upperSequence: {type: integer, minimum: 0, maximum: 9007199254740991}
+        readThroughToken: {$ref: '#/components/schemas/NotificationToken'}
+        serverTime: {$ref: '#/components/schemas/SafeTimestamp'}
+    NotificationSummary:
+      type: object
+      additionalProperties: false
+      required: [unreadCount, stateVersion, upperSequence, readThroughToken, serverTime]
+      properties:
+        unreadCount: {type: integer, minimum: 0, maximum: 9007199254740991}
+        stateVersion: {type: integer, minimum: 0, maximum: 9007199254740991}
+        upperSequence: {type: integer, minimum: 0, maximum: 9007199254740991}
+        readThroughToken: {$ref: '#/components/schemas/NotificationToken'}
+        serverTime: {$ref: '#/components/schemas/SafeTimestamp'}
+    NotificationContent:
+      type: object
+      additionalProperties: false
+      required: [format, schemaVersion, policyVersion, html, text]
+      properties:
+        format: {type: string, const: html}
+        schemaVersion: {type: integer, const: 1}
+        policyVersion: {type: string, const: notification-html-v1}
+        html:
+          type: string
+          minLength: 1
+          description: '已按当前策略规范化并重新校验的安全 HTML；正文不含脚本、事件属性、样式、内嵌资源或可执行组件。'
+        text:
+          type: string
+          minLength: 1
+          description: '由安全树派生的完整纯文本，供格式不可用时回退展示。'
+    NotificationAction:
+      type: object
+      additionalProperties: false
+      required: [actionId, kind, label, emphasis, enabled, unavailableReason, navigationTarget]
+      properties:
+        actionId: {type: string, minLength: 1, maxLength: 64, pattern: '^[a-z0-9._-]+$'}
+        kind: {type: string, enum: [navigate, command]}
+        label: {type: string, minLength: 1, maxLength: 64}
+        emphasis: {type: string, enum: [primary, secondary]}
+        enabled: {type: boolean}
+        unavailableReason:
+          oneOf:
+            - type: 'null'
+            - type: string
+              enum: [unsupported, expired, forbidden, state_changed]
+        navigationTarget:
+          type: [object, 'null']
+          additionalProperties: false
+          required: [kind, path]
+          properties:
+            kind: {type: string, const: internal}
+            path: {type: string, minLength: 1, maxLength: 240, pattern: '^/'}
+    NotificationDetail:
+      type: object
+      additionalProperties: false
+      required: [receiptId, title, scope, category, necessity, sequence, deliveredAt, readAt, clearedAt,
+        lifecycle, stateRevision, clearRevision, contentAvailable, content, contentFallbackText,
+        actions, actionsAvailable, serverTime]
+      properties:
+        receiptId: {$ref: '#/components/schemas/Uuid'}
+        title: {type: string, minLength: 1, maxLength: 240}
+        scope: {type: string, enum: [community, personal]}
+        category: {$ref: '#/components/schemas/NotificationCategory'}
+        necessity: {type: string, enum: [optional, necessary]}
+        sequence: {type: integer, minimum: 1, maximum: 9007199254740991}
+        deliveredAt: {$ref: '#/components/schemas/SafeTimestamp'}
+        readAt:
+          type: [integer, 'null']
+          minimum: 0
+          maximum: 9007199254740991
+        clearedAt:
+          type: [integer, 'null']
+          minimum: 0
+          maximum: 9007199254740991
+        lifecycle: {type: string, enum: [active, expired]}
+        stateRevision: {type: integer, minimum: 0, maximum: 9007199254740991}
+        clearRevision: {type: integer, minimum: 0, maximum: 9007199254740991}
+        contentAvailable: {type: boolean}
+        content:
+          type: [object, 'null']
+          description: '当前策略下可安全渲染的正文；不可用时为 null，调用方必须改用 contentFallbackText，不得展示原始 HTML。'
+          allOf:
+            - $ref: '#/components/schemas/NotificationContent'
+        contentFallbackText:
+          type: [string, 'null']
+          minLength: 1
+        actions:
+          type: array
+          maxItems: 4
+          items: {$ref: '#/components/schemas/NotificationAction'}
+        actionsAvailable: {type: boolean}
+        serverTime: {$ref: '#/components/schemas/SafeTimestamp'}
+    NotificationState:
+      type: object
+      additionalProperties: false
+      required: [receiptId, read, stateRevision, unreadCount, serverTime]
+      properties:
+        receiptId: {$ref: '#/components/schemas/Uuid'}
+        read: {type: boolean}
+        stateRevision: {type: integer, minimum: 0, maximum: 9007199254740991}
+        unreadCount: {type: integer, minimum: 0, maximum: 9007199254740991}
+        serverTime: {$ref: '#/components/schemas/SafeTimestamp'}
+    NotificationStateUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [read, expectedRevision]
+      properties:
+        read: {type: boolean}
+        expectedRevision: {type: integer, minimum: 0, maximum: 9007199254740991}
+    NotificationReadAllRequest:
+      type: object
+      additionalProperties: false
+      required: [requestId, readThroughToken]
+      properties:
+        requestId: {$ref: '#/components/schemas/Uuid'}
+        readThroughToken: {$ref: '#/components/schemas/NotificationToken'}
+    NotificationReadAllResult:
+      type: object
+      additionalProperties: false
+      required: [requestId, affectedCount, watermarkSequence, unreadCount, replayed, serverTime]
+      properties:
+        requestId: {$ref: '#/components/schemas/Uuid'}
+        affectedCount: {type: integer, minimum: 0, maximum: 9007199254740991}
+        watermarkSequence: {type: integer, minimum: 0, maximum: 9007199254740991}
+        unreadCount: {type: integer, minimum: 0, maximum: 9007199254740991}
+        replayed: {type: boolean}
+        serverTime: {$ref: '#/components/schemas/SafeTimestamp'}
+    NotificationClearPreviewRequest:
+      type: object
+      additionalProperties: false
+      description: '封闭且为空；清理范围永远由服务端按当时全局未清理历史决定，不接受客户端筛选、行数或时间推断。'
+    NotificationClearPreview:
+      type: object
+      additionalProperties: false
+      required: [batchId, itemCount, upperSequence, clearSnapshotToken, expiresAt, serverTime]
+      properties:
+        batchId: {$ref: '#/components/schemas/Uuid'}
+        itemCount: {type: integer, minimum: 0, maximum: 9007199254740991}
+        upperSequence: {type: integer, minimum: 0, maximum: 9007199254740991}
+        clearSnapshotToken: {$ref: '#/components/schemas/NotificationToken'}
+        expiresAt: {$ref: '#/components/schemas/SafeTimestamp'}
+        serverTime: {$ref: '#/components/schemas/SafeTimestamp'}
+    NotificationClearAllRequest:
+      type: object
+      additionalProperties: false
+      required: [requestId, clearSnapshotToken]
+      properties:
+        requestId: {$ref: '#/components/schemas/Uuid'}
+        clearSnapshotToken: {$ref: '#/components/schemas/NotificationToken'}
+    NotificationClearResult:
+      type: object
+      additionalProperties: false
+      required: [requestId, batchId, affectedCount, skippedCount, unreadCount, replayed, serverTime]
+      properties:
+        requestId: {$ref: '#/components/schemas/Uuid'}
+        batchId: {$ref: '#/components/schemas/Uuid'}
+        affectedCount: {type: integer, minimum: 0, maximum: 9007199254740991}
+        skippedCount: {type: integer, minimum: 0, maximum: 9007199254740991}
+        unreadCount: {type: integer, minimum: 0, maximum: 9007199254740991}
+        replayed: {type: boolean}
+        serverTime: {$ref: '#/components/schemas/SafeTimestamp'}
+    NotificationClearBatchItem:
+      type: object
+      additionalProperties: false
+      required: [batchId, itemCount, affectedCount, skippedCount, restorableCount, status, createdAt, appliedAt, restoredAt]
+      properties:
+        batchId: {$ref: '#/components/schemas/Uuid'}
+        itemCount: {type: integer, minimum: 0, maximum: 9007199254740991}
+        affectedCount: {type: integer, minimum: 0, maximum: 9007199254740991}
+        skippedCount: {type: integer, minimum: 0, maximum: 9007199254740991}
+        restorableCount: {type: integer, minimum: 0, maximum: 9007199254740991}
+        status: {type: string, enum: [applied, restored, partial]}
+        createdAt: {$ref: '#/components/schemas/SafeTimestamp'}
+        appliedAt:
+          type: [integer, 'null']
+          minimum: 0
+          maximum: 9007199254740991
+        restoredAt:
+          type: [integer, 'null']
+          minimum: 0
+          maximum: 9007199254740991
+    NotificationClearBatchList:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor, serverTime]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items: {$ref: '#/components/schemas/NotificationClearBatchItem'}
+        nextCursor:
+          type: [string, 'null']
+          minLength: 16
+          maxLength: 512
+          pattern: '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
+        serverTime: {$ref: '#/components/schemas/SafeTimestamp'}
+    NotificationRestoreRequest:
+      type: object
+      additionalProperties: false
+      required: [requestId]
+      properties:
+        requestId: {$ref: '#/components/schemas/Uuid'}
+    NotificationRestoreResult:
+      type: object
+      additionalProperties: false
+      required: [requestId, batchId, affectedCount, skippedCount, unreadCount, replayed, serverTime]
+      properties:
+        requestId: {$ref: '#/components/schemas/Uuid'}
+        batchId: {$ref: '#/components/schemas/Uuid'}
+        affectedCount: {type: integer, minimum: 0, maximum: 9007199254740991}
+        skippedCount: {type: integer, minimum: 0, maximum: 9007199254740991}
+        unreadCount: {type: integer, minimum: 0, maximum: 9007199254740991}
+        replayed: {type: boolean}
+        serverTime: {$ref: '#/components/schemas/SafeTimestamp'}
+    NotificationPreferences:
+      type: object
+      additionalProperties: false
+      required: [revision, optionalCategories, necessaryCategories, serverTime]
+      properties:
+        revision: {type: integer, minimum: 0, maximum: 9007199254740991}
+        optionalCategories:
+          type: object
+          additionalProperties: false
+          required: [announcement, personal_update]
+          properties:
+            announcement: {type: boolean}
+            personal_update: {type: boolean}
+        necessaryCategories:
+          type: array
+          maxItems: 8
+          items: {$ref: '#/components/schemas/NotificationCategory'}
+          description: '由 catalog 固定的必要类别，展示说明用，不可写入也不可关闭。'
+        serverTime: {$ref: '#/components/schemas/SafeTimestamp'}
+    NotificationPreferencesUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision, optionalCategories]
+      properties:
+        expectedRevision: {type: integer, minimum: 0, maximum: 9007199254740991}
+        optionalCategories:
+          type: object
+          additionalProperties: false
+          required: [announcement, personal_update]
+          properties:
+            announcement: {type: boolean}
+            personal_update: {type: boolean}
     HealthResponse:
       type: object
       additionalProperties: false

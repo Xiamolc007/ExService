@@ -86,6 +86,7 @@ it('routes the OIDC browser operations through the generated contract shape', as
     clients: { 'ex-outline': { name: 'Docs', redirectUri: client.redirect_uris[0]!, scopes: ['openid'] } } })
   const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices,
     authServices: fixture.authServices, profileServices: fixture.profileServices, storageServices: fixture.storageServices,
+    notifications: fixture.notifications,
     oidcServices })
   apps.push(app)
   const inspect = await app.inject({ method: 'POST', url: '/api/auth/oidc/inspect', payload: { phase: 'login', challenge: 'a' } })

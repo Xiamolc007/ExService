@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { writeToken } from '@web/src/auth/storage'
+import { bindNotificationsToken } from '@web/src/notifications/notificationsConfig'
 import { bindSettingsToken } from '@web/src/settings/settingsConfig'
 
 const get = vi.hoisted(() => vi.fn())
@@ -18,19 +19,52 @@ vi.mock('@exre/exui', async (importOriginal) => ({
   useTheme: () => ({ theme: 'system', setTheme: vi.fn() }),
 }))
 vi.mock('@workspace/components', () => ({
-  SettingsPanel: ({ category, onCategoryChange, profileStatus }: {
-    category: string; onCategoryChange: (category: 'profile') => void; profileStatus: string
-  }) => <div><span>{category}:{profileStatus}</span>
-    <button onClick={() => onCategoryChange('profile')}>个人资料分类</button></div>,
+  SettingsPanel: ({ category, onCategoryChange, profileStatus, notifications }: {
+    category: string
+    onCategoryChange: (category: 'profile' | 'notifications' | 'general') => void
+    profileStatus: string
+    notifications: { status: string }
+  }) => <div>
+    <span>{category}:{profileStatus}</span>
+    <span data-testid="notifications-status">{notifications.status}</span>
+    <button onClick={() => onCategoryChange('profile')}>个人资料分类</button>
+    <button onClick={() => onCategoryChange('notifications')}>通知分类</button>
+  </div>,
 }))
 
 import { SettingsExperience, SettingsModal } from '@web/src/settings/SettingsExperience'
 
 const user = { id: 'user', email: 'person@example.com', nickname: 'Person',
   qq: null, fivemId: null, avatarUrl: null }
+const preferences = {
+  revision: 1,
+  optionalCategories: { announcement: true, personal_update: true },
+  necessaryCategories: ['service_notice'],
+  serverTime: 0,
+}
 
-afterEach(() => { cleanup(); get.mockReset(); invalidateSession.mockReset(); bindSettingsToken(null);
-  window.localStorage.clear(); authState.status = 'authenticated' })
+function respond(overrides: { failPreferences?: boolean; failProfile?: boolean } = {}) {
+  get.mockImplementation((path: string) => {
+    if (path === '/notification-preferences') {
+      return overrides.failPreferences
+        ? Promise.reject(new Error('通知设置暂时无法读取'))
+        : Promise.resolve(preferences)
+    }
+    return overrides.failProfile
+      ? Promise.reject(new Error('资料暂时无法读取'))
+      : Promise.resolve(user)
+  })
+}
+
+afterEach(() => {
+  cleanup()
+  get.mockReset()
+  invalidateSession.mockReset()
+  bindSettingsToken(null)
+  bindNotificationsToken(null)
+  window.localStorage.clear()
+  authState.status = 'authenticated'
+})
 
 describe('SettingsExperience', () => {
   it('names the settings dialog without the extra top description', () => {
@@ -39,24 +73,76 @@ describe('SettingsExperience', () => {
     expect(screen.queryByText('管理外观、个人资料和账号。')).toBeNull()
   })
 
-  it('keeps first-open general settings available and refreshes a cached snapshot on reopen', async () => {
+  it('reads a data source only when its own category is entered', async () => {
     writeToken(window.localStorage, 'current-token')
-    get.mockResolvedValue(user)
+    respond()
     const first = render(<SettingsExperience initialCategory="general" />)
+    // 初始为 general 时不由设置层触发资料或偏好读取。
     expect(screen.getByText('general:idle')).toBeTruthy()
     expect(get).not.toHaveBeenCalled()
+
     await userEvent.click(screen.getByRole('button', { name: '个人资料分类' }))
     await waitFor(() => expect(screen.getByText('profile:ready')).toBeTruthy())
     expect(get).toHaveBeenCalledTimes(1)
+    expect(get).toHaveBeenCalledWith('/auth/me', { alert: false })
+
+    // 同一次设置实例内切回已读过的分区不再重复请求。
+    await userEvent.click(screen.getByRole('button', { name: '通知分类' }))
+    await waitFor(() => expect(screen.getByTestId('notifications-status').textContent).toBe('ready'))
+    expect(get).toHaveBeenCalledTimes(2)
+    expect(get).toHaveBeenLastCalledWith('/notification-preferences', { alert: false })
+    await userEvent.click(screen.getByRole('button', { name: '个人资料分类' }))
+    expect(screen.getByText('profile:ready')).toBeTruthy()
+    expect(get).toHaveBeenCalledTimes(2)
+
     first.unmount()
-    render(<SettingsExperience initialCategory="general" />)
+  })
+
+  it('re-reads a source when the settings are reopened in a new instance', async () => {
+    writeToken(window.localStorage, 'current-token')
+    respond()
+    const first = render(<SettingsExperience initialCategory="general" />)
+    await userEvent.click(screen.getByRole('button', { name: '个人资料分类' }))
+    await waitFor(() => expect(screen.getByText('profile:ready')).toBeTruthy())
+    first.unmount()
+
+    // 关闭后重新打开：停在 general 不读任何来源。
+    const second = render(<SettingsExperience initialCategory="general" />)
+    expect(get).toHaveBeenCalledTimes(1)
+    await userEvent.click(screen.getByRole('button', { name: '个人资料分类' }))
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2))
+    second.unmount()
+  })
+
+  it('keeps the profile partition usable when the notification read fails', async () => {
+    writeToken(window.localStorage, 'current-token')
+    respond({ failPreferences: true })
+    render(<SettingsExperience initialCategory="general" />)
+    await userEvent.click(screen.getByRole('button', { name: '通知分类' }))
+    await waitFor(() => expect(screen.getByTestId('notifications-status').textContent).toBe('error'))
+
+    respond()
+    await userEvent.click(screen.getByRole('button', { name: '个人资料分类' }))
+    await waitFor(() => expect(screen.getByText('profile:ready')).toBeTruthy())
+    expect(get).toHaveBeenLastCalledWith('/auth/me', { alert: false })
+  })
+
+  it('keeps the notifications partition usable when the profile read fails', async () => {
+    writeToken(window.localStorage, 'current-token')
+    respond({ failProfile: true })
+    render(<SettingsExperience initialCategory="general" />)
+    await userEvent.click(screen.getByRole('button', { name: '个人资料分类' }))
+    await waitFor(() => expect(screen.getByText('profile:error')).toBeTruthy())
+
+    respond()
+    await userEvent.click(screen.getByRole('button', { name: '通知分类' }))
+    await waitFor(() => expect(screen.getByTestId('notifications-status').textContent).toBe('ready'))
   })
 
   it('loads the selected profile category when authentication recovers', async () => {
     authState.status = 'unavailable'
     writeToken(window.localStorage, 'current-token')
-    get.mockResolvedValue(user)
+    respond()
     const view = render(<SettingsExperience initialCategory="general" />)
     await userEvent.click(screen.getByRole('button', { name: '个人资料分类' }))
     expect(get).not.toHaveBeenCalled()

@@ -13,11 +13,36 @@ import { z } from 'zod'
 import { avatarSchema, fivemIdSchema, nicknameSchema, qqSchema } from '@components/src/profileValidation'
 import { cropAvatar, minimumAvatarZoom } from '@components/src/avatarCrop'
 import { ContentAreaState, SettingsContentSkeleton } from '@components/src/ContentAreaState'
+import { NotificationPreferencesForm, type NotificationPreferencesDraft } from '@components/src/notifications/NotificationPreferencesForm'
+import type { NotificationCategory } from '@components/src/notifications/notificationsView'
 import styles from '@components/src/SettingsPanel.module.scss'
 
-export type SettingsCategory = 'general' | 'profile' | 'account'
+export type SettingsCategory = 'general' | 'profile' | 'account' | 'notifications'
 export type SettingsTheme = 'light' | 'dark' | 'system'
 export type SettingsField = 'nickname' | 'qq' | 'fivemId'
+
+/**
+ * 通知分区的独立切片。
+ *
+ * 它**刻意不与资料共享状态**：资料读取/保存失败不能阻塞通知分区，反之亦然。
+ * 共享组件只收 props/callback，读写代次与草稿所有权仍在 `apps/web`。
+ */
+export interface SettingsNotificationsSlice {
+  /**
+   * 身份代次：换号/退出时递增。通知偏好的**草稿**由它界定归属，
+   * 少了它，上一个身份未保存的开关会被带到新身份。
+   */
+  identityEpoch: number
+  preferences: NotificationPreferencesDraft | null
+  status: 'idle' | 'loading' | 'ready' | 'error'
+  onRetry: () => void
+  saving: boolean
+  message: string | null
+  conflict: boolean
+  necessaryCategories: NotificationCategory[]
+  onSave: (draft: NotificationPreferencesDraft) => Promise<void>
+  onRefresh: () => void
+}
 
 export interface SettingsPanelProps {
   category: SettingsCategory
@@ -28,6 +53,7 @@ export interface SettingsPanelProps {
   profileStatus: 'idle' | 'loading' | 'ready' | 'error'
   profileError: string | null
   onRetry: () => void
+  notifications: SettingsNotificationsSlice
   onSave: (field: SettingsField, value: string) => Promise<void>
   onUpload: (file: Blob) => Promise<void>
   onRemoveAvatar: () => Promise<void>
@@ -40,7 +66,7 @@ export interface SettingsPanelProps {
 
 const categories: { value: SettingsCategory; label: string }[] = [
   { value: 'profile', label: '个人资料' }, { value: 'general', label: '通用' },
-  { value: 'account', label: '账号' },
+  { value: 'notifications', label: '通知' }, { value: 'account', label: '账号' },
 ]
 
 export function SettingsPanel(props: SettingsPanelProps) {
@@ -61,7 +87,8 @@ export function SettingsPanel(props: SettingsPanelProps) {
     <header className={styles.mobileNavigation}>
       <SelectField value={props.category} onValueChange={(value) => {
         if (value === 'logout') props.onLogout()
-        else if (value === 'profile' || value === 'general' || value === 'account') {
+        else if (value === 'profile' || value === 'general' || value === 'account'
+          || value === 'notifications') {
           props.onCategoryChange(value)
         }
       }}>
@@ -80,11 +107,16 @@ export function SettingsPanel(props: SettingsPanelProps) {
       <h2 className={styles.mobileTitle}>{categories.find(({ value }) => value === props.category)?.label}</h2>
     </header>
     <div className={styles.content}>
-      {props.authMessage && (props.category === 'general' ||
+      {/* 认证提示只依赖共享认证状态：通知分区不能因为资料没读到就不显示它。 */}
+      {props.authMessage && (props.category === 'general' || props.category === 'notifications' ||
         (props.profileStatus === 'ready' && profile)) && <Alert variant="destructive" role="alert">
         <AlertDescription>{props.authMessage}</AlertDescription>
         {props.onRetryAuth && <Button type="button" onClick={props.onRetryAuth}>重试登录状态</Button>}
       </Alert>}
+      {/*
+        按分类**先选来源再选内容门控**：general 只看主题；notifications 只看通知切片；
+        profile/account 共用资料来源。这是分区失败隔离的前提，不是「追加一个分类名」。
+      */}
       {props.category === 'general' ? <ContentAreaState status="ready">
         <header className={styles.contentHeader}><h2>通用</h2></header>
         <section className={styles.group} aria-label="外观">
@@ -105,12 +137,30 @@ export function SettingsPanel(props: SettingsPanelProps) {
             </SelectField>
           </SettingItem>
         </section>
-      </ContentAreaState> : props.profileStatus === 'ready' && profile ? <ContentAreaState status="ready">
-        {props.category === 'profile' ? <ProfileContent {...props} profile={profile} /> :
-          <AccountContent {...props} profile={profile} />}
-      </ContentAreaState> : props.profileStatus === 'error' ? <ContentAreaState status="error"
-        errorMessage={props.profileError ?? '无法读取设置资料'} onRetry={props.onRetry} /> :
-        <ContentAreaState status="loading" skeleton={<SettingsContentSkeleton profile={props.category === 'profile'} />} />}
+      </ContentAreaState> : props.category === 'notifications' ? null
+        : props.profileStatus === 'ready' && profile ? <ContentAreaState status="ready">
+          {props.category === 'profile' ? <ProfileContent {...props} profile={profile} /> :
+            <AccountContent {...props} profile={profile} />}
+        </ContentAreaState> : props.profileStatus === 'error' ? <ContentAreaState status="error"
+          errorMessage={props.profileError ?? '无法读取设置资料'} onRetry={props.onRetry} /> :
+          <ContentAreaState status="loading" skeleton={<SettingsContentSkeleton profile={props.category === 'profile'} />} />}
+      {/*
+        通知表单**始终挂载，不参与上面的分类门控**：`active` 由分类驱动，切到别的分类只是
+        让它返回 `null`。如果把它放进 `category === 'notifications'` 分支里渲染，
+        通知 → 个人资料 → 通知 会卸载重挂，React Hook Form 的草稿（未保存的开关）随之丢失。
+        加载/失败/重试三态由表单自己按通知来源渲染，不共用资料门控。
+      */}
+      <NotificationPreferencesForm active={props.category === 'notifications'}
+        identityEpoch={props.notifications.identityEpoch}
+        saved={props.notifications.preferences}
+        status={props.notifications.status}
+        onRetry={props.notifications.onRetry}
+        saving={props.notifications.saving}
+        message={props.notifications.message}
+        conflict={props.notifications.conflict}
+        necessaryCategories={props.notifications.necessaryCategories}
+        onSave={props.notifications.onSave}
+        onRefresh={props.notifications.onRefresh} />
     </div>
   </div>
 }

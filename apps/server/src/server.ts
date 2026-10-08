@@ -15,6 +15,7 @@ import { HttpHydraAdmin, OidcService } from '@server/src/identity/oidc.js'
 import { configuredIdentityOutboxWorker, startIdentityOutboxWorker } from '@server/src/identity/outbox.js'
 import { IdentityConfigError, parseIdentityConfig } from '@server/src/identity/config.js'
 import { assertDeploymentBinding } from '@server/src/identity/deployment-binding.js'
+import { createNotificationModule, deriveNotificationTokenKey } from '@server/src/modules/notifications/factory.js'
 
 const PORT = Number(process.env.SERVER_PORT ?? '8080')
 const HOST = process.env.SERVER_HOST ?? '127.0.0.1'
@@ -50,12 +51,19 @@ try {
       flowKey: Buffer.from(identity.keys.flow, 'hex'),
       clients: identity.approvedClients,
     }) : undefined
+    const notifications = createNotificationModule({ db,
+      tokenKey: deriveNotificationTokenKey(process.env.SERVER_NOTIFICATION_TOKEN_KEY,
+        parseAuthCodeHmacKey(process.env.AUTH_CODE_HMAC_KEY)) })
+    await notifications.assertReady()
     const app = createApp({ authServices, profileServices, joinServices, invitationServices, storageServices,
+      notifications,
       identityKeys: identity.enabled ? { clients: { [identity.clientId]: identity.keys.outline }, bootstrapKey: identity.keys.bootstrap } : undefined,
       oidcServices, logger: true, corsAllowedOrigins })
     const outbox = identity.enabled ? configuredIdentityOutboxWorker(db, identity) : undefined
     let stopOutbox: (() => void) | undefined
-    app.addHook('onClose', async () => { stopOutbox?.(); await db.close() })
+    // 单实例投影 worker：关闭时停止认领，未完成 lease 由后续运行恢复。
+    const stopProjection = notifications.startWorker()
+    app.addHook('onClose', async () => { stopOutbox?.(); stopProjection(); await db.close() })
     await app.listen({ port: PORT, host: HOST })
     if (outbox) stopOutbox = startIdentityOutboxWorker(outbox)
   } catch (error) {

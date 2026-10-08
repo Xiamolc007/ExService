@@ -20,6 +20,13 @@ function props(overrides: Partial<SettingsPanelProps> = {}): SettingsPanelProps 
   return {
     category: 'general', onCategoryChange: vi.fn(), theme: 'system', onThemeChange: vi.fn(),
     profile, profileStatus: 'ready', profileError: null, onRetry: vi.fn(),
+    notifications: {
+      identityEpoch: 1,
+      preferences: { announcement: true, personal_update: true },
+      status: 'ready', onRetry: vi.fn(), saving: false, message: null, conflict: false,
+      necessaryCategories: ['service_notice'],
+      onSave: vi.fn(async () => undefined), onRefresh: vi.fn(),
+    },
     onSave: vi.fn(async () => undefined), onUpload: vi.fn(async () => undefined),
     onRemoveAvatar: vi.fn(async () => undefined), onLogout: vi.fn(),
     logoutPending: false, actionPending: false, ...overrides,
@@ -34,7 +41,7 @@ describe('SettingsPanel', () => {
     const categories = screen.getByRole('navigation', { name: '设置分类' })
       .querySelectorAll('button')
     expect(Array.from(categories, (button) => button.textContent))
-      .toEqual(['个人资料', '通用', '账号'])
+      .toEqual(['个人资料', '通用', '通知', '账号'])
     expect(screen.getByRole('button', { name: '通用' }).getAttribute('aria-current')).toBe('page')
   })
 
@@ -183,6 +190,51 @@ describe('SettingsPanel', () => {
       else Reflect.deleteProperty(URL, 'createObjectURL')
       if (originalRevoke) Object.defineProperty(URL, 'revokeObjectURL', originalRevoke)
       else Reflect.deleteProperty(URL, 'revokeObjectURL')
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('keeps the notification draft across a notifications to profile round trip', async () => {
+    // 覆盖点：通知表单必须**始终挂载**，由 `active` 决定是否渲染。若只在
+    // `category === 'notifications'` 分支里渲染，切走再切回会卸载重挂，草稿随之丢失。
+    vi.stubGlobal('ResizeObserver', class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    })
+    try {
+      const view = render(<SettingsPanel {...props({ category: 'notifications' })} />)
+      await userEvent.click(screen.getByRole('switch', { name: '社区动态' }))
+      expect(screen.getByText('有尚未保存的更改')).toBeTruthy()
+
+      view.rerender(<SettingsPanel {...props({ category: 'profile' })} />)
+      expect(screen.getByRole('button', { name: '编辑用户名' })).toBeTruthy()
+      // 表单仍在组件树里，只是不渲染任何内容。
+      expect(screen.queryByRole('switch', { name: '社区动态' })).toBeNull()
+
+      view.rerender(<SettingsPanel {...props({ category: 'notifications' })} />)
+      expect((screen.getByRole('switch', { name: '社区动态' }) as HTMLButtonElement)
+        .getAttribute('aria-checked')).toBe('false')
+      expect(screen.getByText('有尚未保存的更改')).toBeTruthy()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('renders the notification section without waiting for the profile source', () => {
+    vi.stubGlobal('ResizeObserver', class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    })
+    try {
+      // 通知分区只看通知来源：资料加载中或失败都不能让它跟着转圈或报错。
+      render(<SettingsPanel {...props({
+        category: 'notifications', profileStatus: 'loading', profile: null,
+      })} />)
+      expect(screen.getByText('管理站内通知。关闭可选分类只影响未来接收，已有通知保留。')).toBeTruthy()
+      expect(screen.queryByRole('heading', { name: '个人资料' })).toBeNull()
+    } finally {
       vi.unstubAllGlobals()
     }
   })

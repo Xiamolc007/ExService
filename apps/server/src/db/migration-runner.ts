@@ -7,6 +7,13 @@ import { APPLICATION_TABLES, BASELINE_APPLICATION_TABLES, assertDatabaseReady } 
 
 const MIGRATIONS_FOLDER = resolve(dirname(fileURLToPath(import.meta.url)), '../../drizzle')
 const SAFE_IDENTIFIER = /^[a-z_][a-z0-9_]*$/
+// Every complete historical table set remains a valid source for an upgrade.
+// Matching names, rather than counts, still rejects incomplete/mixed versions.
+const COMPLETE_TABLE_SETS = [
+  BASELINE_APPLICATION_TABLES, // 0000
+  [...BASELINE_APPLICATION_TABLES, 'auth_oidc_flows', 'auth_oidc_bindings', 'auth_identity_outbox'], // 0001
+  APPLICATION_TABLES,
+]
 
 export interface MigrationOptions extends DatabaseOptions { migrationsSchema?: string }
 
@@ -28,12 +35,8 @@ export async function runMigrations(options: MigrationOptions = {}): Promise<voi
         (row.relkind === 'S' && row.relname === '__drizzle_migrations_id_seq'))))
     if (unknown.length) throw new Error('目标 schema 包含非本应用数据表；拒绝迁移。')
     const appTables = [...found].filter(table => APPLICATION_TABLES.includes(table as typeof APPLICATION_TABLES[number]))
-    if (appTables.length !== 0 && appTables.length !== BASELINE_APPLICATION_TABLES.length &&
-        appTables.length !== APPLICATION_TABLES.length) {
-      throw new Error('Server schema 部分迁移；请人工核查，不自动修复。')
-    }
-    if (appTables.length === BASELINE_APPLICATION_TABLES.length &&
-        BASELINE_APPLICATION_TABLES.some(table => !found.has(table))) {
+    if (appTables.length !== 0 && !COMPLETE_TABLE_SETS.some(tables =>
+      tables.length === appTables.length && tables.every(table => found.has(table)))) {
       throw new Error('Server schema 部分迁移；请人工核查，不自动修复。')
     }
     const journal = await pool.query(`SELECT 1 FROM pg_catalog.pg_tables

@@ -36,6 +36,13 @@ import {
   uploadStorageContent,
 } from '@server/src/modules/storage/handlers.js'
 import { registerHttpFoundation } from '@server/src/http/cors.js'
+import { coerceQueryStringTypes } from '@server/src/http/query-coercion.js'
+import type { NotificationModule } from '@server/src/modules/notifications/factory.js'
+import {
+  getNotification, getNotificationPreferences, getNotificationSummary, listNotificationClearBatches,
+  listNotifications, markNotificationsReadThrough, previewNotificationClear, clearNotificationsSnapshot,
+  restoreNotificationClearBatch, updateNotificationPreferences, updateNotificationState,
+} from '@server/src/modules/notifications/handlers.js'
 
 /**
  * Fastify 路由前缀。Contract 的 `servers[0].url` 只描述客户端 base URL，
@@ -62,6 +69,10 @@ export interface CreateAppOptions {
    * 测试注入临时目录与 fake COS，不写开发数据。
    */
   storageServices: StorageServices
+  /**
+   * 持久通知模块。`server.ts` 按环境变量组装后注入；测试注入隔离 schema。
+   */
+  notifications: NotificationModule
   /**
    * 测试中保持静默；`server.ts` 开启日志，以便用 requestId 关联日志与响应。
    */
@@ -101,6 +112,17 @@ export const serviceHandlers = {
   uploadStorageContent,
   completeStorageUpload,
   getStoredFile,
+  listNotifications,
+  getNotificationSummary,
+  getNotification,
+  updateNotificationState,
+  markNotificationsReadThrough,
+  previewNotificationClear,
+  clearNotificationsSnapshot,
+  listNotificationClearBatches,
+  restoreNotificationClearBatch,
+  getNotificationPreferences,
+  updateNotificationPreferences,
 } as const
 
 /**
@@ -110,7 +132,8 @@ export const serviceHandlers = {
  * 这里不手写任何 `app.get(...)`，也不从 Fastify schema 反向生成 OpenAPI。
  */
 export function createApp({ authServices, profileServices, joinServices, invitationServices, storageServices,
-  identityKeys, oidcServices, logger = false, corsAllowedOrigins = new Set() }: CreateAppOptions): FastifyInstance {
+  notifications, identityKeys, oidcServices, logger = false,
+  corsAllowedOrigins = new Set() }: CreateAppOptions): FastifyInstance {
   const app = Fastify({
     logger,
     requestIdHeader: false,
@@ -130,6 +153,7 @@ export function createApp({ authServices, profileServices, joinServices, invitat
   app.decorate('authServices', authServices)
   app.decorate('profileServices', profileServices)
   app.decorate('storageServices', storageServices)
+  app.decorate('notifications', notifications)
   app.decorate('oidcServices', oidcServices)
   app.decorateRequest('authSession', undefined)
   app.decorateRequest('identityClientId', undefined)
@@ -148,6 +172,14 @@ export function createApp({ authServices, profileServices, joinServices, invitat
         body.nickname = body.nickname.trim()
       }
     }
+    done()
+  })
+
+  // 查询串在协议层是文本，Contract 声明成 integer/number/boolean 的查询参数必须先按声明的
+  // 标量类型强制，否则 `?limit=20` 会被 `coerceTypes: false` 判成 400。类型只从 Glue 依
+  // Contract 生成的 querystring schema 读取；请求体不属于这里，body 仍不强制。
+  app.addHook('preValidation', (request, _reply, done) => {
+    coerceQueryStringTypes(request.query as Record<string, unknown>, request.routeOptions?.schema?.querystring)
     done()
   })
 

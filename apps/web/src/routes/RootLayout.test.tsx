@@ -12,6 +12,8 @@ vi.mock('@workspace/components', () => ({
   SiteHeader: ({ auth: callbacks }: { auth: { onSettings: () => void } }) =>
     <button onClick={callbacks.onSettings}>设置菜单</button>,
   AuthModal: () => null,
+  NotificationBell: () => null,
+  NotificationHistoryModal: () => null,
 }))
 vi.mock('@web/src/settings/SettingsExperience', () => ({
   SettingsModal: ({ initialCategory }: { initialCategory: string }) =>

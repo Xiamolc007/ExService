@@ -19,7 +19,7 @@ import {
   Spinner,
 } from '@exre/exui'
 import { Menu, UserRound } from 'lucide-react'
-import { useSyncExternalStore, type Ref } from 'react'
+import { useSyncExternalStore, type ReactNode, type Ref } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { AuthArea, type AuthAreaProps } from '@components/src/AuthArea'
 import { Logo } from '@components/src/Logo'
@@ -50,6 +50,13 @@ export interface SiteHeaderProps {
   auth: AuthAreaProps
   mobileMenuButtonRef?: Ref<HTMLSpanElement>
   glassAtTop?: boolean
+  /**
+   * 顶栏右侧的通知入口（铃铛与未读 Popup）。
+   *
+   * 顶栏不认识通知业务：这里只是一个渲染槽位，节点由调用方提供，
+   * 因此铃铛只存在一个实例，焦点归还也只指向那一个元素。
+   */
+  notifications?: ReactNode
 }
 
 function subscribeToScroll(onChange: () => void) {
@@ -60,7 +67,7 @@ function subscribeToScroll(onChange: () => void) {
 const isScrolled = () => window.scrollY > 0
 const serverIsScrolled = () => false
 
-export function SiteHeader({ auth, mobileMenuButtonRef, glassAtTop = false }: SiteHeaderProps) {
+export function SiteHeader({ auth, mobileMenuButtonRef, glassAtTop = false, notifications }: SiteHeaderProps) {
   const scrolled = useSyncExternalStore(subscribeToScroll, isScrolled, serverIsScrolled)
   const location = useLocation()
   const navigate = useNavigate()
@@ -104,7 +111,11 @@ export function SiteHeader({ auth, mobileMenuButtonRef, glassAtTop = false }: Si
         </div>
 
         <div className={styles.end}>
-          <AuthArea {...auth} />
+          {notifications !== undefined &&
+            <span className={styles.notificationsSlot}>{notifications}</span>}
+          {/* `display: contents`：桌面上 account 区直接参与 `.end` 的 flex 布局，
+              窄屏时整块隐藏，由 `.mobileAccount` 的 Select 接管。 */}
+          <span className={styles.desktopAuth}><AuthArea {...auth} /></span>
         </div>
 
         <div className={styles.mobileNav}>

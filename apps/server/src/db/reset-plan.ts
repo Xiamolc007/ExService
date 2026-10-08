@@ -9,6 +9,9 @@ import * as schemaTables from '@server/src/db/schema.js'
 
 const SAFE_IDENTIFIER = /^[a-z_][a-z0-9_]*$/
 const DROP_ORDER = [
+  'notification_clear_batch_items', 'notification_clear_batches', 'notification_mutations',
+  'notification_preferences', 'notification_receipts', 'notification_user_streams',
+  'notification_event_recipients', 'notification_events', 'notification_contents',
   'auth_identity_outbox', 'auth_oidc_bindings', 'auth_oidc_flows',
   'join_delivery_attempts', 'join_email_controls', 'join_invitations',
   'join_application_attachments', 'join_application_forms', 'join_application_email_registry',
@@ -23,6 +26,11 @@ const BASELINE_NOT_NULL_COLUMNS = new Set([
   schemaTables.joinApplications, schemaTables.joinApplicationEmailRegistry,
   schemaTables.joinApplicationForms, schemaTables.joinApplicationAttachments,
   schemaTables.joinInvitations, schemaTables.joinEmailControls, schemaTables.joinDeliveryAttempts,
+  schemaTables.notificationContents, schemaTables.notificationEvents,
+  schemaTables.notificationEventRecipients, schemaTables.notificationUserStreams,
+  schemaTables.notificationReceipts, schemaTables.notificationPreferences,
+  schemaTables.notificationMutations, schemaTables.notificationClearBatches,
+  schemaTables.notificationClearBatchItems,
 ].map(getTableConfig).flatMap(table => table.columns.filter(column => column.notNull)
   .map(column => `${table.name}.${column.name}`)))
 
@@ -194,14 +202,15 @@ export async function resetDatabase(options: DatabaseOptions, confirmation: stri
       if (row.table_name === 'auth_sessions' && row.column_name === 'id') {
         return !['gen_random_uuid()::text', '(gen_random_uuid())::text'].includes(row.expression)
       }
-      if ((row.table_name === 'auth_users' && row.column_name === 'profile_version') ||
-          (row.table_name === 'auth_identity_outbox' && row.column_name === 'attempts')) {
-        return row.expression !== '0'
-      }
-      return row.expression !== '0' || !(
-        (row.table_name === 'join_applications' && row.column_name === 'form_version') ||
-        (row.table_name === 'join_email_controls' && row.column_name === 'failed_attempts')
-      )
+      if (row.expression !== '0') return true
+      const zeroDefaultColumns = new Set([
+        'auth_users.profile_version', 'auth_identity_outbox.attempts',
+        'join_applications.form_version', 'join_email_controls.failed_attempts',
+        'notification_events.projection_attempts', 'notification_preferences.revision',
+        'notification_user_streams.last_sequence', 'notification_user_streams.state_version',
+        'notification_receipts.clear_revision', 'notification_receipts.state_revision',
+      ])
+      return !zeroDefaultColumns.has(`${row.table_name}.${row.column_name}`)
     })) {
       throw new Error('目标数据表含非本应用默认值；拒绝重置。')
     }

@@ -1,0 +1,117 @@
+/**
+ * 顶栏铃铛与未读 Popup。
+ *
+ * Popup 的可用宽度由铃铛锚点位置决定：窄屏时贴边加宽，但仍只显示未读与「查看全部」。
+ */
+
+.bell {
+  position: relative;
+  flex: none;
+}
+
+.badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 1.1rem;
+  padding: 0 0.3rem;
+  border-radius: var(--exui-radius-full);
+  background: var(--exui-control-primary);
+  color: var(--exui-control-primary-foreground);
+  font-size: 0.65rem;
+  line-height: 1.4;
+  text-align: center;
+  pointer-events: none;
+}
+
+.badge[data-tone='error'] {
+  background: var(--exui-feedback-danger);
+  color: var(--exui-feedback-danger-foreground, var(--exui-control-primary-foreground));
+}
+
+.popup {
+  display: flex;
+  flex-direction: column;
+  width: min(26rem, calc(100vw - 1rem));
+  max-height: calc(100dvh - 5rem);
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  flex: none;
+  padding: 0.7rem 0.7rem 0.7rem 1.1rem;
+  border-bottom: 1px solid var(--exui-border-default);
+}
+
+.title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  max-height: 55dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.foot {
+  flex: none;
+  margin: 0;
+  padding: 0.6rem 1.1rem;
+  border-top: 1px solid var(--exui-border-default);
+  color: var(--exui-text-secondary);
+  font-size: 0.72rem;
+}
+
+.notice {
+  display: grid;
+  justify-items: start;
+  gap: 0.6rem;
+  margin: 0.75rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--exui-feedback-danger);
+  border-radius: var(--exui-radius-medium);
+  background: var(--exui-surface-secondary);
+  font-size: 0.8rem;
+}
+
+.notice p {
+  margin: 0;
+}
+
+.skeletons {
+  display: grid;
+  gap: 0.6rem;
+  padding: 1rem 1.1rem;
+}
+
+.skeleton {
+  height: 2.6rem;
+  width: 100%;
+}
+
+.empty {
+  padding: 2rem 1.1rem;
+  text-align: center;
+}
+
+.emptyTitle {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+}
+
+.emptyBody {
+  margin: 0;
+  color: var(--exui-text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}

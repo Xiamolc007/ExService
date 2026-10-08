@@ -1,0 +1,122 @@
+/**
+ * 通知正文排版。
+ *
+ * 只允许出现白名单元素，所以这里只描述它们的呈现，不处理任意 HTML。
+ * 长中文、连续 ID 与表格都必须能在 320px 内换行或横向滚动，不能溢出容器。
+ */
+
+.body {
+  /*
+   * 正文容器必须占满可用宽度，而不是按内容撑开。
+   *
+   * 它在 `.detail`（column flex + `align-items: flex-start`）里是收缩到 fit-content 的，
+   * 于是表格的 `min-width` 会把整条正文撑到比列更宽，外层列随之横向溢出 ——
+   * 表格自己的 `.tableScroll` 就再也没机会横向滚动了。
+   * 宽度确定之后，`max-width: 100%` 的滚动容器才能在 320px 下真的滚起来。
+   */
+  width: 100%;
+  min-width: 0;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+
+.paragraph {
+  margin: 0 0 0.9rem;
+}
+
+.heading2 {
+  margin: 1.4rem 0 0.6rem;
+  font-size: 1.2rem;
+  line-height: 1.4;
+}
+
+.heading3 {
+  margin: 1.1rem 0 0.5rem;
+  font-size: 1.05rem;
+  line-height: 1.4;
+}
+
+.list {
+  margin: 0 0 0.9rem;
+  padding-left: 1.5rem;
+}
+
+.quote {
+  margin: 0 0 0.9rem;
+  padding-left: 0.9rem;
+  border-left: 3px solid var(--exui-border-strong);
+  color: var(--exui-text-secondary);
+}
+
+.code {
+  font-family: var(--exui-font-family-mono, ui-monospace, monospace);
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+.pre {
+  margin: 0 0 0.9rem;
+  padding: 0.8rem 1rem;
+  border-radius: var(--exui-radius-medium);
+  background: var(--exui-surface-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.rule {
+  margin: 1.2rem 0;
+  border: 0;
+  border-top: 1px solid var(--exui-border-default);
+}
+
+.link {
+  color: var(--exui-text-link);
+  text-decoration: underline;
+}
+
+.tableScroll {
+  max-width: 100%;
+  margin: 0 0 0.9rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.table {
+  min-width: 25rem;
+  border-collapse: collapse;
+}
+
+.table :global(th),
+.table :global(td) {
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--exui-border-default);
+  text-align: start;
+  vertical-align: top;
+}
+
+.table :global(thead) :global(th) {
+  background: var(--exui-surface-secondary);
+}
+
+.caption {
+  padding-bottom: 0.4rem;
+  color: var(--exui-text-secondary);
+  font-size: 0.85rem;
+  text-align: start;
+}
+
+.fallbackNotice {
+  margin: 0 0 0.8rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--exui-border-default);
+  border-radius: var(--exui-radius-medium);
+  background: var(--exui-surface-secondary);
+  color: var(--exui-text-secondary);
+  font-size: 0.85rem;
+}
+
+.fallbackText {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

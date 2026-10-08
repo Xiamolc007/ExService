@@ -118,7 +118,7 @@ const authFixtures: TestAuth[] = []
 async function createTestApp(corsAllowedOrigins?: ReadonlySet<string>, logger: Parameters<typeof createApp>[0]['logger'] = false) {
   const fixture = await createTestAuth()
   authFixtures.push(fixture)
-  const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices, authServices: fixture.authServices, profileServices: fixture.profileServices, storageServices: fixture.storageServices, logger, corsAllowedOrigins })
+  const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices, authServices: fixture.authServices, profileServices: fixture.profileServices, storageServices: fixture.storageServices, notifications: fixture.notifications, logger, corsAllowedOrigins })
   runningApps.push(app)
   return app
 }
