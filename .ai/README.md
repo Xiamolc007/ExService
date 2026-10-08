@@ -16,7 +16,7 @@ _最后更新：2026-10-08_
 | 存储与 SDK | `apps/server/src/modules/storage/`、`packages/sdk/` | `.ai/knowledge/storage/lifecycle-traps.md` |
 | 文档集成 | `apps/outline/`、`infra/docs-integration/`、`scripts/docs-integration/` | `.ai/architectures/docs-integration/integration-boundaries.md`、`.ai/architectures/docs-integration/unified-reading-interface.md`、`.ai/knowledge/docs-integration/public-reader-refs.md` |
 | Contract Test | `tests/contract/` | `.ai/architectures/contract-tests/test-layers.md` |
-| 持久通知 | `apps/server/src/modules/notifications/`、`apps/web/src/notifications/`、`packages/components/src/notifications/` | `.ai/knowledge/notifications/clear-preview-coexistence.md`、`.ai/knowledge/server/query-string-type-enforcement.md` |
+| 持久通知 | `apps/server/src/modules/notifications/`、`apps/web/src/notifications/`、`packages/components/src/notifications/` | `.ai/knowledge/notifications/clear-preview-coexistence.md`、`.ai/knowledge/notifications/command-idempotency.md`、`.ai/knowledge/server/query-string-type-enforcement.md` |
 | Monica 项目协作 | Exre Delivery Squad | `.ai/architectures/monica-team/workflow.md` |
 
 跨模块结构见 `.ai/architectures/overview.md`；业务术语见 `.ai/CONTEXT.md`；账号、申请与邀请数据规则见 `.ai/databases/data-model.md`；决策索引见 `.ai/decisions/README.md`。

@@ -19,6 +19,7 @@ export type NotificationErrorCode =
   | 'NOTIFICATION_EVENT_CONFLICT'
   | 'NOTIFICATION_PUBLISH_FORBIDDEN'
   | 'NOTIFICATION_UNSUPPORTED'
+  | 'NOTIFICATION_QUERY_INVALID'
   | 'NOTIFICATION_BUSY'
 
 const DETAILS: Record<NotificationErrorCode, { statusCode: number; message: string }> = {
@@ -35,6 +36,7 @@ const DETAILS: Record<NotificationErrorCode, { statusCode: number; message: stri
   NOTIFICATION_EVENT_CONFLICT: { statusCode: 409, message: '相同事件标识携带了不同内容。' },
   NOTIFICATION_PUBLISH_FORBIDDEN: { statusCode: 403, message: '当前身份不能发布该通知。' },
   NOTIFICATION_UNSUPPORTED: { statusCode: 400, message: '该通知能力尚未接入。' },
+  NOTIFICATION_QUERY_INVALID: { statusCode: 400, message: '查询参数不合法。' },
   NOTIFICATION_BUSY: { statusCode: 503, message: '服务繁忙，请稍后重试。' },
 }
 

@@ -266,10 +266,12 @@ export class NotificationService {
     const digest = normalizeDigest({ kind: 'read_through', upperSequence })
 
     return await this.options.db.transaction(async tx => {
+      // 先锁用户行再查重放：并发提交同一个 requestId 时，锁把第二条排到第一条提交之后，
+      // 它才会看到去重记录而不是重复执行。
+      await this.options.repository.lockUser(userId, tx)
       const replay = await this.claimMutation(userId, requestId, 'read_through', digest, tx)
       if (replay !== null) return { ...(JSON.parse(replay) as ReadThroughResult), replayed: true, serverTime: now }
 
-      await this.options.repository.lockUser(userId, tx)
       await this.options.repository.lockStream(userId, tx)
       const affectedCount = await this.options.repository.markReadThrough(userId, now, upperSequence, tx)
       await this.options.repository.bumpStream(userId, tx)
@@ -333,10 +335,10 @@ export class NotificationService {
     const digest = normalizeDigest({ kind: 'clear', batchId })
 
     return await this.options.db.transaction(async tx => {
+      await this.options.repository.lockUser(userId, tx)
       const replay = await this.claimMutation(userId, requestId, 'clear', digest, tx)
       if (replay !== null) return { ...(JSON.parse(replay) as ClearResult), replayed: true, serverTime: now }
 
-      await this.options.repository.lockUser(userId, tx)
       await this.options.repository.lockStream(userId, tx)
       const batch = await this.options.repository.findClearBatchForUpdate(batchId, userId, tx)
       if (batch === undefined) throw new NotificationError('NOTIFICATION_BATCH_NOT_FOUND')
@@ -408,10 +410,10 @@ export class NotificationService {
     const now = this.options.now()
     const digest = normalizeDigest({ kind: 'restore', batchId })
     return await this.options.db.transaction(async tx => {
+      await this.options.repository.lockUser(userId, tx)
       const replay = await this.claimMutation(userId, requestId, 'restore', digest, tx)
       if (replay !== null) return { ...(JSON.parse(replay) as ClearResult), replayed: true, serverTime: now }
 
-      await this.options.repository.lockUser(userId, tx)
       await this.options.repository.lockStream(userId, tx)
       const batch = await this.options.repository.findClearBatchForUpdate(batchId, userId, tx)
       if (batch === undefined || batch.status === 'preview') {
@@ -477,11 +479,21 @@ export class NotificationService {
     })
   }
 
-  /** 同 key 同摘要返回原终态；异摘要冲突。 */
+  /**
+   * 同 key 同摘要返回原终态；异摘要或**跨 kind 复用 key**都判冲突。
+   *
+   * 必须在调用方已持有 user 行锁之后调用：并发提交同一个 requestId 时，
+   * 两条命令都会先查到「没有记录」而重复执行；锁把第二条排到第一条提交之后，
+   * 它才会看到去重记录。`clear` 有 batch status 兜底，但 `restore` 的重复执行
+   * 会返回一个 `affected=0` 的错误终态。
+   */
   private async claimMutation(userId: string, requestId: string, kind: 'read_through' | 'clear' | 'restore',
     digest: string, tx: SqlExecutor): Promise<string | null> {
-    const existing = await this.options.repository.findMutation(userId, requestId, kind, tx)
+    const existing = await this.options.repository.findMutation(userId, requestId, tx)
     if (existing === undefined) return null
+    // 主键是 (user_id, request_id)：换 kind 提交同一个 key 时去重记录会被静默丢弃，
+    // 这里给出明确冲突，而不是让命令再执行一遍。
+    if (existing.kind !== kind) throw new NotificationError('NOTIFICATION_REQUEST_CONFLICT')
     if (existing.digest !== digest) throw new NotificationError('NOTIFICATION_REQUEST_CONFLICT')
     return existing.result_json
   }
@@ -558,15 +570,20 @@ function clampLimit(value: number | null, fallback: number, max: number): number
   return Math.min(Math.max(value, 1), max)
 }
 
+/**
+ * 封闭字段的取值由 Contract 的 `enum` 把关；这里是直接调用 handler 时的兜底。
+ * 参数错误不能复用 `CONTENT_UNSAFE` —— 那条文案说的是「正文包含不受支持或不安全的内容」，
+ * 用它回答一个非法查询参数会把排查方向带偏。
+ */
 function parseScope(value: string | null): NotificationScope | null {
   if (value === null || value === 'all') return null
-  if (!isNotificationScope(value)) throw new NotificationError('CONTENT_UNSAFE')
+  if (!isNotificationScope(value)) throw new NotificationError('NOTIFICATION_QUERY_INVALID')
   return value
 }
 
 function parseCategory(value: string | null): NotificationCategory | null {
   if (value === null) return null
-  if (!isNotificationCategory(value)) throw new NotificationError('CONTENT_UNSAFE')
+  if (!isNotificationCategory(value)) throw new NotificationError('NOTIFICATION_QUERY_INVALID')
   return value
 }
 

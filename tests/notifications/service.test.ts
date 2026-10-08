@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { randomUUID } from 'node:crypto'
 import { createNotificationModule, type NotificationModule } from '@server/src/modules/notifications/factory'
+import { normalizeDigest } from '@server/src/modules/notifications/producer.js'
 import { NotificationError } from '@server/src/modules/notifications/errors'
 import { isolatedPostgres } from '@tests/helpers/postgres'
 import type { AppDatabase } from '@server/src/db/client.js'
@@ -58,7 +59,13 @@ async function countPreviewBatchItems(userId: string): Promise<number> {
   return Number(result.rows[0]?.count ?? 0)
 }
 
-async function publishAnnouncement(overrides: { title?: string; html?: string; audience?: { kind: 'users'; userIds: readonly string[] } } = {},
+/** 停用账号：投影必须把它当作不活跃，而不是照常投递。 */
+async function disableUser(userId: string, at: number): Promise<void> {
+  await db.query('UPDATE auth_users SET disabled_at = $2 WHERE id = $1', [userId, at])
+}
+
+async function publishAnnouncement(overrides: { title?: string; html?: string; audience?: { kind: 'users'; userIds: readonly string[] };
+  availableAt?: number | null } = {},
   actor: string | null = null, requireAdmin = false) {
   return notifications.producer.publish({
     eventType: 'community.announcement.published',
@@ -72,7 +79,7 @@ async function publishAnnouncement(overrides: { title?: string; html?: string; a
       templateVersion: 1,
       sourceRevision: 1,
       actionsJson: '[]',
-      availableAt: null,
+      availableAt: overrides.availableAt ?? null,
       expiresAt: null,
     },
     sourceType: 'internal',
@@ -209,6 +216,58 @@ describe('history, unread and detail', () => {
     const detail = await notifications.service.detail(user, history.items[0]!.receiptId)
     expect(detail.lifecycle).toBe('expired')
     expect(detail.contentAvailable).toBe(true)
+  })
+
+  it('skips an account disabled after publication but before projection', async () => {
+    const user = await seedUser()
+    await publishAnnouncement({ title: '停用后投影', audience: { kind: 'users', userIds: [user] } })
+    // 发布之后、投影之前被停用：投影必须记成 skipped_disabled，而不是照常投递。
+    await disableUser(user, now())
+    await project()
+
+    const list = await notifications.service.list({ userId: user, view: 'history', scope: null, category: null, limit: null, cursor: null })
+    expect(list.items).toHaveLength(0)
+    const recipients = await db.query<{ state: string }>(
+      'SELECT state FROM notification_event_recipients WHERE user_id = $1', [user])
+    // 存在性不等于活跃：账号行还在，所以这里不能退化成「已删除才算停用」。
+    expect(recipients.rows[0]?.state).toBe('skipped_disabled')
+  })
+
+  it('defers a publication that is not available yet', async () => {
+    const user = await seedUser()
+    // 推迟走的是 deferEventProjection，它必须复用事务连接：走默认连接会在事务外
+    // 另起一条连接改同一行，一旦本事务持有该行锁就是自锁。
+    await publishAnnouncement({ title: '定时', audience: { kind: 'users', userIds: [user] },
+      availableAt: now() + 60_000 })
+    await project()
+    const before = await notifications.service.list({ userId: user, view: 'history', scope: null, category: null, limit: null, cursor: null })
+    expect(before.items).toHaveLength(0)
+
+    currentTime += 61_000
+    await project()
+    const after = await notifications.service.list({ userId: user, view: 'history', scope: null, category: null, limit: null, cursor: null })
+    expect(after.items).toHaveLength(1)
+    expect(after.items[0]!.title).toBe('定时')
+  })
+
+  it('requires the same admin check for withdraw as for publish', async () => {
+    const admin = await seedUser('admin2')
+    await grantAdmin(admin)
+    const plain = await seedUser('plain2')
+    const published = await publishAnnouncement({ title: '待撤回' }, admin, true)
+
+    await expect(notifications.producer.withdraw({
+      dedupeKey: 'withdraw-no-admin', contentId: published.contentId, actorUserId: plain,
+      sourceType: 'internal', sourceId: 'test',
+    }, { requireAdmin: true })).rejects.toThrowError(/NOTIFICATION_PUBLISH_FORBIDDEN/)
+
+    // 没要求 admin 时行为不变：撤回同样能让内容消失。
+    await notifications.producer.withdraw({
+      dedupeKey: 'withdraw-plain', contentId: published.contentId, actorUserId: null,
+      sourceType: 'internal', sourceId: 'test',
+    })
+    const list = await notifications.service.list({ userId: admin, view: 'history', scope: null, category: null, limit: null, cursor: null })
+    expect(list.items).toHaveLength(0)
   })
 
   it('removes a withdrawn notification from list and count and returns a neutral 404', async () => {
@@ -466,6 +525,75 @@ describe('recoverable clear', () => {
     const preview = await notifications.service.previewClear(user)
     expect(preview.itemCount).toBe(0)
     expect(await countPreviewBatchItems(user)).toBe(0)
+  })
+
+  it('keeps a cleared receipt out of single reads and state writes', async () => {
+    const user = await seedUser()
+    await publishAnnouncement({ title: '将清理', audience: { kind: 'users', userIds: [user] } })
+    await project()
+    const list = await notifications.service.list({ userId: user, view: 'history', scope: null, category: null, limit: null, cursor: null })
+    const receiptId = list.items[0]!.receiptId
+
+    const preview = await notifications.service.previewClear(user)
+    await notifications.service.clearSnapshot(user, randomUUID(), preview.clearSnapshotToken)
+
+    // 已清理项在列表里已经不可见，单条 GET 与 PATCH 必须与它一致 —— 否则清理就不是真的移除访问路径。
+    await expect(notifications.service.detail(user, receiptId)).rejects.toThrowError(/NOTIFICATION_NOT_FOUND/)
+    await expect(notifications.service.updateState(user, receiptId, true, 0))
+      .rejects.toThrowError(/NOTIFICATION_NOT_FOUND/)
+  })
+
+  it('refuses to reuse one request id across kinds instead of re-running the command', async () => {
+    const user = await seedUser()
+    await publishAnnouncement({ title: '跨 kind', audience: { kind: 'users', userIds: [user] } })
+    await project()
+
+    const preview = await notifications.service.previewClear(user)
+    const requestId = randomUUID()
+    await notifications.service.clearSnapshot(user, requestId, preview.clearSnapshotToken)
+
+    // 去重记录的主键是 (user_id, request_id)，不含 kind。按 kind 查会查不到、命令再执行一次，
+    // 而随后的 ON CONFLICT DO NOTHING 又会静默丢掉记录。这里必须给出明确冲突。
+    await expect(notifications.service.restoreBatch(user, preview.batchId, requestId))
+      .rejects.toThrowError(/NOTIFICATION_REQUEST_CONFLICT/)
+  })
+
+  it('refuses a stored idempotency record that belongs to another kind', async () => {
+    const user = await seedUser()
+    await publishAnnouncement({ title: 'kind 兜底', audience: { kind: 'users', userIds: [user] } })
+    await project()
+    const preview = await notifications.service.previewClear(user)
+    await notifications.service.clearSnapshot(user, randomUUID(), preview.clearSnapshotToken)
+
+    // 摘要里已经含 kind，所以上面的「跨 kind 复用 key」靠摘要就能挡住。
+    // 这条单独盯 kind 判定本身：手工放一条同 key、同摘要、但 kind 不同的记录，
+    // 只靠摘要比对会放行并重复执行。
+    const requestId = randomUUID()
+    await db.query(`INSERT INTO notification_mutations (user_id, request_id, kind, digest, result_json,
+      clear_batch_id, created_at) VALUES ($1, $2, 'clear', $3, '{}', NULL, $4)`,
+    [user, requestId, normalizeDigest({ kind: 'restore', batchId: preview.batchId }), now()])
+    await expect(notifications.service.restoreBatch(user, preview.batchId, requestId))
+      .rejects.toThrowError(/NOTIFICATION_REQUEST_CONFLICT/)
+  })
+
+  it('serialises concurrent submissions of the same request id', async () => {
+    const user = await seedUser()
+    await publishAnnouncement({ title: '并发', audience: { kind: 'users', userIds: [user] } })
+    await project()
+    const preview = await notifications.service.previewClear(user)
+    await notifications.service.clearSnapshot(user, randomUUID(), preview.clearSnapshotToken)
+
+    // 查重放必须在持有 user 行锁之后：否则两条都查不到记录而重复执行，
+    // 第二条会把 affected=0 的错误终态返回给调用方。
+    const requestId = randomUUID()
+    const [first, second] = await Promise.all([
+      notifications.service.restoreBatch(user, preview.batchId, requestId),
+      notifications.service.restoreBatch(user, preview.batchId, requestId),
+    ])
+    expect(first.affectedCount).toBe(1)
+    expect(first.replayed).toBe(false)
+    expect(second.replayed).toBe(true)
+    expect(second.affectedCount).toBe(first.affectedCount)
   })
 
   it('restores only what this batch actually cleared', async () => {

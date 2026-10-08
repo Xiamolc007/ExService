@@ -13,6 +13,10 @@ import { DEFAULT_PREFERENCES, OPTIONAL_CATEGORIES, isNotificationCategory } from
  * 有界批次、lease token、稳定排序、有限退避与 poison 隔离；suppressed 不算
  * delivered，事件只在全部受众到达终态时才 completed。单实例：Server 关闭时
  * 停止认领并有界等待正在执行的短事务，未完成 lease 由后续运行恢复。
+ *
+ * **事务回调里的所有 repository 调用都必须显式传 `tx`。** 用默认参数会走连接池里的
+ * 另一条连接；一旦本事务已经持有目标行的锁，那条连接会阻塞在锁上，而本事务又在等
+ * 它的结果 —— 自锁。`completeEventProjection` 那种**事务提交之后**的调用不在此列。
  */
 
 export interface ProjectionWorkerOptions {
@@ -129,7 +133,9 @@ export class NotificationProjectionWorker {
         }
         if (content.available_at > now) {
           // 尚未生效：释放 lease 并推迟到生效时刻，不消耗失败预算，避免每轮空转。
-          await this.options.repository.deferEventProjection(event.event_id, content.available_at)
+          // 必须走事务连接：走默认连接会在事务外另起一条连接改同一行，
+          // 一旦本事务也持有该行的锁就是自锁。
+          await this.options.repository.deferEventProjection(event.event_id, content.available_at, tx)
           counts.remaining = userIds.length
           return counts
         }

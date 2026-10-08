@@ -107,13 +107,36 @@ const RECEIPT_SELECT = `
  */
 const VISIBLE_CONTENT = `r.user_id = $1 AND c.available_at <= $2 AND c.withdrawn_at IS NULL`
 
+/**
+ * 未清理 receipt 的可读基准：在 `P` 之上排除已清理项。
+ *
+ * 已清理项不属于 history，因此单条 GET 与 PATCH state 也必须与列表一致地拒绝它。
+ * 凡是「本人可见且未清理」的读与批量写都用它，不要在调用处再拼一次 `cleared_at IS NULL` ——
+ * 拼漏一处就会出现「列表看不到、单条却能读写」的不一致。
+ *
+ * 两处**不**用它：`applyClearBatch` 里的 `cleared_at IS NULL` 是「只清理仍未清理的项」
+ * 这个业务条件的一部分，`restoreClearBatch` 则必须能看到已清理的项；两者的语义都与可读基准不同。
+ */
+const VISIBLE_UNCLEARED_RECEIPT = `${VISIBLE_CONTENT} AND r.cleared_at IS NULL`
+
 export class NotificationRepository {
   constructor(readonly db: AppDatabase) {}
 
+  /**
+   * 锁住用户行并返回**是否仍活跃**。
+   *
+   * 存在性不等于活跃：发布之后、投影之前被停用的账号不能再收到通知，
+   * 否则 `skipped_disabled` 只会在账号行被删除时出现。
+   *
+   * 只有 `projection.ts` 消费「活跃」这个判定。`service.ts` 的六处调用只用它取行锁、
+   * 不看返回值 —— 停用账号在会话解析处就被拒了（`auth/service.ts` 校验 `disabled_at`），
+   * 根本进不到通知的 service 路径。`FOR NO KEY UPDATE` 无论活跃与否都会取到锁。
+   */
   async lockUser(userId: string, executor: SqlExecutor = this.db): Promise<boolean> {
     const result = await executor.query<{ id: string; disabled_at: number | null }>(
       'SELECT id, disabled_at FROM auth_users WHERE id = $1 FOR NO KEY UPDATE', [userId])
-    return result.rows.length === 1
+    const row = result.rows[0]
+    return row !== undefined && row.disabled_at === null
   }
 
   async lockStream(userId: string, executor: SqlExecutor): Promise<{ lastSequence: number; stateVersion: number }> {
@@ -253,14 +276,14 @@ export class NotificationRepository {
   async findReceipt(receiptId: string, userId: string, now: number,
     executor: SqlExecutor = this.db): Promise<ReceiptListRow | undefined> {
     const result = await executor.query<ReceiptListRow>(
-      `${RECEIPT_SELECT} WHERE r.receipt_id = $3 AND ${VISIBLE_CONTENT}`, [userId, now, receiptId])
+      `${RECEIPT_SELECT} WHERE r.receipt_id = $3 AND ${VISIBLE_UNCLEARED_RECEIPT}`, [userId, now, receiptId])
     return result.rows[0]
   }
 
   async findReceiptForUpdate(receiptId: string, userId: string, now: number,
     executor: SqlExecutor): Promise<ReceiptListRow | undefined> {
     const result = await executor.query<ReceiptListRow>(
-      `${RECEIPT_SELECT} WHERE r.receipt_id = $3 AND ${VISIBLE_CONTENT} FOR UPDATE OF r`,
+      `${RECEIPT_SELECT} WHERE r.receipt_id = $3 AND ${VISIBLE_UNCLEARED_RECEIPT} FOR UPDATE OF r`,
       [userId, now, receiptId])
     return result.rows[0]
   }
@@ -277,7 +300,7 @@ export class NotificationRepository {
     upperSequence: number
   }, executor: SqlExecutor = this.db): Promise<ReceiptListRow[]> {
     const values: unknown[] = [params.userId, params.now, params.upperSequence]
-    let sql = `${RECEIPT_SELECT} WHERE ${VISIBLE_CONTENT} AND r.cleared_at IS NULL AND r.sequence <= $3`
+    let sql = `${RECEIPT_SELECT} WHERE ${VISIBLE_UNCLEARED_RECEIPT} AND r.sequence <= $3`
     if (params.view === 'unread') {
       sql += ' AND r.read_at IS NULL AND (c.expires_at IS NULL OR c.expires_at > $2)'
     }
@@ -303,7 +326,7 @@ export class NotificationRepository {
     const result = await executor.query<{ count: string }>(`
       SELECT count(*)::text AS count FROM notification_receipts r
         JOIN notification_contents c ON c.content_id = r.content_id
-        WHERE ${VISIBLE_CONTENT} AND r.cleared_at IS NULL AND r.read_at IS NULL
+        WHERE ${VISIBLE_UNCLEARED_RECEIPT} AND r.read_at IS NULL
           AND (c.expires_at IS NULL OR c.expires_at > $2)`, [userId, now])
     return Number(result.rows[0]?.count ?? 0)
   }
@@ -330,8 +353,8 @@ export class NotificationRepository {
     const result = await executor.query(`
       UPDATE notification_receipts r SET read_at = $2, state_revision = state_revision + 1
         FROM notification_contents c
-        WHERE c.content_id = r.content_id AND r.user_id = $1 AND r.cleared_at IS NULL
-          AND r.read_at IS NULL AND r.sequence <= $3 AND ${VISIBLE_CONTENT}
+        WHERE c.content_id = r.content_id AND r.user_id = $1 AND ${VISIBLE_UNCLEARED_RECEIPT}
+          AND r.read_at IS NULL AND r.sequence <= $3
           AND (c.expires_at IS NULL OR c.expires_at > $2)`, [userId, now, upperSequence])
     return result.rowCount ?? 0
   }
@@ -367,11 +390,18 @@ export class NotificationRepository {
     return (result.rowCount ?? 0) === 1
   }
 
-  async findMutation(userId: string, requestId: string, kind: string,
-    executor: SqlExecutor = this.db): Promise<{ digest: string; result_json: string } | undefined> {
-    const result = await executor.query<{ digest: string; result_json: string }>(
-      'SELECT digest, result_json FROM notification_mutations WHERE user_id = $1 AND request_id = $2 AND kind = $3',
-      [userId, requestId, kind])
+  /**
+   * 按 `(user_id, request_id)` 查重放记录 —— 这正是表的**主键**。
+   *
+   * 不能按 `(user_id, request_id, kind)` 查：跨 kind 复用同一个 requestId 时查不到记录，
+   * 命令会重复执行，而随后的 `ON CONFLICT DO NOTHING` 又会静默丢掉去重记录。
+   * 这里一律把记录取回来，由调用方判定 kind 是否匹配并给出明确冲突。
+   */
+  async findMutation(userId: string, requestId: string,
+    executor: SqlExecutor = this.db): Promise<{ kind: string; digest: string; result_json: string } | undefined> {
+    const result = await executor.query<{ kind: string; digest: string; result_json: string }>(
+      'SELECT kind, digest, result_json FROM notification_mutations WHERE user_id = $1 AND request_id = $2',
+      [userId, requestId])
     return result.rows[0]
   }
 
@@ -516,7 +546,7 @@ export class NotificationRepository {
     const result = await executor.query<{ receipt_id: string; clear_revision: number }>(`
       SELECT r.receipt_id, r.clear_revision FROM notification_receipts r
         JOIN notification_contents c ON c.content_id = r.content_id
-        WHERE ${VISIBLE_CONTENT} AND r.cleared_at IS NULL
+        WHERE ${VISIBLE_UNCLEARED_RECEIPT}
         ORDER BY r.sequence DESC`, [userId, now])
     return result.rows.map(row => ({ receiptId: row.receipt_id, clearRevision: row.clear_revision }))
   }

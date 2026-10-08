@@ -195,8 +195,14 @@ export class NotificationProducer {
     })
   }
 
-  /** 撤回：与内容生命周期在同一事务，独立事件不再创建 receipt。 */
-  async withdraw(input: WithdrawInput): Promise<{ eventId: string; replayed: boolean }> {
+  /**
+   * 撤回：与内容生命周期在同一事务，独立事件不再创建 receipt。
+   *
+   * `requireAdmin` 与 `publish` 对称：撤回同样会让已投递的通知从所有收件人处消失，
+   * 授权要求不能比发布更松。N1 两者都还没有 HTTP 入口，但对称性必须从一开始就成立。
+   */
+  async withdraw(input: WithdrawInput,
+    options: { requireAdmin?: boolean } = {}): Promise<{ eventId: string; replayed: boolean }> {
     const entry = catalogEntry('community.announcement.withdrawn', EVENT_VERSION)
     if (entry === undefined) throw new NotificationError('NOTIFICATION_UNSUPPORTED')
     const now = this.deps.now()
@@ -209,6 +215,11 @@ export class NotificationProducer {
       if (existing !== undefined) {
         if (existing.digest !== digest) throw new NotificationError('NOTIFICATION_EVENT_CONFLICT')
         return { eventId: existing.event_id, replayed: true }
+      }
+      if (options.requireAdmin === true) {
+        if (input.actorUserId === null || !(await this.deps.repository.isAdminUser(input.actorUserId, tx))) {
+          throw new NotificationError('NOTIFICATION_PUBLISH_FORBIDDEN')
+        }
       }
       const updated = await this.deps.repository.withdrawContent(input.contentId, now, tx)
       if (updated !== 1) throw new NotificationError('NOTIFICATION_NOT_FOUND')

@@ -477,4 +477,18 @@ describe('registered notification handler output', () => {
     expect(Object.keys(clear).sort()).toEqual(['affectedCount', 'batchId', 'replayed', 'requestId', 'serverTime',
       'skippedCount', 'unreadCount'])
   })
+
+  /**
+   * HTTP 层由 Contract 的 `enum` 先挡住；直接调用 handler 时走的是兜底分支。
+   * 这条分支不能复用 `CONTENT_UNSAFE` —— 那条文案说的是「正文包含不受支持或不安全的内容」，
+   * 用它回答一个非法查询参数会把排查方向带偏。
+   */
+  it('reports an illegal query value as a query error instead of unsafe content', async () => {
+    const rejected = await serviceHandlers.listNotifications(
+      { query: { view: 'history', scope: 'nope' }, server: app, authSession: { userId } } as never, reply
+    ).then(() => null, (error: unknown) => error) as { code?: string; publicMessage?: string } | null
+    expect(rejected).not.toBeNull()
+    expect(rejected!.code).toBe('NOTIFICATION_QUERY_INVALID')
+    expect(rejected!.publicMessage).not.toContain('正文')
+  })
 })
