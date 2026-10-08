@@ -5,6 +5,7 @@
 - 默认用中文沟通；代码、标识符、Commit message 和既有文档沿用各自语言约定。
 - 文档、注释和交付说明中的仓库路径以仓库根目录为基准，使用行内代码；不写 `./`、`../`、Markdown 相对链接或本机绝对路径。代码中的 import 和运行时路径遵循工具约定。
 - 开工前从 `.ai/README.md` 查找相关知识；启动步骤与命令见 `README.md`，配置导入、运行和部署材料见 `docs/runtime.md`。
+- Monica 任务使用当前项目提示词和本工程规则提供项目上下文；Exre 通用 Agents 只定义角色职责，不携带其他项目规则。ExWebsite 项目协作约定见 `.ai/architectures/monica-team/workflow.md`。
 - 开发或修改 `/docs/` 或 Outline 相关功能、代码、页面前，必须先读取并遵守 `apps/outline/AGENTS.md`。
 
 <!-- codebase-worker:start -->

@@ -2,7 +2,7 @@
 
 本目录记录源码难以直接表达的模块边界、已接受决策、数据规则与运行陷阱。仓库以 `api/openapi.yaml` 为唯一 HTTP Contract；`apps/server/` 是唯一 Fastify Server，使用独立 PostgreSQL `exre`。当前仍是单实例开发阶段，不代表已可公网部署。
 
-_最后更新：2026-10-07_
+_最后更新：2026-10-08_
 
 ## 模块与入口
 
@@ -16,7 +16,7 @@ _最后更新：2026-10-07_
 | 存储与 SDK | `apps/server/src/modules/storage/`、`packages/sdk/` | `.ai/knowledge/storage/lifecycle-traps.md` |
 | 文档集成 | `apps/outline/`、`infra/docs-integration/`、`scripts/docs-integration/` | `.ai/architectures/docs-integration/integration-boundaries.md`、`.ai/architectures/docs-integration/unified-reading-interface.md`、`.ai/knowledge/docs-integration/public-reader-refs.md` |
 | Contract Test | `tests/contract/` | `.ai/architectures/contract-tests/test-layers.md` |
-| Monica 团队 | EXS Delivery Squad | `.ai/architectures/monica-team/workflow.md` |
+| Monica 项目协作 | Exre Delivery Squad | `.ai/architectures/monica-team/workflow.md` |
 
 跨模块结构见 `.ai/architectures/overview.md`；业务术语见 `.ai/CONTEXT.md`；账号、申请与邀请数据规则见 `.ai/databases/data-model.md`；决策索引见 `.ai/decisions/README.md`。
 

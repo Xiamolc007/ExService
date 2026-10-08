@@ -32,9 +32,15 @@ Thumbs.db
 # reading only. Docs under .ai/ and .notes/ cite paths inside it, so it is left
 # in place but intentionally not tracked.
 .agents/
+.claude/
+.superpowers/
 
 playwright
 .playwright-cli
 output
 vendor/exui/
 .local/docs-integration/
+
+# Local docs-integration previews and one-off verification artifacts
+.notes/docs-integration/previews/
+.notes/docs-integration/reports/
