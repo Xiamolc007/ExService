@@ -97,6 +97,7 @@ export interface NotificationCopy {
   historyCount: (count: number) => string
   loadMore: string
   retryNextPage: string
+  pageRetrying: string
   nextPageError: string
   listLoading: string
   listError: string
@@ -175,9 +176,14 @@ export const notificationCopy: NotificationCopy = {
   filterLabel: '显示',
   filterAll: '全部历史',
   filterUnread: '仅未读',
-  historyCount: (count) => `${count} 条历史`,
+  /**
+   * 已加载条数。Contract 不返回总数，所以这里**不能**说成「共 N 条」——
+   * 翻了几页就是几页的量，措辞必须如实。
+   */
+  historyCount: (count) => `已加载 ${count} 条`,
   loadMore: '加载更多',
-  retryNextPage: '重试下一页',
+  retryNextPage: '重新加载列表',
+  pageRetrying: '正在重新加载…',
   nextPageError: '下一页加载失败，已显示的通知保留。',
   listLoading: '正在加载通知',
   listError: '通知暂时无法加载，计数未更新。',

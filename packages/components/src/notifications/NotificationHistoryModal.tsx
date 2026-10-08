@@ -13,6 +13,7 @@ import {
   isNotificationUnread,
   notificationActionReasonLabel,
   notificationCategoryLabel,
+  notificationCopy,
   notificationStateLabel,
   type NotificationClearBatchView,
   type NotificationDetailView,
@@ -182,7 +183,9 @@ export function NotificationHistoryModal(props: NotificationHistoryModalProps) {
                   <SelectItem value="unread">仅未读</SelectItem>
                 </SelectContent>
               </SelectField>
-              <span className={styles.count}>{props.list.items.length} 条历史</span>
+              <span className={styles.count}>
+                {notificationCopy.historyCount(props.list.items.length)}
+              </span>
             </div>
           </div>
 
@@ -215,12 +218,14 @@ export function NotificationHistoryModal(props: NotificationHistoryModalProps) {
                         不能写成「重试下一页」却把整份列表重读一遍。
                       */}
                       {props.list.nextPageStatus === 'loading' && !props.list.hasMore &&
-                        <p className={styles.pageRetrying} role="status">正在重新加载…</p>}
+                        <p className={styles.pageRetrying} role="status">
+                          {notificationCopy.pageRetrying}
+                        </p>}
                       {props.list.nextPageStatus === 'error' &&
                         <div role="alert" className={styles.pageError}>
-                          <p>下一页加载失败，已显示的通知保留。</p>
+                          <p>{notificationCopy.nextPageError}</p>
                           <Button type="button" variant="ghost" size="sm"
-                            onClick={props.list.onLoadMore}>重新加载列表</Button>
+                            onClick={props.list.onLoadMore}>{notificationCopy.retryNextPage}</Button>
                         </div>}
                     </div>}
                 </>}

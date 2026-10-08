@@ -90,7 +90,26 @@ describe('NotificationHistoryModal', () => {
     expect(screen.getAllByText('未读').length).toBeGreaterThan(0)
     expect(screen.getAllByText('已读').length).toBeGreaterThan(0)
     expect(screen.getAllByText('已过期').length).toBeGreaterThan(0)
-    expect(screen.getByText('3 条历史')).toBeTruthy()
+  })
+
+  /**
+   * 计数措辞：Contract 不返回总数，所以只能说**已加载**多少条。
+   * 说成「共 N 条」或「N 条历史」会被读成总数，而翻页还没到底时它并不是总数。
+   */
+  it('counts the loaded rows and never implies a total', () => {
+    const { rerender } = render(<NotificationHistoryModal {...props({
+      list: { ...props().list, items: [item, { ...item, receiptId: 'r-2' }] },
+    })} />)
+    expect(screen.getByText('已加载 2 条')).toBeTruthy()
+    expect(screen.queryByText(/共 \d+ 条/)).toBeNull()
+    expect(screen.queryByText(/\d+ 条历史/)).toBeNull()
+    // 翻页后跟着变（仍是已加载量，不是总量）。
+    rerender(<NotificationHistoryModal {...props({
+      list: { ...props().list, hasMore: true, items: [item, { ...item, receiptId: 'r-2' },
+        { ...item, receiptId: 'r-3' }] },
+    })} />)
+    expect(screen.getByText('已加载 3 条')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '加载更多' })).toBeTruthy()
   })
 
   it('selects a row through the shared list without writing state itself', async () => {

@@ -3,6 +3,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { writeToken } from '@web/src/auth/storage'
 import { bindNotificationsToken, notificationsConfig } from '@web/src/notifications/notificationsConfig'
+import { SUMMARY_POLLING } from '@web/src/notifications/summaryPolling'
 import { ExAxiosError } from '@workspace/sdk/http/browser'
 
 const get = vi.hoisted(() => vi.fn())
@@ -121,6 +122,214 @@ describe('notifications controller', () => {
     await waitFor(() => expect(hook.result.current.countState).toEqual({ kind: 'error' }))
     expect(notificationsConfig.summary.unreadCount).toBe(0)
     hook.unmount()
+  })
+
+  /**
+   * M5：轮询调度（设计 9.3）。
+   *
+   * 用**可控时钟**（`vi.useFakeTimers`）驱动，不靠真实等待：
+   * 推进定时器就能观察间隔是否真的随失败拉长、随成功复位。
+   */
+  describe('M5 polling backoff', () => {
+    const summaryCalls = () => get.mock.calls.filter(call => call[0] === '/notifications/summary').length
+
+    function setupPolling() {
+      const hook = renderHook(() => useNotificationsController())
+      return hook
+    }
+
+    it('lengthens the interval while summaries keep failing and resets it after a success', async () => {
+      vi.useFakeTimers()
+      try {
+        // 前 4 次持续失败，之后恢复。用假时钟记录每次读取的时刻。
+        let attempts = 0
+        const attemptedAt: number[] = []
+        get.mockImplementation((path: string) => {
+          if (path !== '/notifications/summary') return Promise.resolve(page)
+          attempts += 1
+          attemptedAt.push(Date.now())
+          return attempts <= 4
+            ? Promise.reject(new ExAxiosError('network', 'NETWORK_ERROR', '网络连接失败，请稍后重试'))
+            : Promise.resolve(summary)
+        })
+        const hook = setupPolling()
+        await vi.advanceTimersByTimeAsync(0)
+        expect(summaryCalls()).toBe(1)
+
+        // 推进 25 分钟。排程是：a1@0 失败 → 60s → a2@60s 失败 → 240s → a3@300s 失败
+        // → 480s → a4@780s 失败 → 960s 但被上限截到 600s → a5@1380s **成功** → 复位 60s
+        // → a6@1440s → a7@1500s。
+        await vi.advanceTimersByTimeAsync(25 * 60_000)
+        expect(attempts).toBeGreaterThanOrEqual(6)
+
+        const gaps = attemptedAt.slice(1).map((at, index) => at - attemptedAt[index]!)
+        // 失败期间（gaps[0..3]）：间隔严格变大。固定 60 秒的话这里会全部相等。
+        const failingGaps = gaps.slice(0, 4)
+        for (let index = 1; index < failingGaps.length; index += 1) {
+          expect(failingGaps[index]!).toBeGreaterThan(failingGaps[index - 1]!)
+        }
+        expect(failingGaps[0]).toBe(SUMMARY_POLLING.baseInterval)
+        // 第 4 档本该是 16 分钟，被上限截到 10 分钟。
+        expect(failingGaps[3]).toBe(SUMMARY_POLLING.maxInterval)
+
+        // 成功之后：间隔立刻回到基准（退避只针对“正在失败”的那段时间）。
+        expect(hook.result.current.countState).toEqual({ kind: 'ready', count: 2 })
+        expect(gaps[4]).toBe(SUMMARY_POLLING.baseInterval)
+        expect(gaps[5]).toBe(SUMMARY_POLLING.baseInterval)
+        hook.unmount()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('stops polling while the page is hidden and resumes when it becomes visible', async () => {
+      vi.useFakeTimers()
+      const visibility = vi.spyOn(document, 'visibilityState', 'get')
+      try {
+        visibility.mockReturnValue('visible')
+        const hook = setupPolling()
+        await vi.advanceTimersByTimeAsync(0)
+        const seen = summaryCalls()
+
+        // 隐藏：轮询停掉，推进 10 分钟也不再发请求。
+        visibility.mockReturnValue('hidden')
+        act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+        await vi.advanceTimersByTimeAsync(10 * 60_000)
+        expect(summaryCalls()).toBe(seen)
+
+        // 回到可见：立即按节流刷一次，并重新起轮询。
+        visibility.mockReturnValue('visible')
+        await act(async () => {
+          document.dispatchEvent(new Event('visibilitychange'))
+          await vi.advanceTimersByTimeAsync(0)
+        })
+        expect(summaryCalls()).toBe(seen + 1)
+        await vi.advanceTimersByTimeAsync(60_000)
+        expect(summaryCalls()).toBe(seen + 2)
+        hook.unmount()
+      } finally {
+        visibility.mockRestore()
+        vi.useRealTimers()
+      }
+    })
+
+    /**
+     * 复位必须落到**已经 setTimeout 出去的档位**上，而不只是把计数器清零。
+     *
+     * 缺陷版本里 `onVisible` 是 `refreshNow(); schedule()` —— `schedule()` 在同一 tick
+     * 读 `nextDelay()`，那时本次成败还不知道，于是新排的定时器仍是旧退避档位。
+     */
+    it('re-arms the timer on the base interval after a successful refresh on becoming visible', async () => {
+      vi.useFakeTimers()
+      const visibility = vi.spyOn(document, 'visibilityState', 'get')
+      try {
+        visibility.mockReturnValue('visible')
+        // 前 3 次失败，之后成功。
+        let attempts = 0
+        get.mockImplementation((path: string) => {
+          if (path !== '/notifications/summary') return Promise.resolve(page)
+          attempts += 1
+          return attempts <= 3
+            ? Promise.reject(new ExAxiosError('network', 'NETWORK_ERROR', '网络连接失败，请稍后重试'))
+            : Promise.resolve(summary)
+        })
+        const hook = setupPolling()
+        await vi.advanceTimersByTimeAsync(0)
+        // a1@0 失败 → a2@60s 失败 → a3@300s 失败，退避被推到 480s。
+        await vi.advanceTimersByTimeAsync(60_000)
+        await vi.advanceTimersByTimeAsync(240_000)
+        expect(summaryCalls()).toBe(3)
+
+        // 隐藏：待触发的轮询撤掉，推进 30 分钟也不再发请求。
+        visibility.mockReturnValue('hidden')
+        act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+        await vi.advanceTimersByTimeAsync(30 * 60_000)
+        expect(summaryCalls()).toBe(3)
+
+        // 回到可见：这次刷新成功 → 调度器复位 → 下一个间隔应为基准 60s。
+        visibility.mockReturnValue('visible')
+        await act(async () => {
+          document.dispatchEvent(new Event('visibilitychange'))
+          await vi.advanceTimersByTimeAsync(0)
+        })
+        expect(summaryCalls()).toBe(4)
+        expect(hook.result.current.countState).toEqual({ kind: 'ready', count: 2 })
+
+        // 一个基准间隔后就有下一次。旧退避是 480s，那时这里仍应是 4 次。
+        await vi.advanceTimersByTimeAsync(60_000)
+        expect(summaryCalls()).toBe(5)
+        hook.unmount()
+      } finally {
+        visibility.mockRestore()
+        vi.useRealTimers()
+      }
+    })
+
+    it('collapses a burst of focus events into one request', async () => {
+      vi.useFakeTimers()
+      try {
+        const hook = setupPolling()
+        await vi.advanceTimersByTimeAsync(0)
+        const seen = summaryCalls()
+        // 密集聚焦：同一节流窗口内连发 10 次，不该变成 10 个请求。
+        await act(async () => {
+          for (let index = 0; index < 10; index += 1) {
+            window.dispatchEvent(new Event('focus'))
+            await vi.advanceTimersByTimeAsync(0)
+          }
+        })
+        expect(summaryCalls()).toBe(seen + 1)
+        // 出了节流窗口（10s）才再放行一次。
+        await act(async () => {
+          vi.advanceTimersByTime(10_000)
+          window.dispatchEvent(new Event('focus'))
+          await vi.advanceTimersByTimeAsync(0)
+        })
+        expect(summaryCalls()).toBe(seen + 2)
+        hook.unmount()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('does not stack a second request while one summary is already in flight', async () => {
+      let release!: (value: unknown) => void
+      get.mockImplementation((path: string) => {
+        if (path !== '/notifications/summary') return Promise.resolve(page)
+        // 第一次挂住，好在「在途」状态下再触发刷新。
+        return new Promise(resolve => { release = resolve })
+      })
+      const hook = renderHook(() => useNotificationsController())
+      await waitFor(() => expect(summaryCalls()).toBe(1))
+      // 在途时再要求刷新若干次：在途去重应当把它们全部合并掉。
+      await act(async () => {
+        for (let index = 0; index < 5; index += 1) window.dispatchEvent(new Event('focus'))
+      })
+      expect(summaryCalls()).toBe(1)
+      await act(async () => { release(summary) })
+      hook.unmount()
+    })
+
+    it('clears the backoff and throttle window on logout so the next session starts fresh', async () => {
+      vi.useFakeTimers()
+      try {
+        get.mockImplementation((path: string) => path === '/notifications/summary'
+          ? Promise.reject(new ExAxiosError('network', 'NETWORK_ERROR', '网络连接失败，请稍后重试'))
+          : Promise.resolve(page))
+        const hook = setupPolling()
+        await vi.advanceTimersByTimeAsync(0)
+        await vi.advanceTimersByTimeAsync(60_000 + 120_000)
+        expect(summaryCalls()).toBeGreaterThan(1)
+
+        // 退出：监听与定时器一并撤掉，推进时间不再产生任何请求。
+        hook.unmount()
+        const seen = summaryCalls()
+        await vi.advanceTimersByTimeAsync(30 * 60_000)
+        expect(summaryCalls()).toBe(seen)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
   })
 
   it('loads history when the modal opens and does not mark anything read by opening', async () => {

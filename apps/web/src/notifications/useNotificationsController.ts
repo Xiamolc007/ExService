@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useSnapshot } from 'valtio'
 import { api } from '@web/src/api/client'
@@ -10,6 +10,7 @@ import {
   isCurrentNotificationGeneration, mergeNotificationPage, notificationsConfig,
   type NotificationDetail, type NotificationItem,
 } from '@web/src/notifications/notificationsConfig'
+import { createSummaryScheduler } from '@web/src/notifications/summaryPolling'
 import type {
   NotificationBulkSlice, NotificationConfirmSlice, NotificationCountState, NotificationDetailSlice,
   NotificationHistoryFilter, NotificationListSlice, NotificationRecordsSlice,
@@ -17,8 +18,6 @@ import type {
 
 /** 列表页大小；Contract 上界为 50。 */
 const PAGE_LIMIT = 20
-/** 可见时的未读计数轮询间隔。隐藏、匿名时停止。 */
-const SUMMARY_POLL_INTERVAL = 60_000
 
 interface ClearPreview {
   token: string
@@ -71,6 +70,10 @@ export function useNotificationsController() {
   const [previewClock, setPreviewClock] = useState(0)
 
   const clearPreview = useRef<ClearPreview | null>(null)
+  /** 未读计数轮询：失败退避、成功复位、聚焦节流。 */
+  const scheduler = useMemo(() => createSummaryScheduler(), [])
+  /** 未读计数在途请求，用于去重。 */
+  const summaryInFlight = useRef<Promise<void> | null>(null)
   const readAllIntent = useRef<string | null>(null)
   const restoreIntent = useRef(new Map<string, string>())
   /**
@@ -123,41 +126,110 @@ export function useNotificationsController() {
     try {
       const result = await api.GET('/notifications/summary', { alert: false })
       if (!isCurrentNotificationGeneration(generation)) return
+      // 一次成功就把退避拉回基准：退避只针对「正在失败」的那段时间（设计 9.3）。
+      scheduler.recordSuccess()
       applyUnreadCount(result.unreadCount, result.readThroughToken)
     } catch (error) {
       if (!isCurrentNotificationGeneration(generation)) return
       if (sessionInvalid(error)) return
+      scheduler.recordFailure()
       notificationsConfig.summary.status = 'error'
       notificationsConfig.summary.error = error instanceof ExAxiosError
         ? error.message : '未读计数暂时无法读取'
     }
-  }, [authenticated, sessionInvalid])
+  }, [authenticated, sessionInvalid, scheduler])
+
+  /**
+   * 在途去重：挂载、定时器、聚焦、可见性可能同时要求刷新，同一时刻只发一次。
+   * 返回这一次读取的 promise，好让调用方等它落地再排下一次（退避要用本次结果）。
+   *
+   * 显式重试（`refreshSummary` / 列表重试）**不**走这里 —— 用户点了就该真的发一次请求，
+   * 不能被一个在途请求吞掉。
+   */
+  const runSummaryIfIdle = useCallback((): Promise<void> => {
+    if (summaryInFlight.current !== null) return summaryInFlight.current
+    const task = loadSummary()
+    summaryInFlight.current = task
+    void task.finally(() => {
+      if (summaryInFlight.current === task) summaryInFlight.current = null
+    })
+    return task
+  }, [loadSummary])
 
   useEffect(() => {
-    if (authenticated) void loadSummary()
-  }, [authenticated, loadSummary])
+    if (authenticated) void runSummaryIfIdle()
+  }, [authenticated, runSummaryIfIdle])
 
-  // 聚焦与可见性刷新 + 可见时的轮询；隐藏或匿名时停止，不做实时承诺。
+  // 聚焦与可见性刷新 + 可见时的轮询；隐藏或匿名时停止，不做实时承诺（设计 9.3）。
   useEffect(() => {
     if (!authenticated) return
     let timer: ReturnType<typeof setTimeout> | undefined
-    const tick = () => {
-      timer = setTimeout(() => {
-        if (document.visibilityState === 'visible') void loadSummary()
-        tick()
-      }, SUMMARY_POLL_INTERVAL)
+    let stopped = false
+    const clearTimer = () => {
+      if (timer === undefined) return
+      clearTimeout(timer)
+      timer = undefined
     }
-    const onFocus = () => void loadSummary()
-    const onVisible = () => { if (document.visibilityState === 'visible') void loadSummary() }
-    tick()
+    /** 只排下一次，间隔由当前退避决定：失败会越排越远，成功后回到基准。 */
+    const schedule = () => {
+      clearTimer()
+      if (stopped || document.visibilityState !== 'visible') return
+      timer = setTimeout(() => {
+        timer = undefined
+        if (stopped) return
+        // 定时器这条路径不过节流窗口：它本身就是按间隔来的。
+        // 等这一次读取**落地**再排下一次 —— 否则退避用的是上一次的失败数，慢一个周期。
+        void runSummaryIfIdle().finally(schedule)
+      }, scheduler.nextDelay())
+    }
+    /**
+     * 确保有一个待触发的轮询：已有倒计时就**不动**。
+     * 否则密集 focus 会不断把倒计时推后，反而永远等不到下一次轮询。
+     */
+    const ensureScheduled = () => {
+      if (timer !== undefined) return
+      schedule()
+    }
+    /**
+     * 聚焦/可见性刷新：节流 + 在途去重，密集 focus 不该变成请求风暴。
+     *
+     * 两条分支都必须保证最后**有一个待触发的轮询**：
+     * - 真发了请求 → 排程挂在 `.finally` 上，等本次落地再排。否则新排的定时器用的还是
+     *   本次之前的失败数，复位就只落到了计数器上、落不到已经 `setTimeout` 出去的档位；
+     * - 被节流挡掉 → 只补排（`ensureScheduled` 本来就只在没有倒计时时才排），按当前档位续。
+     */
+    const refreshNow = () => {
+      if (stopped || document.visibilityState !== 'visible') return
+      if (!scheduler.allowRefresh()) {
+        ensureScheduled()
+        return
+      }
+      void runSummaryIfIdle().finally(schedule)
+    }
+
+    const onFocus = () => refreshNow()
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') {
+        // 隐藏：撤掉待触发的轮询，否则它会在隐藏期间再发一次；回到可见时重新起。
+        clearTimer()
+        return
+      }
+      refreshNow()
+    }
+
+    if (document.visibilityState === 'visible') schedule()
     window.addEventListener('focus', onFocus)
     document.addEventListener('visibilitychange', onVisible)
     return () => {
-      if (timer !== undefined) clearTimeout(timer)
+      stopped = true
+      clearTimer()
       window.removeEventListener('focus', onFocus)
       document.removeEventListener('visibilitychange', onVisible)
+      // 退出/换号：清掉退避、节流窗口与在途标记，下次登录从基准间隔重新开始。
+      scheduler.reset()
+      summaryInFlight.current = null
     }
-  }, [authenticated, loadSummary])
+  }, [authenticated, runSummaryIfIdle, scheduler])
 
   // ---- 列表 --------------------------------------------------------------
   /**
