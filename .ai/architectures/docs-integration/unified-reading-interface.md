@@ -12,15 +12,29 @@ _最后更新：2026-10-08_
 | 导航 | `apps/outline/app/components/Sidebar/DocsNavigation.tsx` 接收只包含标签、地址、子节点和选中/展开状态的投影。集合展开按钮与链接分开；成员个人功能通过受保护插槽提供。 |
 | 正文 | `apps/outline/app/scenes/Document/components/DocumentReadingFrame.tsx` 共用标题、正文宽度与目录位置。公共目录只接收 headings 和导航回调，不构造成员 Document。 |
 | 搜索 | `apps/outline/app/components/DocsSearch.tsx` 共用成员搜索的胶囊输入、筛选行、页面间距、无结果提示和结果呈现；两种页面使用同一个 Scene，成员与公共 adapter 分别处理自己的 DTO 和查询。公共文档集筛选只投影 PublicDocsStore 数据，不挂成员筛选或 Model；已就绪搜索页独自拥有 Header，公共外层在配置等待或失败时提供 Header。 |
-| 状态 | `apps/outline/app/components/DocsStatus.tsx` 显示 Icon、Title、Content。空状态以 Lucide Files 图标作为 Hero，说明补充标题而不重复；加载图标遵守减少动态效果设置；失败使用错误图标、安全文案和真实 Retry callback。 |
+| 状态 | `apps/outline/app/components/DocsStatus.tsx` 共用轻量线性图标和提示。加载只显示旋转图标与单行文案，并遵守减少动态效果设置；`not-found` 使用 FileSearch、说明与唯一返回主页链接，网络或服务失败保留真实 Retry callback；空状态使用 Files 图标。`layout` 显式区分 `inline` 局部内容、`page` 顶部栏下方居中和 `fullscreen` 无顶部栏的全高居中，侧栏与评论不得使用整页高度。 |
 
 `AuthenticatedLayout` 保留原用户/团队 hook、拖拽、快捷键、通知与个人工作区行为。`WebsitePublic` 不挂载这些身份专属组件。集成公共路由在 `apps/outline/app/routes/index.tsx` 登记，独立 Outline 的登录与共享路由仍保留原分支。
 
+成员侧栏的 `apps/outline/app/components/Sidebar/components/SidebarLink.tsx` 将行内操作与链接导航隔离：操作区先让子按钮处理事件，再阻止冒泡并取消 click 默认行为。仅阻止冒泡不能阻止外层 anchor 的原生导航；mousedown 与键盘事件也须隔离，避免触发 NavLink 的提前导航。`ellipsis={false}` 同时解除标签与行容器裁切，供新建子文档和重命名输入框保留完整焦点描边；普通文本行继续裁切长标题。
+
+成员文档顶栏在 `apps/outline/app/scenes/Document/components/Header.tsx` 将左侧面包屑、目录与收藏，以及右侧文档操作分别放入半圆角 Glass 胶囊；协作者头像保留在操作胶囊外。材质沿用 Outline 的 styled-components 适配层和 ExUI Glass tokens，普通操作默认透明，保存与发布保留原主操作语义。菜单继续通过既有 Portal 呈现，权限与紧凑布局条件仍由原成员组件控制；此样式不扩展公共阅读能力。
+
+文档页与文档集页共用 `apps/outline/app/components/GlassToolbar.tsx` 的材质和紧凑尺寸。文档集在 `apps/outline/app/scenes/Collection/index.tsx` 包裹左侧搜索或归档面包屑，在 `apps/outline/app/scenes/Collection/components/Actions.tsx` 包裹右侧操作，成员头像仍在胶囊外；新建与编辑使用透明按钮，完成编辑保留主操作样式。链接式操作须显式保留 `data-slot="action-button"`，使尺寸约束与原生按钮一致。
+
+胶囊内的 32px 操作按钮须同步解除 `Button.Inner` 默认 36px 的最小高度，否则文字与图标会向下溢出。`exui.glass.shadow` 提供内描边，外投影另由 `exui.shadow.medium` 叠加；不能将内描边当作面板投影。真实浏览器回归入口为 `tests/browser/docs-toolbar-geometry.mjs`，检查内容居中和外阴影；文档集页传入 `data-collection-toolbar` 属性名。
+
+侧栏折叠后，`apps/outline/app/components/Header.tsx` 的桌面展开控件同样复用 `GlassToolbar`：40px 外层承载材质与阴影，32px 按钮只负责交互，外部槽位预留与相邻胶囊的间距并在展开侧栏后收起。不要改用普通 36px ToggleButton 或复制另一份 Glass 高光。`tests/browser/docs-toolbar-geometry.mjs` 的 `assertDocsHeaderToggleGlass` 比较可见 Header 控件与工具栏的高度、顶边和材质，须排除折叠侧栏中的 inert/隐藏按钮。
+
 恢复阅读与集成退出的等待/失败使用 `apps/outline/app/components/DocsRecoveryLayout.tsx`，组合同一个 DocsLayout、Header 和公共导航；它不挂账号菜单或成员通知。状态保留品牌和侧栏，不另建裸页面。Website 退出确认使用自己的 ExUI 体系提供等价的图标、标题、说明和重试；不跨仓库复用 React 组件。
 
-`apps/outline/app/components/DocsNavigationFocus.tsx` 在每个共用布局内协调集成模式的主区域焦点。pathname 或已核验身份变化后等待可见标题/状态，使用 `data-docs-focus` 与 `data-docs-state` 区分正文就绪和加载转换。侧栏与隐藏/inert 内容不是目标；普通重渲染、query/hash、分页和输入交互不重新夺取焦点。独立模式保留原焦点行为。
+`apps/outline/app/components/DocsNavigationFocus.tsx` 在每个共用布局内协调集成模式的主区域焦点。首次进入页面及身份核验不主动聚焦标题；布局内 pathname 变化后才等待可见标题/状态，使用 `data-docs-focus` 与 `data-docs-state` 区分正文就绪和加载转换。侧栏与隐藏/inert 内容不是目标；普通重渲染、query/hash、分页和输入交互不重新夺取焦点。独立模式保留原焦点行为。
 
-公共正文的目录开关使用 `DocumentReadingFrame` 的标题区按钮，`PublicDocument` 持有本地显示状态，不读写成员 DocumentPreference。只有一个公开目录容器，桌面、移动和打印共用标题投影；没有标题时隐藏开关。成员目录仍使用原偏好和能力边界。
+公共正文的返回集合与目录入口由 `apps/outline/app/scenes/WebsitePublic/PublicReadingNavigation.tsx` 组合既有 GlassNavigationToolbar 和 Button，放在 Header.left。`DocumentReadingFrame` 只负责标题、有效的公开更新时间、正文与目录展示；导航不进入正文列。`WebsitePublic` 仅在配置等待、失败或未初始化时拥有 Header；就绪集合由 PublicDirectory 的 Scene、文档由互斥的 PublicDocumentView/Reader 分支拥有 Header，publicOnly 使用相同分支。
+
+`PublicDocument` 持有本地目录偏好、headings 与 Drawer 状态，不读写成员 DocumentPreference。headings 保留 Editor ref/onInit 双时机初始化及等值比较，排除表格内标题，仅呈现 level <= 4。移动模式或共用阅读网格右侧空间不足现有目录宽度时，顶部入口打开既有 Drawer；空间足够时切换侧栏目录，正文列不移动。尺寸切换、路由与身份代次变化清理抽屉；选择标题保留 location state，仅更新 hash 并关闭抽屉。打印使用独立静态目录，并隐藏公共抽屉 Portal 和遮罩。成员目录仍使用原偏好和能力边界。
+
+公共 Sidebar 直接复用 SidebarLink、Disclosure 与分组 Header。展开按钮和锚点为兄弟节点；集合直属文档最小深度为 2，后续逐级递增。PublicNavigation 在 observer 内复制 expandedIds，使仅改变文档展开状态也会更新不依赖 MobX 的展示行。文档当前页只高亮文档，所属集合保持展开；空公共插槽不增加分组标题。公共集合页使用 Scene 和 DocsSearchResult 展示组件，完整描述经只读 publicReader Editor 渲染，根文档列表保留公开树语义；移动列表宽度修正限制在公共适配器。
 
 ## 公共数据生命周期
 
@@ -49,6 +63,8 @@ Outline 的 `apps/outline/shared/utils/docsReadingReturnPath.ts` 与 Website 的
 Website 的 `SignedOutPage` 保留原 token 核验和会话变化订阅。只有确认退出且跳转前 token 仍匹配时，才通过 `/docs/?docsResume=…` 继续；active 或 unavailable 不自动跳转。Outline 根 `WebsiteIdentityController` 在恢复期间抑制自动身份桥接，先通过 Router 删除提示 query，再匿名预检和 SPA replace。一次性 `docsReadingResume` marker 让最终阅读入口再次检查公开目标；不可见时清理 PublicDocsStore 的旧树、正文、搜索与在途代次，回到通用提示，不展示旧标题。该 marker 不授予权限，后续仍进入原成员授权或公共 DTO 分支。
 
 身份错误的重试由同一 controller 区分失败阶段：配置失败重读 auth.config，身份失联重读 auth.info，Website probe 失败重新探测，显式 OIDC 失败重新发起一次显式登录并清除失败 hash。普通匿名结果不自动升级为登录；自动尝试限制和旧回调代次保护继续生效。
+
+公共阅读正文只呈现文档状态，不叠加登录状态错误区块。`PublicNavigation` 在匿名身份不可用且配置就绪时，将带可访问名称和提示的轻量重试按钮放在侧栏登录入口旁，继续调用同一 controller 的分阶段重试；普通匿名和阅读恢复界面不显示该按钮。配置与文档读取失败仍在原内容区域提供错误和重试。
 
 退出等待期间，policy 投影、动作执行、正文保存、评论和发布入口共同阻止新写操作。`DocumentPublish` 必须使用 projected `PoliciesStore.abilities`；原始 policy 读取会绕过等待保护。异步 move/save 后还要检查 pending 与窗口捕获的会话代次，阻止旧操作继续写入或关闭后来会话的窗口。已开始的服务端写请求不能撤回；同代次退出失败后恢复原操作能力。
 

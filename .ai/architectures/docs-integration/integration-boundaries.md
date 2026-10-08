@@ -2,7 +2,7 @@
 
 Website 管理账号与本站会话，Hydra 提供 OIDC 协议，Outline 管理文档、权限和附件。Website HTTP operation 以 `api/openapi.yaml` 为准；本站数据规则集中在 `.ai/databases/data-model.md`。本页集中记录当前实现的配置、准备、运行和恢复边界；浏览器与多设备撤销时延需另行验收。
 
-_最后更新：2026-10-06_
+_最后更新：2026-10-08_
 
 ## 本地入口与资源
 
@@ -111,7 +111,13 @@ outbox 按固定 clientId 独立选择 Hydra admin、Outline internal URL 与原
 
 Outline 集合成员权限控制登录阅读/评论/编辑，Website 社区管理员不自动成为文档管理员。集合 Share 与当前发布状态共同决定匿名可见，旧单篇 Share 不提供旁路。`apps/outline/server/commands/publicAccess.ts` 统一目录/搜索/文档/附件可见性；SSR 提供公开标题/正文摘要/canonical/sitemap，私有、草稿、缺失统一 404。附件须属于可读已发布内容，不能只凭 URL 读私有字节。
 
+集成模式的文档集保持 `permission: null` 与 `commenting: true`，通过成员和群组授予访问与编辑能力。`apps/outline/app/components/Collection/CollectionForm.tsx` 的创建、编辑表单使用这些固定值，并禁用工作区默认权限与评论开关；独立 Outline 保留原设置能力。服务端 `apps/outline/server/commands/integratedCollectionSettings.ts` 仍校验这些约束。`Integrated collections require private access and reader comments` 是参数校验错误；`collections.create` 在此之前已经检查创建权限，不能将这一 400 响应解释为账号没有创建权限。
+
 local 公共入口与直接 Vite 在 HTTP/upgrade 转发前拒绝规范化 `/api/internal`、`/docs/internal` 根及后代，含编码、斜杠/反斜杠、点段和畸形 escape 绕过。Hydra admin 不经公共代理。`/docs` 308 至 `/docs/` 保留 query；Website `/api` 保留，Outline 后端仅剥一次 `/docs`，集成 Vite 静态保留 `/docs/static/`。standalone Outline 保留直接 URL、static strip/TLS，不能套用集成前缀规则。
+
+Outline 本地附件存储的上传地址与文件读取地址由 `apps/outline/server/storage/files/LocalStorage.ts` 根据 `env.URL` 的公开挂载路径生成。集成模式使用 `/docs/api/files.create` 与 `/docs/api/files.get`；遗漏 `/docs` 会让请求进入 Website Contract 路由并返回 `NOT_FOUND`。独立根路径部署仍使用 `/api/files.create` 与 `/api/files.get`，Website Contract 不登记 Outline 附件路由。
+
+私有附件的授权入口由 `apps/outline/server/models/Attachment.ts` 的 `getRedirectUrl` 生成，也必须保留公开挂载路径：集成模式为 `/docs/api/attachments.redirect`，独立根路径部署为 `/api/attachments.redirect`。仅修正上传与文件读取地址仍会让上传后的图片加载落入 Website Contract。编辑器 `apps/outline/shared/editor/commands/insertFiles.ts` 须等待图片加载再替换占位；加载失败通过上传 Promise 拒绝进入同一清理流程，移除占位、通知错误并结束上传状态，不能在 DOM 事件回调里直接抛错。
 
 可信 forwarding/mount headers 只来自已验证 public origin；浏览器 Origin 不改写，hostile/缺失 Origin 仍被上游 CSRF 拒绝。Location 仅对 allowlist 的 Outline 未挂载路径添加前缀，外部、Website identity、Hydra、已挂载地址保持。Cookie 保留 Path：`exdocs_access` 为 `/docs`，HTTP `csrfToken` 为 `/docs`，HTTPS 唯一 `__Host-csrfToken` 为 `/`，不全局 cookiePathRewrite。
 
