@@ -2,7 +2,7 @@
 
 Website 管理账号与本站会话，Hydra 提供 OIDC 协议，Outline 管理文档、权限和附件。Website HTTP operation 以 `api/openapi.yaml` 为准；本站数据规则集中在 `.ai/databases/data-model.md`。本页集中记录当前实现的配置、准备、运行和恢复边界；浏览器与多设备撤销时延需另行验收。
 
-_最后更新：2026-10-05_
+_最后更新：2026-10-06_
 
 ## 本地入口与资源
 
@@ -97,7 +97,7 @@ full override 选择忽略的 `.local/docs-integration/Dockerfile.website-runtim
 
 Website/Outline 各自解析不可变模式配置。local 固定 `ex-outline-local`、经校验回环 HTTP issuer/origin、精确 `<publicOrigin>/docs/auth/oidc.callback`、退出 `<publicOrigin>/identity/signed-out`；dev/full 保留 `ex-outline`、8090 issuer/callback 和旧 Hydra-only `ex-oidc-probe`。不允许 wildcard/任意 client 注册。Outline `URL` 带 `/docs`，`WEBSITE_URL` 是 Logo/身份页面返回主站的根地址，不可互换。
 
-公共 `WebsitePublic` 通过同源 `WebsiteSessionProbe` `/identity/status` 交换粗粒度 active/anonymous/unavailable，校验 origin/source/nonce，最多一秒，不交换 Bearer/资料/token。active 发起已有 OIDC，匿名直接公共阅读；运行中身份服务不可用保持公共页与可重试状态。标签页 sessionStorage 仅存安全 returnPath、随机 attemptId、时间；同路径十分钟内抑制重复自动尝试，被动刷新不清失败记录。成功关联清除，另一安全路径或到期允许新尝试；失败 fragment 抑制自动跳转，显式操作可重试。
+根级 `WebsiteIdentityController` 通过同源 `WebsiteSessionProbe` `/identity/status` 交换粗粒度 active/anonymous/unavailable，校验 origin/source/nonce，最多一秒，不交换 Bearer/资料/token。active 发起已有 OIDC，匿名直接公共阅读；运行中身份服务不可用保持公共页与可重试状态。标签页 sessionStorage 仅存安全 returnPath、随机 attemptId、时间；同路径十分钟内抑制重复自动尝试，被动刷新不清失败记录。成功关联清除，另一安全路径或到期允许新尝试；失败 fragment 抑制自动跳转，显式操作可重试。公共与成员的呈现、临时 DTO 及请求代次边界见 `.ai/architectures/docs-integration/unified-reading-interface.md`。
 
 OIDC 保留 state/nonce/PKCE、签名、issuer/audience、userinfo.sub、sid/`ex_session_id` 核验。begin 成功设置 client-qualified、HttpOnly、SameSite=Lax、Path=/docs/auth、十分钟随机 browser-proof cookie；Redis 仅存摘要，callback 消费 state/换 token 前验证发起浏览器，结果清除 cookie。他人浏览器不能消费原流程。可信故障返回校验后的原 docs path/query 与 `#website-signin-unavailable`；不可信 state/proof 返回 `/docs/`。returnPath 拒绝外域、反斜杠、控制字符、编码穿越与非 docs 路径。
 
