@@ -26,6 +26,8 @@ Glue 的 Bearer handler 等待异步会话验证后才把身份交给受保护 o
 
 `apps/server/src/db/migrate.ts` 和 `apps/server/src/db/reset.ts` 是不可 import 的 CLI 入口。共享逻辑分别在 `apps/server/src/db/migration-runner.ts`、`apps/server/src/db/reset-plan.ts`；运行时不会导入带写入副作用的 CLI。`apps/server/drizzle.config.ts` 供 Drizzle Kit 生成使用，运行迁移由显式 CLI 触发。
 
+迁移前置检查必须接受每个已发布迁移版本的完整表集合，按表名精确匹配，不能仅接受最初基线和最新结构。新增 migration 时保留历史升级入口，并用隔离 PostgreSQL 测试从历史 migration 前缀升级、保留原数据及拒绝缺表或混合版本；否则完整旧库也会被误判为部分迁移。
+
 ## 测试隔离
 
 `tests/helpers/postgres.ts` 启动独立 PostgreSQL Testcontainers 容器，容器库名也为 `exre`。数据库用例各自创建 schema，在其内隔离业务表与 migration journal，并在结束时关闭连接、删除 schema 和容器；夹具不读取本机 `DATABASE_URL`。Docker 不可用时，数据库测试明确失败，不回退到开发库。
