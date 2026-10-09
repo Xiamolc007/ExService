@@ -123,4 +123,6 @@ Outline 本地附件存储的上传地址与文件读取地址由 `apps/outline/
 
 带会话的非安全方法要求精确 origin 与签名双提交 CSRF，安全方法签发 token；四个匿名读 POST `public.collections.list`、`public.documents.list`、`public.documents.info`、`public.documents.search` 免 CSRF，其余合法读 POST 也携带 token。OIDC browser proof/state/nonce/PKCE 不由 CSRF cookie 替代。
 
+集成页面启动所需的 `auth.config` 是公开配置读取，`apps/outline/app/stores/AuthStore.ts` 必须以 `credentials: "omit"` 请求它，避免同主机其他服务或历史登录残留的 `accessToken` 触发会话 CSRF 检查并阻断匿名目录。`apps/outline/app/utils/ApiClient.ts` 将调用方的 credentials 策略传给真实 fetch，未指定时仍为 `same-origin`；`auth.info` 等受保护请求继续携带会话并接受原有 CSRF 校验。公开配置可读取不代表 `localhost` 与配置的 `127.0.0.1` 可互换，登录及写入仍须使用配置中的 public origin。
+
 local HMR 从 public origin 派生，legacy 保持 8090。生产 `httpReady` 显式 Host 分支使用 node:http/node:https 真正传递 Host，保留 gateway foreign Host 421、手动 redirect、真实 Response/expected 和正常 TLS；无 Host 分支使用 fetch。请求、body/expected、剩余总 deadline 与必需 child 退出均受限，不能以另一 smoke helper 或无限等待替代真实就绪。
