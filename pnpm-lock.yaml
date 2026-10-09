@@ -109,8 +109,8 @@ importers:
   apps/web:
     dependencies:
       '@exre/exui':
-        specifier: link:../../../../exui/packages/components
-        version: link:../../../../exui/packages/components
+        specifier: ^0.8.0
+        version: 0.8.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@hookform/resolvers':
         specifier: 5.9.1
         version: 5.9.1(ajv@8.20.0)(react-hook-form@7.88.0(react@19.3.0))(zod@4.6.5)
@@ -182,8 +182,8 @@ importers:
   packages/components:
     dependencies:
       '@exre/exui':
-        specifier: link:../../../../exui/packages/components
-        version: link:../../../../exui/packages/components
+        specifier: ^0.8.0
+        version: 0.8.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@hookform/resolvers':
         specifier: ^5.9.1
         version: 5.9.1(ajv@8.20.0)(react-hook-form@7.88.0(react@19.3.0))(zod@4.6.5)
@@ -232,8 +232,8 @@ importers:
         version: 3.0.0
     devDependencies:
       '@exre/exui':
-        specifier: ^0.7.0
-        version: 0.7.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        specifier: ^0.8.0
+        version: 0.8.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@types/node':
         specifier: ^22.20.3
         version: 22.20.3
@@ -793,8 +793,8 @@ packages:
       '@noble/hashes':
         optional: true
 
-  '@exre/exui@0.7.0':
-    resolution: {integrity: sha512-GSQV9P7EYUe4uGTYbGlffryPmRqiyoWy8KliOqSUURyHmlKUVjaf++xhqgfQaj/Gc63YYeziimFtYdQDxxuLXA==}
+  '@exre/exui@0.8.0':
+    resolution: {integrity: sha512-OZk9QjeOmVxX2utWELWncD7ilvh0bsF71TWgQjEkr6GTyclGNzfa4Sc2SC9gH7PE17/5qz79pPHzyaqtphSrww==}
     peerDependencies:
       react: '>=19.0.0 <20'
       react-dom: '>=19.0.0 <20'
@@ -3680,7 +3680,7 @@ snapshots:
 
   '@exodus/bytes@1.15.2': {}
 
-  '@exre/exui@0.7.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
+  '@exre/exui@0.8.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
       '@fontsource-variable/outfit': 5.3.0
     optionalDependencies:
