@@ -1,3 +1,13 @@
+# AGENTS.md
+
+## 沟通与文档
+
+- 默认用中文沟通；代码、标识符、Commit message 和既有文档沿用各自语言约定。
+- 文档、注释和交付说明中的仓库路径以仓库根目录为基准，使用行内代码；不写 `./`、`../`、Markdown 相对链接或本机绝对路径。代码中的 import 和运行时路径遵循工具约定。
+- 开工前从 `.ai/README.md` 查找相关知识；启动步骤与命令见 `README.md`，配置导入、运行和部署材料见 `docs/runtime.md`。
+- Monica 任务使用当前项目提示词和本工程规则提供项目上下文；Exre 通用 Agents 只定义角色职责，不携带其他项目规则。ExWebsite 项目协作约定见 `.ai/architectures/monica-team/workflow.md`。
+- 开发或修改 `/docs/` 或 Outline 相关功能、代码、页面前，必须先读取并遵守 `apps/outline/AGENTS.md`。
+
 <!-- codebase-worker:start -->
 ## Project AI documentation rules
 
@@ -6,7 +16,7 @@
 ### Durable knowledge extraction
 
 - After completing a module or making a major decision, use `codebase-documenter` to update evidence-backed durable `.ai/` knowledge.
-- `.ai/CONTEXT.md` holds the domain language; `.ai/architectures/`, `.ai/decisions/`, and `.ai/knowledge/` hold system structure, accepted decisions, and non-obvious behavior, each grouped by module. Keep each fact in exactly one of them and link instead of duplicating.
+- `.ai/CONTEXT.md` holds the domain language; `.ai/architectures/`, `.ai/decisions/`, and `.ai/knowledge/` hold system structure, accepted decisions, and non-obvious behavior, each grouped by module. Database model, database-specific decisions, and database-specific operational knowledge live in `.ai/databases/`. Keep each fact in exactly one place and link instead of duplicating.
 - Design documents, RFCs, and implementation plans stay where they are, normally `notes/<module>/`. After a design is complete, ask the user before distilling its stable conclusions into `.ai/`.
 - Do not archive transient task narration, raw test output, unadopted speculation, source-code duplication, or version-control and workspace state. Update `.ai/README.md` and `.ai/decisions/README.md` after structural changes.
 
@@ -19,107 +29,48 @@
 - If a code-commiter skill is available, commits must be made using this SKILL.
 <!-- codebase-worker:end -->
 
-# AGENTS.md
+## 架构与目录边界
 
-本仓库是一个 **Contract-first 的本地 Backend Sandbox**：`api/openapi.yaml` 是唯一的 HTTP API Contract，
-Fastify + SQLite 是本地开发实现，未来的 PHP + MySQL 是生产实现，TypeScript 生成的 API Client 是前端访问层。
+本仓库采用 Contract-first 架构：`api/openapi.yaml` 是唯一 HTTP Contract，`apps/server/` 是唯一 Website Fastify Server，业务数据使用独立 PostgreSQL `exre`。完整架构见 `.ai/architectures/overview.md`。
 
-## 先读 Contract，再写代码
-
-1. **不得臆造** endpoint、HTTP method、路径参数、请求字段或响应字段。
-2. 实现任何 API 调用前，必须读取 `api/openapi.yaml`。
-3. API 变更先修改 `api/openapi.yaml`，然后执行 `pnpm api:lint` 和 `pnpm api:generate`。
-4. 前端只能通过 `@workspace/api-client` 发起 API 请求；不得直接使用 `fetch`，不得在本仓库内复制 DTO 类型。
-5. Mock Server 只实现 Contract 中带 `operationId` 的 operation；不得新增 Fastify HTTP 路由、静态 JSON mock 路由，也不得用 Fastify schema 反向生成 OpenAPI。
-6. Mock 数据只保留在本地 SQLite（`apps/mock-server/data/mock.sqlite`）；不得提交数据库文件。
-7. OpenAPI 3.1 的 schema 只能使用 JSON Schema Draft-07 兼容子集（`type`、`const`、`enum`、`required`、`properties`、`additionalProperties`、数组、`$ref` 等）。引入 Draft 2020-12 专有语义前，必须先单独设计并确认 Fastify 的 validator 与 serializer compiler，不能只改 Contract。
-8. 破坏性 Contract 变更必须显式评审与版本化；当前没有版本策略或兼容层，不要自行发明。
-
-## 目录边界
-
-| 路径 | 责任 | 禁止事项 |
-| --- | --- | --- |
-| `api/` | 定义 HTTP 路径、operation、请求/响应/错误 schema。 | 存放前端或服务端实现。 |
-| `packages/api-client/` | 导出生成的类型与 `createApiClient({ baseUrl })` 工厂。 | 引入 React、Valtio、Framer Motion、业务状态或 endpoint 定义。 |
-| `apps/web/` | 配置 Vite、SCSS、环境变量，并适配共享 Client。 | 直接调用浏览器 `fetch`、复制 DTO、臆造 endpoint。 |
-| `apps/mock-server/` | 加载 Contract、映射 operation handler、执行受控的 SQLite 访问。 | 用 `app.get()` 绕过 Contract、把 schema 写成第二份 API 定义、连接生产数据库。 |
-| `tests/contract/` | 从 Contract 读取 schema，对真实 Fastify app 的 HTTP 响应做验证。 | 只单测 handler 而跳过路由与 schema 注册。 |
-
-## 命令
-
-| 命令 | 作用 |
+| 路径 | 责任与边界 |
 | --- | --- |
-| `pnpm dev` | 并行启动 Vite（`5173`）与 Mock Server（`3000`）；不执行 migration/reset。 |
-| `pnpm api:lint` | 用 Redocly 校验 Contract 的解析、引用与项目规则。 |
-| `pnpm api:generate` | 用 openapi-typescript 更新 `packages/api-client/src/generated/schema.d.ts`。 |
-| `pnpm typecheck` | 对每个 workspace 包执行无输出的 TypeScript 检查。 |
-| `pnpm test` | 运行 Vitest Contract Test。 |
-| `pnpm build` | 构建 Vite 前端并编译 Mock Server 的 TypeScript。 |
-| `pnpm db:migrate` | 创建/升级本地 SQLite 文件并应用未执行的 migration。 |
-| `pnpm db:reset` | 只删除并重建 `apps/mock-server/data/mock.sqlite` 及其 WAL/SHM 文件。 |
+| `api/` | HTTP 路径、operation、请求/响应/错误 schema；不放实现。 |
+| `packages/api-client/` | 生成类型与 `createApiClient({ baseUrl })`；不引入 React、业务状态或第二份 endpoint 定义。 |
+| `packages/components/` | 基于 ExUI 的共享 UI；不访问 API、不定义路由表、不导入 ExUI 全局样式。 |
+| `apps/web/` | 前端路由、主题、构建配置与 Client 适配；API 请求只经 `@workspace/api-client`，不直接使用 `fetch` 或复制 DTO。 |
+| `apps/server/` | 加载 Contract、映射 handler、执行受控数据库访问；不绕过 Contract 注册 HTTP 路由或静态 JSON mock，不反向生成 OpenAPI，不连接 `outline` 等其他数据库。 |
+| `apps/outline/` | 独立文档服务及 Git submodule，使用自己的 Yarn、数据库和附件存储；不属于 pnpm workspace，Website 不接管其 API。 |
+| `tests/contract/` | 从 Contract 读取 schema，验证真实 Fastify 路由、原始 handler 输出和双向 operation 覆盖。 |
 
-新环境初始化顺序：
+## Contract-first 工作流
 
-```bash
-pnpm install
-pnpm api:lint
-pnpm api:generate
-pnpm db:migrate
-pnpm dev
-```
+1. 实现 API 调用前读取 `api/openapi.yaml`；不得臆造 endpoint、方法、参数或字段。
+2. API 变更先改 Contract，再运行 `pnpm api:lint` 和 `pnpm api:generate`。`packages/api-client/src/generated/schema.d.ts` 禁止手改，Contract 变更须同时提交重新生成的结果。
+3. 在 `apps/server/src/app.ts` 的 `serviceHandlers` 中显式登记 `operationId`，实现 handler，并通过共享 Client 接入前端。Contract 与登记表必须双向一致；文件名不参与映射。Glue 的 `/api` 前缀须显式配置，`servers[].url` 不能替代它。
+4. 新增或修改 operation 时同步更新 `tests/contract/`：校验真实 HTTP 响应及注册 handler 的原始返回值，防止序列化掩盖回归。原因见 `.ai/knowledge/server/serialization-masks-handler-regressions.md` 与 `.ai/knowledge/server/operation-registration-gaps.md`。
+5. 完成 API 变更后运行 `pnpm typecheck`、`pnpm test`、`pnpm build`；自动检查、真实浏览器验收和部署验收分别报告。
 
-## 修改 API 的固定顺序
+OpenAPI 3.1 schema 仅使用 JSON Schema Draft-07 兼容子集；引入 Draft 2020-12 专有语义前，须单独设计并确认 validator/serializer compiler。破坏性 Contract 变更须显式评审与版本化；不要自行发明版本策略或兼容层。
 
-```
-修改 api/openapi.yaml
-  ↓
-pnpm api:lint
-  ↓
-pnpm api:generate          # 重新生成 packages/api-client/src/generated/schema.d.ts
-  ↓
-实现/更新 apps/mock-server 的 handler（并在 app.ts 的 serviceHandlers 中登记）
-  ↓
-前端经 @workspace/api-client 调用
-  ↓
-pnpm typecheck && pnpm test && pnpm build
-```
+## 前端规则
 
-## 不可手改的生成物
+- 修改 Form 前，阅读并遵守 `.ai/rules/frontend-forms.md`；全站临时通知统一使用 `ExMessage`，遵守 `.ai/rules/frontend-notifications.md`。
+- 共享组件使用 CSS Modules、ExUI 颜色/边框/圆角 token 和 `lucide-react` 图标，不新建本地 token 层。`react`、`react-dom`、`react-router` 同时声明为 peer/dev dependencies，保证消费方单一实例。
+- 修改 ExUI 接入或主题前，阅读 `.ai/knowledge/web/exui-integration-traps.md`。全局样式仅在 `apps/web/src/main.tsx` 导入一次；`useTheme` 必须位于 `ThemeProvider` 内，应用按 light/dark 类补充 `color-scheme`。不要另装 ExUI 已打包的 Sonner、Radix、Base UI 等实现库。
 
-`packages/api-client/src/generated/schema.d.ts` 由 `pnpm api:generate` 写入并纳入版本控制。
-**禁止人工编辑**；Contract 变更必须同时提交重新生成的结果。
+## Server 与数据库规则
 
-## Mock Server 实现约定
+- 错误统一经 `apps/server/src/errors.ts` 返回 envelope；对外消息仅允许 Contract 校验错误或固定文案，其他异常（含应用抛出的 4xx）的 `error.message` 不得回显。
+- 修改表的职责、关系或数据规则前，先阅读并更新 `.ai/databases/data-model.md`，评审模型影响，再改 schema/migration。纯索引、迁移实现和测试数据调整不要求更新模型；物理结构以 `apps/server/src/db/schema.ts`、`apps/server/drizzle/` 为准。
+- `DATABASE_URL` 与连接后的 `current_database()` 必须核验为独立 `exre`。Server 监听前检查数据库身份、migration 和必需结构；缺失时拒绝启动，提示显式迁移，不创建数据库、不隐式迁移或 reset。
+- 自动数据库测试使用 PostgreSQL Testcontainers 与逐用例 schema；Docker 不可用时明确失败，不回退本机开发库。
+- `apps/server/src/db/migrate.ts`、`apps/server/src/db/reset.ts` 是 CLI 入口，禁止 import；复用逻辑位于 `apps/server/src/db/migration-runner.ts`、`apps/server/src/db/reset-plan.ts`、`apps/server/src/db/client.ts`。
+- 头像位于 `apps/server/data/avatars/`，不得提交；启动和 reset 不删除头像，清理须显式核对数据库引用。数据库生命周期细节见 `.ai/architectures/server/request-lifecycle.md`。
 
-- `apps/mock-server/src/app.ts` 通过 `fastify-openapi-glue` 注册路由：
+## 运行与交付边界
 
-  ```ts
-  fastify.register(openapiGlue, {
-    specification: openapiPath,
-    prefix: '/api',
-    serviceHandlers: { getHealth },
-  })
-  ```
-
-- OpenAPI 路径写 `/health`，实际注册为 `/api/health`。`servers[].url` **不能**替代 Glue 的 `prefix`。
-- `operationId` 通过 `serviceHandlers.<operationId>` 显式映射到 handler；文件名不参与自动解析。
-- 新增 operation 时，必须同时更新 `serviceHandlers`，并在 `tests/contract/` 增加对应的 Contract Test。
-- **响应序列化会掩盖 handler 回归**：Fastify 用 Contract 的 response schema 序列化响应，未声明的字段会被静默丢弃，`const` 声明会被强制写入。实测 handler 返回 `{status:'ok',secret:'x'}`、`{status:'down'}` 或 `{status:42}` 时，线上响应都仍是 `{"status":"ok"}`。
-  → 因此 Contract Test 除了断言 HTTP 响应体，**必须**同时校验 `serviceHandlers` 中注册的 handler 的**原始返回值**（见 `tests/contract/health.test.ts` 的 `registered handler output`）。只断言 HTTP 响应体时，「多余字段 / `const` 值 / 值类型」三类漂移完全不可见（缺字段会让序列化失败并变成 500，反而能被 HTTP 断言抓到）。
-- Contract 与 `serviceHandlers` 必须**双向一致**：`contract coverage` 测试会检查「Contract 声明的每个 operationId 都已登记 handler」以及「没有登记 Contract 未声明的 handler」。**新增** operation 却漏登记时，该路由只会在运行时返回 500，而 `/api/health` 等既有断言仍然全绿 —— 只有这条覆盖检查能发现。
-- 错误一律通过 `src/errors.ts` 的统一 envelope 返回。对外消息只有两个来源：Fastify 依据 Contract schema 生成的校验错误，或固定文案；**其他异常（含应用代码抛出的 4xx）的 `error.message` 不得回显**，它可能包含堆栈、SQL、SQLite 路径或原始异常内容。
-- Mock Server 在监听前检查本地数据库文件是否存在；缺失时进程必须失败并提示 `pnpm db:migrate` 或 `pnpm db:reset`，**不得**隐式创建或重置数据库。
-- 首个业务表必须由**新的** Drizzle migration 创建；不得修改 `drizzle/0000_baseline.sql`。
-
-## 数据库边界
-
-- 本地数据库固定为 `apps/mock-server/data/mock.sqlite`，仅服务于本地 Mock 环境。
-- 不连接、不共享 PHP/生产 MySQL 数据库；不提供任意数据库路径或任意文件删除入口。
-- migration 只能通过显式命令执行；服务启动不建表、不生成 migration、不隐式 reset。
-- `src/db/migrate.ts` 与 `src/db/reset.ts` 是 **CLI 入口，不能被 import**（会写入或删除本地数据库）。
-  二者在非直接执行时抛错；需要复用逻辑时，只 import `src/db/client.ts` 中的纯函数。
-
-## 未来接入 PHP 时
-
-PHP 后端只需按同一份 Contract 实现 API，不使用本仓库的任何 Node、Drizzle 或 SQLite 代码。
-前端业务调用点不改变，只调整 `VITE_API_BASE_URL` 指向 PHP 的 `/api` 前缀。
+- 普通 runtime 只读取根 `.env.local`，受支持的进程变量优先；已有环境须显式导入，保留原数据库、账号、秘密、存储与头像，不用示例默认值覆写。
+- 日常运行只核对准备状态；数据库创建、迁移、客户端登记和管理员初始化须显式执行。bootstrap 必须使用用户明确选择的已有启用账号 UUID。
+- ExUI 使用 registry 发布包，由 pnpm 与 Outline Yarn lockfile 分别锁定；不恢复本地 link/portal。日常启动不改写 lockfile 或依赖树；停止只清理可证明归属的运行资源，不删除持久数据。
+- 文档身份、代理与资源归属规则见 `.ai/architectures/docs-integration/integration-boundaries.md`。当前仍是单实例开发阶段，部署材料不代表公网生产验收；本阶段不部署上线。

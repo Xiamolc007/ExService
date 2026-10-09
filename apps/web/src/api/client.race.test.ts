@@ -1,0 +1,75 @@
+// @vitest-environment jsdom
+import { createServer, type Server } from 'node:http'
+import { afterEach, expect, it, vi } from 'vitest'
+
+let server: Server | undefined
+afterEach(async () => {
+  vi.unstubAllEnvs()
+  window.localStorage.clear()
+  if (server) {
+    server.closeAllConnections()
+    await new Promise<void>(resolve => server!.close(() => resolve()))
+    server = undefined
+  }
+})
+
+it('keeps a newer cross-tab session when an old Web API request expires before its storage event', async () => {
+  let arrived!: () => void, release!: () => void
+  const reached = new Promise<void>(resolve => { arrived = resolve })
+  const gate = new Promise<void>(resolve => { release = resolve })
+  const authorization: string[] = []
+  server = createServer(async (request, response) => {
+    authorization.push(request.headers.authorization ?? '')
+    response.setHeader('content-type', 'application/json')
+    if (authorization.length === 1) {
+      arrived()
+      await gate
+      response.statusCode = 401
+      response.end(JSON.stringify({ error: { code: 'SESSION_INVALID', message: 'expired', requestId: 'old-request' } }))
+    } else response.end(JSON.stringify({ status: 'ok' }))
+  })
+  await new Promise<void>(resolve => server!.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  if (!address || typeof address === 'string') throw new Error('expected fixture TCP address')
+  vi.stubEnv('VITE_API_BASE_URL', `http://127.0.0.1:${address.port}/api`)
+  window.history.replaceState({}, '', '/login')
+  window.localStorage.setItem('exwebsite.auth.token', 'old-token')
+  vi.resetModules()
+  const { api } = await import('@web/src/api/client')
+  const pending = api.GET('/health', { alert: false })
+  await reached
+  window.localStorage.setItem('exwebsite.auth.token', 'new-token')
+  release()
+  await expect(pending).rejects.toMatchObject({ code: 'SESSION_INVALID' })
+  expect(window.localStorage.getItem('exwebsite.auth.token')).toBe('new-token')
+  await expect(api.GET('/health', { alert: false })).resolves.toEqual({ status: 'ok' })
+  expect(authorization).toEqual(['Bearer old-token', 'Bearer new-token'])
+})
+
+it('clears a matching persisted session and notifies the bound Web session', async () => {
+  const authorization: string[] = []
+  server = createServer((request, response) => {
+    authorization.push(request.headers.authorization ?? '')
+    response.writeHead(401, { 'content-type': 'application/json' })
+    response.end(JSON.stringify({ error: { code: 'SESSION_INVALID', message: 'expired', requestId: 'current-request' } }))
+  })
+  await new Promise<void>(resolve => server!.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  if (!address || typeof address === 'string') throw new Error('expected fixture TCP address')
+  vi.stubEnv('VITE_API_BASE_URL', `http://127.0.0.1:${address.port}/api`)
+  window.history.replaceState({}, '', '/login?ssoRequestId=keep-this-container')
+  window.localStorage.setItem('exwebsite.auth.token', 'current-token')
+  vi.resetModules()
+  const { api } = await import('@web/src/api/client')
+  const { subscribeSessionChanges, readToken } = await import('@web/src/auth/storage')
+  const observed: Array<string | null> = []
+  const unsubscribe = subscribeSessionChanges(() => observed.push(readToken(window.localStorage)))
+  try {
+    await expect(api.GET('/health', { alert: false })).rejects.toMatchObject({ code: 'SESSION_INVALID' })
+    expect(authorization).toEqual(['Bearer current-token'])
+    expect(window.localStorage.getItem('exwebsite.auth.token')).toBeNull()
+    expect(observed).toEqual([null])
+    expect(window.location.pathname).toBe('/login')
+    expect(window.location.search).toBe('?ssoRequestId=keep-this-container')
+  } finally { unsubscribe() }
+})

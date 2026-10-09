@@ -1,0 +1,27 @@
+.authButton {
+  letter-spacing: 0.125em;
+  box-shadow: var(--exui-shadow-medium);
+}
+
+.avatarButton {
+  padding: 0;
+  border-radius: 50%;
+}
+
+.avatarButton .avatar {
+  width: 100%;
+  height: 100%;
+}
+
+.unavailable {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  color: var(--exui-feedback-danger);
+  font-size: 0.75rem;
+
+  span {
+    max-width: 13rem;
+  }
+}

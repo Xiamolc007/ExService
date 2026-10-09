@@ -5,18 +5,21 @@ node_modules/
 dist/
 *.tsbuildinfo
 
-# Local Mock database (fixed path: apps/mock-server/data/mock.sqlite)
-# data/.gitkeep is committed on purpose so the directory exists after checkout.
-# WAL/SHM 由 src/db/client.ts 的 `journal_mode = WAL` 产生；rollback journal 不会由本项目代码产生，
-# 但外部工具（sqlite3 CLI 等）可能生成，同样不应提交（可能包含数据页）。
-apps/mock-server/data/mock.sqlite
-apps/mock-server/data/mock.sqlite-journal
-apps/mock-server/data/mock.sqlite-wal
-apps/mock-server/data/mock.sqlite-shm
+# Server-generated avatar bytes stay local. `apps/server/data/.gitkeep` is tracked.
+apps/server/data/avatars/
+
+# Generic content storage: uploaded objects and in-flight temporary files stay local.
+# 精确匹配这两个目录，不广泛忽略其他 data 内容。
+apps/server/data/uploads/
+apps/server/data/upload-tmp/
+
+# Preserve and ignore local data left by the pre-promotion SQLite Server.
+apps/mock-server/data/
 
 # Local environment overrides
 .env.local
 .env.*.local
+.env.local.command-runtime.tmp
 
 # Logs
 *.log
@@ -24,3 +27,20 @@ apps/mock-server/data/mock.sqlite-shm
 # Editor / OS noise
 .DS_Store
 Thumbs.db
+
+# Local agent tooling: the vendored ExUI usage skill is kept on disk for local
+# reading only. Docs under .ai/ and .notes/ cite paths inside it, so it is left
+# in place but intentionally not tracked.
+.agents/
+.claude/
+.superpowers/
+
+playwright
+.playwright-cli
+output
+vendor/exui/
+.local/docs-integration/
+
+# Local docs-integration previews and one-off verification artifacts
+.notes/docs-integration/previews/
+.notes/docs-integration/reports/

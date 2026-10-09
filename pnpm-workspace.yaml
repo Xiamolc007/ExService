@@ -1,15 +1,26 @@
 packages:
   - apps/*
+  - '!apps/outline'
   - packages/*
+
+# Drizzle 的 SQLite 驱动是可选 peer；本仓库只解析 PostgreSQL 驱动。
+autoInstallPeers: false
 
 # pnpm 默认阻止依赖的执行脚本。以下依赖允许执行安装脚本：
 #   esbuild         -> Vite / Vitest / tsx 的平台二进制，必须由 postinstall 提供
 #   @parcel/watcher -> tsx watch 的原生文件监听
-#   better-sqlite3  -> 当前平台有 prebuild，无需构建；保留以支持缺少 prebuild 的平台
+#   protobufjs      -> Testcontainers 的依赖，只执行版本约束提示
+#   ssh2/cpu-features 是 Testcontainers 路径的可选原生加速绑定；使用纯 JS 回退。
 allowBuilds:
   '@parcel/watcher': true
-  better-sqlite3: true
+  better-sqlite3: false
+  # cos-js-sdk-v5 的 postinstall 只在存在 patches/ 目录时执行 `npx patch-package`；
+  # 发行包不带该目录，脚本是无操作，因此显式禁止，不让依赖安装脚本联网。
+  cos-js-sdk-v5: false
+  cpu-features: false
   esbuild: true
+  protobufjs: true
+  ssh2: false
 
 # 由 pnpm 在首次安装时自动写入（`pnpm install` 输出的 "Added 3 entries to
 # minimumReleaseAgeExclude in pnpm-workspace.yaml"）：这些版本落在当时生效的依赖发布时长

@@ -1,0 +1,192 @@
+[
+  {
+    "value": "/docs/search?q=",
+    "valid": true,
+    "path": "/docs/search?q="
+  },
+  {
+    "value": "/docs/search?q=&collectionId=12345678-1234-1234-1234-123456789abc&unknown=x#hash",
+    "valid": true,
+    "path": "/docs/search?q=&collectionId=12345678-1234-1234-1234-123456789abc"
+  },
+  {
+    "value": "/docs/",
+    "valid": true,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs",
+    "valid": true,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/doc/hello-1234567890",
+    "valid": true,
+    "path": "/docs/doc/hello-1234567890"
+  },
+  {
+    "value": "/docs/search?q=hello&junk=x#hash",
+    "valid": true,
+    "path": "/docs/search?q=hello"
+  },
+  {
+    "value": "/docs/public/collection/12345678-1234-1234-1234-123456789abc",
+    "valid": true,
+    "path": "/docs/public/collection/12345678-1234-1234-1234-123456789abc"
+  },
+  {
+    "value": "https://evil.test/docs/",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "//evil.test/docs/",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs2",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/logout",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/auth/oidc",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/new",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/doc/hello-1234567890/edit",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/doc/hello-1234567890/history",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/doc/12345678-1234-1234-1234-123456789abc",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/public/collection/nope",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/../docs/",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/./",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/%2e%2e/",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/%252e%252e/",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs\\x",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/search?q=a&q=b",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/search?q=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/search?q=%0a",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/search?q=%5c",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/search?q=hello&collectionId=12345678-1234-1234-1234-123456789abc&unknown=drop#hash",
+    "valid": true,
+    "path": "/docs/search?q=hello&collectionId=12345678-1234-1234-1234-123456789abc"
+  },
+  {
+    "value": "/docs/search?collectionId=12345678-1234-1234-1234-123456789abc",
+    "valid": true,
+    "path": "/docs/search?collectionId=12345678-1234-1234-1234-123456789abc"
+  },
+  {
+    "value": "/docs/search?q=hello&collectionId=bad",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/search?collectionId=12345678-1234-1234-1234-123456789abc&collectionId=12345678-1234-1234-1234-123456789abc",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/search?q=%zz",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/doc/hello-1234567890?q=term&token=secret&edit=true#hash",
+    "valid": true,
+    "path": "/docs/doc/hello-1234567890?q=term"
+  },
+  {
+    "value": "/docs/doc/hello-1234567890?q=%E4%B8%AD%E6%96%87",
+    "valid": true,
+    "path": "/docs/doc/hello-1234567890?q=%E4%B8%AD%E6%96%87"
+  },
+  {
+    "value": "/docs/doc/hello-1234567890?q=",
+    "valid": true,
+    "path": "/docs/doc/hello-1234567890?q="
+  },
+  {
+    "value": "/docs/doc/hello-1234567890?q=a&q=b",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/doc/hello-1234567890?q=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "valid": false,
+    "path": "/docs/"
+  },
+  {
+    "value": "/docs/doc/hello-1234567890?q=term&collectionId=12345678-1234-1234-1234-123456789abc",
+    "valid": true,
+    "path": "/docs/doc/hello-1234567890?q=term"
+  }
+]

@@ -1,0 +1,52 @@
+@import url('https://fonts.googleapis.com/css2?family=Science+Gothic:wght@700&display=swap');
+
+.page {
+  position: relative;
+  width: 100vw;
+  margin: 0 0 5rem;
+  padding-top: 240px;
+}
+
+.heroArtwork {
+  display: block;
+  width: 100vw;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.heading {
+  position: absolute;
+  top: 220px;
+  right: 0;
+  left: 0;
+  transform: translateY(-100%);
+  display: grid;
+  justify-items: center;
+  gap: 0.25rem;
+  padding-inline: 1.5rem;
+  text-align: center;
+}
+
+.title {
+  margin: 0;
+  color: var(--exui-text-primary);
+  font-family: 'Science Gothic', sans-serif;
+  font-size: clamp(2rem, 5vw, 5rem);
+  font-weight: 700;
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--exui-text-secondary);
+  font-size: 1rem;
+}
+
+.aboutButton {
+  position: fixed;
+  bottom: 48px;
+  left: 50%;
+  z-index: 1;
+  transform: translateX(-50%);
+}

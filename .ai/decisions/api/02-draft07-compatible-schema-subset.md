@@ -3,9 +3,9 @@
 - 状态：已接受
 - 模块：`api`
 - 日期：2026-09-16
-- 来源：`notes/backend-sandbox/specs/2026-09-16-backend-sandbox-scaffold-design.md` §6、`notes/backend-sandbox/rfcs/2026-09-16-contract-first-backend-sandbox-scaffold-rfc.md`「约束与已作决策」
+- 来源：`.notes/archive/backend-sandbox/specs/2026-09-16-backend-sandbox-scaffold-design.md` §6、`.notes/archive/backend-sandbox/rfcs/2026-09-16-contract-first-backend-sandbox-scaffold-rfc.md`「约束与已作决策」
 
-_最后更新：2026-09-17_
+_最后更新：2026-09-29_
 
 ## 背景
 
@@ -40,4 +40,4 @@ Contract 中的 schema 只使用 Draft-07 兼容子集：`type`、`const`、`enu
 
 - `api/openapi.yaml` 的 `info.description` 末段。
 - `tests/contract/health.test.ts` 中 `toDraft07Definitions()` 与 `new Ajv({ allErrors: true, strict: false })`。
-- `notes/backend-sandbox/rfcs/2026-09-16-contract-first-backend-sandbox-scaffold-rfc.md` 中的「Schema 兼容性」与对应风险行。
+- `.notes/archive/backend-sandbox/rfcs/2026-09-16-contract-first-backend-sandbox-scaffold-rfc.md` 中的「Schema 兼容性」与对应风险行。

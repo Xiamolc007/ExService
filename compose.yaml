@@ -1,0 +1,70 @@
+name: exwebsite-docs-integration
+
+services:
+  postgres:
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?configure first}
+      EXRE_PASSWORD: ${EXRE_PASSWORD:?configure first}
+      OUTLINE_PASSWORD: ${OUTLINE_PASSWORD:?configure first}
+      HYDRA_PASSWORD: ${HYDRA_PASSWORD:?configure first}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/docs-integration/postgres/init.sh:/docker-entrypoint-initdb.d/10-integrated-databases.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U postgres']
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+    command: [redis-server, --appendonly, 'yes']
+    volumes:
+      - redisdata:/data
+
+  hydra:
+    image: oryd/hydra:v2.3.0@sha256:b94007e19a1f7f78157e7f4ea340da8a55b5f104a0f1198755c256f38ef32b4b
+    command: [serve, all, --dev]
+    ports:
+      - 127.0.0.1:14445:4445
+    environment:
+      DSN: postgres://hydra:${HYDRA_PASSWORD:?configure first}@postgres:5432/hydra?sslmode=disable
+      SECRETS_SYSTEM: ${HYDRA_SYSTEM_SECRET:?configure first}
+      URLS_SELF_ISSUER: http://identity.exwebsite.test:8090/
+      URLS_LOGIN: http://exwebsite.test:8090/identity/login
+      URLS_CONSENT: http://exwebsite.test:8090/identity/consent
+      URLS_LOGOUT: http://exwebsite.test:8090/identity/logout
+      SERVE_PUBLIC_HOST: 0.0.0.0
+      SERVE_ADMIN_HOST: 0.0.0.0
+      TTL_AUTH_CODE: 60s
+      TTL_ACCESS_TOKEN: 60s
+      TTL_ID_TOKEN: 60s
+      LOG_LEVEL: warn
+      LOG_FORMAT: json
+      LOG_LEAK_SENSITIVE_VALUES: 'false'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  gateway:
+    image: nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236
+    environment:
+      WEBSITE_SERVER_UPSTREAM: ${WEBSITE_SERVER_UPSTREAM:?configure first}
+      WEBSITE_WEB_UPSTREAM: ${WEBSITE_WEB_UPSTREAM:?configure first}
+      OUTLINE_BACKEND_UPSTREAM: ${OUTLINE_BACKEND_UPSTREAM:?configure first}
+      OUTLINE_STATIC_UPSTREAM: ${OUTLINE_STATIC_UPSTREAM:?configure first}
+      OUTLINE_STATIC_PREFIX: ${OUTLINE_STATIC_PREFIX-}
+    volumes:
+      - ./infra/docs-integration/gateway/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+    ports:
+      - 127.0.0.1:8090:8090
+    networks:
+      default:
+        aliases:
+          - exwebsite.test
+          - identity.exwebsite.test
+
+volumes:
+  pgdata:
+  redisdata:

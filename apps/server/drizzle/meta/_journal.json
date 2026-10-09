@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1790660864808,
+      "tag": "0000_charming_ted_forrester",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790754562104,
+      "tag": "0001_safe_firebird",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791432801372,
+      "tag": "0002_persistent_notifications",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,0 +1,387 @@
+/**
+ * 通知历史 Modal。
+ *
+ * 两列各自滚动：`.listScroll` 与 `.detailColumn` 是仅有的两个滚动容器，
+ * `.dialog` 自身 `overflow: hidden`，`.grid` 用 `min-height: 0` 让子元素能收缩。
+ */
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(66rem, calc(100vw - 2rem));
+  height: min(48rem, calc(100dvh - 2rem));
+  max-width: calc(100vw - 2rem);
+  max-height: calc(100dvh - 2rem);
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+.head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  padding: 1rem 3.5rem 1rem 1.5rem;
+  border-bottom: 1px solid var(--exui-border-default);
+}
+
+.title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 650;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(17rem, 22rem) minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+
+.listColumn {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--exui-border-default);
+}
+
+.listTools {
+  display: grid;
+  flex: none;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--exui-border-default);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.filterLabel {
+  color: var(--exui-text-secondary);
+  font-size: 0.8rem;
+}
+
+.filterTrigger {
+  min-width: 7.5rem;
+}
+
+.count {
+  color: var(--exui-text-secondary);
+  font-size: 0.75rem;
+}
+
+.listScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.listFooter {
+  display: grid;
+  justify-items: start;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-top: 1px solid var(--exui-border-default);
+}
+
+.pageError {
+  display: grid;
+  justify-items: start;
+  gap: 0.4rem;
+  color: var(--exui-feedback-danger);
+  font-size: 0.78rem;
+}
+
+.pageError p {
+  margin: 0;
+}
+
+.pageRetrying {
+  margin: 0;
+  color: var(--exui-text-secondary);
+  font-size: 0.78rem;
+}
+
+.detailColumn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+  min-width: 0;
+  min-height: 0;
+  padding: 1.5rem 2rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-wrap: anywhere;
+}
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.typeTag {
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--exui-border-default);
+  border-radius: var(--exui-radius-full);
+  color: var(--exui-text-secondary);
+  font-size: 0.72rem;
+}
+
+.detailTitle {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.detailMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--exui-text-secondary);
+  font-size: 0.78rem;
+}
+
+.expiredBanner,
+.hint {
+  margin: 0;
+  color: var(--exui-text-secondary);
+  font-size: 0.78rem;
+}
+
+.actionRow {
+  display: grid;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.actionButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.actionReason {
+  margin: 0;
+  color: var(--exui-text-secondary);
+  font-size: 0.75rem;
+}
+
+.readTools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  margin-top: 0.4rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--exui-border-default);
+}
+
+.records {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+  width: 100%;
+}
+
+.recordsTitle {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.recordsIntro {
+  margin: 0;
+  color: var(--exui-text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.batchList {
+  display: grid;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.batch {
+  display: grid;
+  justify-items: start;
+  gap: 0.4rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--exui-border-default);
+  border-radius: var(--exui-radius-medium);
+}
+
+.batchDate {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.batchCounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0;
+  color: var(--exui-text-secondary);
+  font-size: 0.78rem;
+}
+
+.status {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  border-top: 1px solid var(--exui-border-default);
+  font-size: 0.78rem;
+}
+
+.undo {
+  padding: 0;
+}
+
+.notice {
+  display: grid;
+  justify-items: start;
+  gap: 0.6rem;
+  margin: 0.75rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--exui-feedback-danger);
+  border-radius: var(--exui-radius-medium);
+  background: var(--exui-surface-secondary);
+  font-size: 0.8rem;
+}
+
+.notice p {
+  margin: 0;
+}
+
+.skeletons {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.75rem;
+}
+
+.skeleton {
+  height: 3rem;
+  width: 100%;
+}
+
+.bodySkeleton {
+  height: 6rem;
+  width: 100%;
+}
+
+.empty {
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+}
+
+.emptyTitle {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+}
+
+.emptyBody {
+  margin: 0;
+  color: var(--exui-text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.confirm {
+  max-width: min(30rem, calc(100vw - 2rem));
+}
+
+.confirmBody {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.confirmBody p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.confirmNote {
+  color: var(--exui-text-secondary);
+  font-size: 0.8rem;
+}
+
+.confirmExpired {
+  color: var(--exui-feedback-danger);
+}
+
+.backButton {
+  display: none;
+}
+
+/* ≤ 42rem：列表与正文切换，Modal 铺满可用视口。 */
+@media (max-width: 42rem) {
+  .dialog {
+    width: calc(100vw - 1rem);
+    height: calc(100dvh - 1rem);
+    max-width: calc(100vw - 1rem);
+    max-height: calc(100dvh - 1rem);
+  }
+
+  .head {
+    padding: 0.75rem 3rem 0.75rem 1rem;
+  }
+
+  .title {
+    font-size: 1.05rem;
+  }
+
+  .grid {
+    display: block;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .listColumn {
+    height: 100%;
+    border-right: 0;
+  }
+
+  .detailColumn {
+    height: 100%;
+    padding: 1rem;
+    display: none;
+  }
+
+  .grid.detailMode .listColumn {
+    display: none;
+  }
+
+  .grid.detailMode .detailColumn {
+    display: flex;
+  }
+
+  .backButton {
+    display: inline-flex;
+  }
+}

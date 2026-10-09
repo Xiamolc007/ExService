@@ -1,0 +1,113 @@
+/** 通知偏好分区：沿用现有设置分区的行式排版与错误展示规则。 */
+
+.header {
+  margin-bottom: 0.5rem;
+}
+
+.header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 650;
+}
+
+.intro {
+  margin: 0 0 0.5rem;
+  color: var(--exui-text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.row {
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--exui-border-default);
+}
+
+.necessary {
+  padding-top: 1.25rem;
+}
+
+.necessaryTitle {
+  margin: 0 0 0.25rem;
+  font-size: 0.9rem;
+}
+
+.necessaryBody {
+  margin: 0;
+  color: var(--exui-text-secondary);
+  font-size: 0.82rem;
+}
+
+.saveRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+.draftState {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--exui-text-secondary);
+  font-size: 0.8rem;
+}
+
+.saveActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.error,
+.message {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.error {
+  color: var(--exui-feedback-danger);
+}
+
+.message {
+  color: var(--exui-text-secondary);
+}
+
+.notice {
+  display: grid;
+  justify-items: start;
+  gap: 0.6rem;
+  margin: 0.75rem 0;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--exui-feedback-danger);
+  border-radius: var(--exui-radius-medium);
+  background: var(--exui-surface-secondary);
+  font-size: 0.85rem;
+}
+
+.notice p {
+  margin: 0;
+}
+
+.skeletons {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+.skeleton {
+  height: 3rem;
+  width: 100%;
+}
+
+@media (max-width: 38rem) {
+  .row {
+    align-items: flex-start;
+  }
+}

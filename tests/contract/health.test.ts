@@ -1,10 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createApp, serviceHandlers } from '@workspace/mock-server'
+import { Writable } from 'node:stream'
+import { createApp, serviceHandlers } from '@workspace/server'
+import { createTestAuth, type TestAuth } from '@tests/helpers/auth'
 import Ajv, { type ValidateFunction } from 'ajv'
 import { afterEach, describe, expect, it } from 'vitest'
 import { parse as parseYaml } from 'yaml'
+import { parseCorsAllowedOrigins } from '@server/src/http/cors'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -110,15 +113,19 @@ const validateHealthResponse = compileComponentSchema('HealthResponse')
 const validateErrorEnvelope = compileComponentSchema('ErrorEnvelope')
 
 const runningApps: Array<ReturnType<typeof createApp>> = []
+const authFixtures: TestAuth[] = []
 
-function createTestApp() {
-  const app = createApp({ logger: false })
+async function createTestApp(corsAllowedOrigins?: ReadonlySet<string>, logger: Parameters<typeof createApp>[0]['logger'] = false) {
+  const fixture = await createTestAuth()
+  authFixtures.push(fixture)
+  const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices, authServices: fixture.authServices, profileServices: fixture.profileServices, storageServices: fixture.storageServices, notifications: fixture.notifications, logger, corsAllowedOrigins })
   runningApps.push(app)
   return app
 }
 
 afterEach(async () => {
   await Promise.all(runningApps.splice(0).map((app) => app.close()))
+  await Promise.all(authFixtures.splice(0).map((fixture) => fixture.close()))
 })
 
 describe('contract coverage', () => {
@@ -145,11 +152,12 @@ describe('contract coverage', () => {
 
 describe('GET /api/health over HTTP', () => {
   it('returns 200 with a JSON body that satisfies HealthResponse', async () => {
-    const app = createTestApp()
+    const app = await createTestApp()
 
     const response = await app.inject({ method: 'GET', url: '/api/health' })
 
     expect(response.statusCode).toBe(200)
+    expect(response.headers['x-request-id']).toEqual(expect.any(String))
     expect(response.headers['content-type']).toMatch(/^application\/json/)
 
     const body: unknown = response.json()
@@ -158,7 +166,7 @@ describe('GET /api/health over HTTP', () => {
   })
 
   it('returns no fields beyond the ones declared by the contract', async () => {
-    const app = createTestApp()
+    const app = await createTestApp()
 
     const body = (await app.inject({ method: 'GET', url: '/api/health' })).json() as Record<string, unknown>
 
@@ -166,12 +174,38 @@ describe('GET /api/health over HTTP', () => {
   })
 
   it('registers the contract path under the explicit /api prefix', async () => {
-    const app = createTestApp()
+    const app = await createTestApp()
 
     // Contract 中路径写作 /health；缺少 prefix 时这里会得到 404。
     const unprefixed = await app.inject({ method: 'GET', url: '/health' })
 
     expect(unprefixed.statusCode).toBe(404)
+  })
+})
+
+describe('HTTP infrastructure', () => {
+  it('uses a generated request ID and allows only configured CORS preflights', async () => {
+    const origin = 'http://127.0.0.1:9999'
+    const app = await createTestApp(parseCorsAllowedOrigins(origin))
+    const actual = await app.inject({ method: 'GET', url: '/api/health', headers: { origin, 'x-request-id': 'forged' } })
+    expect(actual.headers['x-request-id']).not.toBe('forged')
+    expect(actual.headers['access-control-allow-origin']).toBe(origin)
+    expect(actual.headers['access-control-expose-headers']).toContain('X-Request-Id')
+    const preflight = await app.inject({ method: 'OPTIONS', url: '/api/health', headers: { origin, 'access-control-request-method': 'GET', 'access-control-request-headers': 'Authorization, Content-Type' } })
+    expect(preflight.statusCode).toBe(204)
+    expect(preflight.headers['x-request-id']).toEqual(expect.any(String))
+    expect(preflight.headers.vary).toContain('Access-Control-Request-Headers')
+    const denied = await app.inject({ method: 'OPTIONS', url: '/api/health', headers: { origin, 'access-control-request-method': 'TRACE' } })
+    expect(denied.statusCode).toBe(400)
+    expect(denied.headers['access-control-allow-methods']).toBeUndefined()
+    const outside = await app.inject({ method: 'OPTIONS', url: '/api-other', headers: { origin, 'access-control-request-method': 'GET' } })
+    expect(outside.statusCode).toBe(404)
+    expect(outside.headers['access-control-allow-origin']).toBeUndefined()
+  })
+
+  it('rejects wildcard and origins with a path', () => {
+    expect(() => parseCorsAllowedOrigins('*')).toThrow()
+    expect(() => parseCorsAllowedOrigins('https://example.test/admin')).toThrow()
   })
 })
 
@@ -218,17 +252,32 @@ describe('contract schema enforcement', () => {
 
 describe('undeclared routes', () => {
   it('returns the contract ErrorEnvelope', async () => {
-    const app = createTestApp()
+    const app = await createTestApp()
 
     const response = await app.inject({ method: 'GET', url: '/api/not-in-contract' })
+    expect(response.headers['x-request-id']).toEqual(expect.any(String))
+    expect(response.headers['x-request-id']).toBe(response.json().error.requestId)
 
     expect(response.statusCode).toBe(404)
     expect(response.headers['content-type']).toMatch(/^application\/json/)
     expect(validateErrorEnvelope(response.json())).toBe(true)
   })
 
+  it('uses the same generated ID in error headers, bodies, and request logs', async () => {
+    const lines: string[] = []
+    const stream = new Writable({ write(chunk, _encoding, done) { lines.push(String(chunk)); done() } })
+    const app = await createTestApp(undefined, { stream })
+    const response = await app.inject({ method: 'POST', url: '/api/auth/login', payload: {}, headers: { 'x-request-id': 'forged-id' } })
+    const id = response.headers['x-request-id']
+    expect(response.statusCode).toBe(400)
+    expect(id).toEqual(expect.any(String))
+    expect(id).not.toBe('forged-id')
+    expect(response.json().error.requestId).toBe(id)
+    expect(lines.map(line => JSON.parse(line) as { reqId?: string }).some(entry => entry.reqId === id)).toBe(true)
+  })
+
   it('does not leak internal details', async () => {
-    const app = createTestApp()
+    const app = await createTestApp()
 
     const body = (await app.inject({ method: 'GET', url: '/api/not-in-contract' })).json() as {
       error: { message: string; requestId: string }
@@ -236,6 +285,6 @@ describe('undeclared routes', () => {
 
     expect(body.error.requestId).toBeTruthy()
     expect(body.error.message).not.toContain(projectRoot)
-    expect(body.error.message).not.toMatch(/mock\.sqlite|node_modules|\bat\s+\S+\s+\(/i)
+    expect(body.error.message).not.toMatch(/postgres(?:ql)?:\/\/|DATABASE_URL|node_modules|\bat\s+\S+\s+\(/i)
   })
 })

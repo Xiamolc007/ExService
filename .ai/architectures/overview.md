@@ -1,87 +1,58 @@
 # 跨模块架构总览
 
-本文件说明 ExWebsite 的整体结构与请求流。单个模块的内部结构见各模块目录下的文档。
+本文件说明 ExWebsite 当前开发拓扑。HTTP 形状以 `api/openapi.yaml` 为准；Server 请求与数据库生命周期见 `.ai/architectures/server/request-lifecycle.md`，数据规则见 `.ai/databases/data-model.md`。
 
-_最后更新：2026-09-18_
+_最后更新：2026-10-05_
 
 ## 系统结构
 
-Contract 是唯一的中心节点，所有其他部分都是它的消费者：
-
 ```text
-                         api/openapi.yaml
-                      （唯一 API Contract）
-                               │
-        ┌──────────────────────┼──────────────────────┐
-        │                      │                      │
-        ▼                      ▼                      ▼
- pnpm api:generate      fastify-openapi-glue    未来 PHP 实现
-        │                      │                      │
-        ▼                      ▼                      ▼
- packages/api-client     apps/mock-server        PHP + MySQL
-        │                      │                （不在本仓库）
-        ▼                      ▼
- apps/web ──/api 代理──▶ Fastify 路由 ──▶ handler ──▶ Drizzle ──▶ SQLite
+api/openapi.yaml ──api:generate──▶ packages/api-client ──▶ apps/web
+       │                                                    │
+       └──fastify-openapi-glue──▶ apps/server ◀──/api 代理──┘
+                                    │
+                                    ├──业务服务──▶ PostgreSQL exre
+                                    └──头像文件──▶ apps/server/data/avatars/
 ```
 
-依赖方向是单向的：Contract 不依赖任何实现；实现侧不反向定义 Contract。
+上图是 Website 业务请求链；`apps/server/` 是唯一 Website Fastify Server。Contract 不依赖实现；Fastify 只注册带 `operationId` 的 operation，Website 前端只经共享 Client 发请求。当前仍是本地开发拓扑，公网部署能力需后续设计。
+
+普通开发入口已接入完整 local 文档与统一身份集成；Website 的 `/api` 仍归 Fastify。Outline 是 `apps/outline/` Git submodule，保留自己的 Yarn、数据库与附件存储，不成为 pnpm workspace 包，Website Fastify 不接管文档 API。local 与原 8090 dev/full 的配置、身份及请求边界统一见 `.ai/architectures/docs-integration/integration-boundaries.md`。
 
 ## 模块边界
 
-| 路径 | 责任 | 禁止事项 |
-| --- | --- | --- |
-| `api/` | 定义 HTTP 路径、operation、请求/响应/错误 schema。 | 存放前端或服务端实现。 |
-| `packages/api-client/` | 导出生成的类型与 `createApiClient({ baseUrl })` 工厂。 | 引入 React、Valtio、Framer Motion、业务状态或 endpoint 定义。 |
-| `apps/web/` | 配置 Vite、SCSS、环境变量，声明前端路由表，并适配共享 Client。 | 直接调用浏览器 `fetch`、复制 DTO、臆造 endpoint。 |
-| `apps/mock-server/` | 加载 Contract、映射 operation handler、执行受控的 SQLite 访问。 | 用 `app.get()` 绕过 Contract、把 schema 写成第二份 API 定义、连接生产数据库。 |
-| `tests/contract/` | 从 Contract 读取 schema，对真实 Fastify app 的 HTTP 响应做验证。 | 只单测 handler 而跳过路由与 schema 注册。 |
+| 路径 | 责任 |
+| --- | --- |
+| `api/` | 唯一 HTTP Contract：路径、operation、请求/响应/错误 schema。 |
+| `packages/api-client/` | 生成的类型和 `createApiClient({ baseUrl })`。 |
+| `packages/components/` | 基于 ExUI 的应用级共享 UI。 |
+| `apps/web/` | Vite/React 前端、路由、主题和 Client 接入。 |
+| `apps/server/` | Contract 路由、业务服务、受控 PostgreSQL 访问。 |
+| `apps/outline/` | 独立文档服务，负责文档数据、权限、公共阅读及协作。 |
+| `tests/contract/` | 对真实 Fastify app 的 HTTP 行为与原始 handler 输出做验证。 |
 
-## 依赖与构建边界
+## 依赖与构建
 
-- `packages/api-client` 以**源码形式**导出（`exports` 直接指向 `src/index.ts`），由消费方的打包器编译，因此没有自己的构建步骤。
-- 它是为打包器准备的包，不是 Node 运行时包：内部使用无扩展名的相对 import，Node ESM 不接受这种说明符。若将来需要在 Node 侧复用，必须补充真正的构建产物与 `exports` 条件，或统一改为显式扩展名。
-- 根 `package.json` 只承载跨工作区的命令与工具依赖，不含运行时依赖；运行时依赖按上表的边界声明在各自包内。
+- `packages/api-client` 和 `packages/components` 以源码导出，供消费方打包器编译。
+- TypeScript 别名由 `tsconfig.base.json` 声明；Vite 与 Vitest 分别配置解析。Server 构建由 `scripts/rewrite-server-imports.mjs` 把别名改写为产物内相对引用。
+- 根命令位于 `package.json`；Server 运行时依赖属于 `apps/server/package.json`。
 
-## 前端请求流（开发期）
+## 开发进程
 
-1. `apps/web/src/api/client.ts` 解析 `VITE_API_BASE_URL`，缺省 `/api`，据此创建唯一的共享 Client 实例。
-2. Vite 把 `/api/*` 转发到 `http://127.0.0.1:3000`，并且**不做 rewrite**：`/api` 前缀由 Mock Server 自己注册。
-3. `apps/web/src/main.tsx` 在 `import.meta.env.DEV` 下经共享 Client 调用 `GET /health`，作为启动期连通性检查；失败只记录开发错误，不渲染任何面板或业务 UI。
-4. 切换到生产实现时，只把 `VITE_API_BASE_URL` 指向 PHP 的 `/api` 前缀，业务调用点与共享 Client 都不改动。
+根目录 `pnpm dev` 由 `scripts/docs-integration/local-dev.mjs` 监督应用及已准备的基础服务，普通运行只读校验准备状态。工具与依赖、显式准备、资源归属、失败清理和旧模式兼容均以 `.ai/architectures/docs-integration/integration-boundaries.md` 为唯一详细说明；首次使用步骤见 `README.md`。正常运行与镜像构建证明不替代真实浏览器或公网部署验收。
 
-## 前端页面结构
+## 前端请求流
 
-`apps/web` 的挂载点只有一个 router 实例，路由表与实际页面分离：
+1. `apps/web/src/api/client.ts` 读取 `VITE_API_BASE_URL`，缺省 `/api`，创建共享 Client。
+2. 开发期 Vite 将 `/api/*` 代理至本机 Website Server，保留 `/api` 前缀；Server 的 Glue 注册该前缀。根命令注入代理目标，单独启动 Web 时使用配置的缺省目标。
+3. `apps/web/src/main.tsx` 在开发模式调用健康 operation 检查连通性；失败仅记录开发错误。
 
-```text
-main.tsx ──<BrowserRouter>──▶ App.tsx（路由表）
-                                  │
-                                  ▼
-                       routes/RootLayout.tsx（只渲染 <Outlet />）
-                                  │
-                     ┌────────────┴────────────┐
-                     ▼                         ▼
-             pages/Home.tsx  `/`      pages/NotFound.tsx  `*`
-```
+前端页面由单个 React router 管理。`apps/web/src/main.tsx` 的 ExUI `ThemeProvider` 包住整个路由树，并且只在该入口导入一次 `@exre/exui/style.css`。深链接部署时仍需 SPA fallback，见 `.ai/decisions/web/02-react-route-skeleton.md`。
 
-- 首版只有这两条路由；`*` 只处理前端路由，不替代 Mock Server 的 404 envelope。
-- 布局层只提供嵌套路由的挂载点，不含导航或其他 UI。
-- 代价是 history 路由要求未来的 PHP 部署把未知路径回落到 `index.html`。理由见 [[web/02-react-route-skeleton]]。
+## 新增 operation
 
-## 扩展点：新增一个 operation
-
-新增 API 的唯一入口是 Contract。落地顺序（与 `AGENTS.md` 一致）为：
-
-1. 修改 `api/openapi.yaml`。
-2. `pnpm api:lint`。
-3. `pnpm api:generate`，重新生成 `packages/api-client/src/generated/schema.d.ts`。
-4. 实现或更新 Mock Server 的 handler，并在 `apps/mock-server/src/app.ts` 的 `serviceHandlers` 中登记。
-5. 在 `tests/contract/` 增加对应的 Contract Test。
-6. 前端经 `@workspace/api-client` 调用。
-7. `pnpm typecheck && pnpm test && pnpm build`。
-
-第 4 步和第 5 步都不能省：漏登记 handler 只会让新路由在运行时返回 500，既有断言仍然全绿；只断言 HTTP 响应体也看不到 handler 的回归。原因见 [knowledge/mock-server](../knowledge/mock-server/serialization-masks-handler-regressions.md)。
+先修改 `api/openapi.yaml`，运行 `pnpm api:lint` 与 `pnpm api:generate`；再更新 `apps/server/src/app.ts` 的 `serviceHandlers`、对应 handler 和 `tests/contract/` 的 HTTP 与原始输出断言。前端经 `@workspace/api-client` 调用，最后运行 `pnpm typecheck`、`pnpm test`、`pnpm build`。覆盖原因见 `.ai/knowledge/server/operation-registration-gaps.md` 和 `.ai/knowledge/server/serialization-masks-handler-regressions.md`。
 
 ## 数据库边界
 
-本地 Mock 数据库固定在 `apps/mock-server/data/mock.sqlite`，只服务于本地 Mock 环境。它不连接、不共享 PHP/生产数据库，也不接受任意数据库路径或任意文件删除入口。其生命周期与命令语义见 [architectures/mock-server/request-lifecycle.md](mock-server/request-lifecycle.md) 与 [[mock-server/03-database-changes-only-by-explicit-command]]。
+`DATABASE_URL` 必须指向独立的 PostgreSQL `exre`。启动只验证目标身份、migration journal 和必需结构；显式 `pnpm db:migrate` 才应用迁移。开发专用 `db:reset` 要求 `--confirm exre`，校验回环地址和对象归属。自动测试使用独立 PostgreSQL 容器及逐用例 schema，不连接开发库。详见 `.ai/architectures/server/request-lifecycle.md` 与 `.ai/databases/knowledge/database-lifecycle-traps.md`。

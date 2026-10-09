@@ -11,15 +11,782 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Read mock server liveness
-         * @description 返回本地 Mock Server 的存活状态。
-         *
-         *     该 operation 只表示 Mock Server 已完成监听前置检查（含本地 SQLite 文件存在性检查），
-         *     不代表业务数据库能够完成业务 CRUD；首版没有业务表。
-         */
+        /** Read server liveness */
         get: operations["getHealth"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/captcha/challenges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reserve an image captcha challenge for authentication
+         * @description The Server returns a placeholder PNG during development and does not validate captcha submissions yet.
+         */
+        post: operations["createCaptchaChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/join/applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit one complete join application
+         * @description Exactly one application JSON part; new players cannot attach proofs. Each proof carries its raw file bytes in a separate multipart part with the same proofs field name, without percent encoding. Proof parts retain their supplied media type; the server validates extension and byte signatures independently of that media type. One normalized email may apply only once across all histories and categories. Existing history returns 409 JOIN_APPLICATION_EXISTS before account-only EMAIL_IN_USE. Validation and atomic persistence complete before success. All responses use no-store.
+         */
+        post: operations["submitJoinApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/join/applications/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read the minimal join application result
+         * @description Read-only snapshot; six closed status/nextAction pairs, no email or personal information. Missing applications return 200 not_found, including account-only legacy users. A completed invitation with an existing user wins over newer history; otherwise use createdAt DESC, id DESC and latest invitation issuedAt DESC, id DESC. Expiry calculation never writes business state. All responses use no-store.
+         */
+        post: operations["queryJoinApplicationResult"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/join/applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** listJoinApplications */
+        get: operations["listJoinApplications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/join/applications/{applicationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** getJoinApplication */
+        get: operations["getJoinApplication"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/join/applications/{applicationId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** approveJoinApplication */
+        post: operations["approveJoinApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/join/applications/{applicationId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** rejectJoinApplication */
+        post: operations["rejectJoinApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/join/applications/{applicationId}/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** resendJoinInvitation */
+        post: operations["resendJoinInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/join/applications/{applicationId}/attachments/{attachmentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download an application proof attachment
+         * @description Development review access only. Missing or mismatched application/attachment pairs return 404 JOIN_ATTACHMENT_NOT_FOUND. Always download; never preview. Two response slots are acquired before attachment reads; capacity failure is 503 and Retry-After: 5. A 60 second response deadline terminates started connections without a second JSON response. All responses use no-store.
+         */
+        get: operations["downloadJoinApplicationAttachment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/invitations/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** checkInvitationEligibility */
+        post: operations["checkInvitationEligibility"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/invitations/code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** requestInvitationCode */
+        post: operations["requestInvitationCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/invitations/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** verifyInvitationCode */
+        post: operations["verifyInvitationCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/invitations/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** completeInvitationRegistration */
+        post: operations["completeInvitationRegistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a local session */
+        post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the authenticated user */
+        get: operations["getCurrentUser"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update the authenticated user's profile */
+        patch: operations["updateCurrentUser"];
+        trace?: never;
+    };
+    "/auth/me/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload and replace the authenticated user's avatar */
+        post: operations["uploadCurrentUserAvatar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/avatars/{avatarId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a currently referenced public avatar image */
+        get: operations["getAvatarImage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke the current local session */
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/sso/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Inspect a local SSO request */
+        post: operations["inspectSsoRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/sso/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete an SSO request with credentials */
+        post: operations["loginForSso"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/sso/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete an SSO request with the current session */
+        post: operations["confirmSsoWithSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oidc/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Inspect an approved Hydra login or consent challenge */
+        post: operations["inspectOidcRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oidc/login/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept a Hydra login challenge with the current Website session */
+        post: operations["acceptOidcLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oidc/consent/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept preapproved OIDC scopes for the current Website session */
+        post: operations["acceptOidcConsent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oidc/logout/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke the linked browser session and accept its Hydra logout challenge */
+        post: operations["acceptOidcLogout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/identity/session/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check one client-bound Hydra session against the Website session */
+        post: operations["checkLinkedSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/identity/session/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke one client-bound Website browser session */
+        post: operations["revokeLinkedSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/identity/user/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Inspect an active Website account during controlled bootstrap */
+        post: operations["inspectIdentityUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/uploads/prepare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve the upload plan for one storage key
+         * @description Server selects the medium for this call from runtime configuration unless the caller pins medium. The file branch only returns the current byte ceiling. The cos branch validates configuration, key, declared size and media type before requesting scoped STS credentials and signing the upload ticket, and returns no partial credentials when any step fails. Credentials authorize exactly one key for PutObject. All responses use no-store.
+         */
+        post: operations["prepareStorageUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload content through the server and return its URL
+         * @description Multipart with exactly one binary data part plus keyword text fields in any order. Repeated fields, unknown fields, more than one file, a missing data part, an invalid media type and a non-multipart request are rejected. An explicit contentType wins, otherwise the part media type is used, otherwise application/octet-stream. The filename never selects the stored path. Bearer authentication completes before any content is consumed. Byte and wire ceilings are enforced while parsing, not from the supplied Content-Length. Two failures answer 503 — exhausted upload slots (STORAGE_BUSY) carries Retry-After, a requested medium that is not enabled (STORAGE_UNAVAILABLE) does not. All responses use no-store.
+         */
+        post: operations["uploadStorageContent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/uploads/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm a direct cos upload and issue its URL
+         * @description Verifies the ticket length and structure, the fixed HMAC algorithm, the signature, the version and validity window, the current session user, the key against the current bucket and region, and the current size ceiling before querying the object. Never issues a request from a region or bucket taken from an unverified ticket. A size above the ceiling returns 413 and a different size than declared returns 409. The client cannot submit a bucket, download host, URL or existence flag. All responses use no-store.
+         */
+        post: operations["completeStorageUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one object from the local file medium
+         * @description Public read of the local uploads root only. Directories are never returned as files. Range is unsupported in this version and a Range request still returns the full 200 body. Bytes are sent as application/octet-stream with attachment disposition and MIME sniffing disabled. Failures before the headers are flushed return the error envelope; a failure afterwards terminates the connection instead of appending JSON. The implicit HEAD route stays closed because the contract does not declare it.
+         */
+        get: operations["getStoredFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the authenticated user's own persistent notifications
+         * @description Keyset pagination over the personal sequence, newest first. `view=unread` applies the unread predicate (uncleared, unread, not expired); `view=history` returns every uncleared receipt including read and expired ones. Neither view includes cleared, withdrawn or unauthorized content, and no view writes state. Filters never change the global unread count, which always comes from `GET /notifications/summary`. The cursor is signed and bound to the user, view, filters and an upper sequence bound, so a later page may return fewer rows when authorization or lifecycle changes; the caller deduplicates by `receiptId`.
+         */
+        get: operations["listNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the authenticated user's global unread count
+         * @description Counts the unread predicate over the whole personal history, never the current filter or a loaded page only. Pending projection, cleared, expired, withdrawn and unauthorized receipts are excluded. `stateVersion` is a hint that personal state changed; it is not a cache key for the count because expiry and withdrawal do not always bump it.
+         */
+        get: operations["getNotificationSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/{notificationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one own notification with its safe body and resolved actions
+         * @description Read-only. Returns the canonical safe HTML body only when the content schema and policy are still renderable; otherwise `content` is null and the plain-text fallback carries the safe text. A receipt that is no longer visible returns a neutral 404 without leaking the title. Reading does not mark the notification read.
+         */
+        get: operations["getNotification"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/{notificationId}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Mark one own notification read or unread
+         * @description Only the read flag is writable; there is no archive, no arbitrary resource and no body update. `expectedRevision` is the receipt state revision returned by the list or detail call. A stale revision returns 409 without changing state, a no-op does not increment the revision, and a failed write leaves the notification unread.
+         */
+        patch: operations["updateNotificationState"];
+        trace?: never;
+    };
+    "/notifications/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark every currently unread notification read, up to a signed bound
+         * @description Global in scope and independent of any list filter. Only receipts that satisfy the unread predicate at execution time and sit at or below `readThroughToken`'s bound are changed; newly arrived or late-projected receipts with a larger sequence stay unread. Cleared, expired and already-read receipts are not rewritten. `requestId` is the idempotency key: replaying it returns the original terminal result without writing state again, and reusing it with a different body returns 409.
+         */
+        post: operations["markNotificationsReadThrough"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/clear-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview a recoverable clear of the whole personal history
+         * @description Snapshots every uncleared receipt the caller could see at preview time, regardless of the current filter or of which pages were loaded, and records the exact receipt set with each receipt's clear revision. The body is closed and empty. The returned token is bound to the caller and expires in 10 minutes; a preview that was never submitted stops being executable when it expires and never stores a body.
+         */
+        post: operations["previewNotificationClear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/clear-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clear exactly the previewed personal history, recoverably
+         * @description Applies the snapshot recorded by `previewNotificationClear`. Only receipts that still belong to the caller, are still visible, are still uncleared and still carry the previewed clear revision are cleared; a receipt that was restored, cleared again or cleared later from another device is skipped rather than overwritten. Clearing sets the personal clear state only: it never writes `readAt`, never deletes the source content, event or business record, and never emits a business event or webhook. The result is idempotent per `requestId`.
+         */
+        post: operations["clearNotificationsSnapshot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/clear-batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the authenticated user's own clear batches
+         * @description Returns clear-batch metadata only: date, counts, status and how many of that batch's items are currently restorable. It never lists preview-only batches, never returns notification bodies or titles and never mixes cleared notifications into the notification list.
+         */
+        get: operations["listNotificationClearBatches"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/clear-batches/{batchId}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore the items one clear batch actually cleared
+         * @description Restores only the receipts that this batch cleared and that are still cleared by this same batch at the same applied clear revision; receipts cleared again later are not swept in. Each receipt is re-checked against the current read predicate: withdrawn or unauthorized items are skipped without returning private content, and expired items return to history without becoming unread again. Unread and unexpired receipts therefore re-enter the unread count. A partial restore is a normal outcome. `requestId` is the idempotency key for this restore intent.
+         */
+        post: operations["restoreNotificationClearBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notification-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the authenticated user's notification preferences
+         * @description Returns the effective preferences, including defaults for a user with no stored row. Necessary notices are fixed by the catalog and cannot be switched off, so they are reported as explanation only and are never writable. Preferences are independent of `GET /auth/me`.
+         */
+        get: operations["getNotificationPreferences"];
+        /**
+         * Replace the authenticated user's optional notification preferences
+         * @description A complete replacement of the optional categories, not a patch. `expectedRevision` must match the stored revision; a stale revision returns 409 and the caller re-reads before retrying. Turning a category off stops future optional projection of that category and never deletes already-delivered history; turning it back on does not re-deliver suppressed events.
+         */
+        put: operations["updateNotificationPreferences"];
         post?: never;
         delete?: never;
         options?: never;
@@ -31,20 +798,705 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        HealthResponse: {
+        OidcChallenge: string;
+        OidcInspectRequest: {
+            /** @enum {string} */
+            phase: "login" | "consent";
+            challenge: components["schemas"]["OidcChallenge"];
+        };
+        OidcInspectResponse: {
+            clientName: string;
+            scopes: string[];
+        };
+        OidcChallengeRequest: {
+            challenge: components["schemas"]["OidcChallenge"];
+        };
+        OidcRedirectResponse: {
+            redirectUrl: string;
+        };
+        LinkedSessionRef: {
+            hydraSid: string;
+            subject: components["schemas"]["Uuid"];
+        };
+        LinkedSessionRevokeRequest: {
+            hydraSid: string;
+            subject: components["schemas"]["Uuid"];
+            requestId: components["schemas"]["Uuid"];
+        };
+        LinkedSessionRevokeResponse: {
+            /** @constant */
+            revoked: true;
+        };
+        SessionCheckResult: components["schemas"]["ActiveLinkedSession"] | components["schemas"]["InactiveLinkedSession"];
+        ActiveLinkedSession: {
+            /** @constant */
+            active: true;
+            sessionId: components["schemas"]["Uuid"];
+            userId: components["schemas"]["Uuid"];
+            expiresAt: components["schemas"]["SafeTimestamp"];
+            profile: {
+                nickname: components["schemas"]["Nickname"];
+                email: components["schemas"]["Email"];
+                avatarUrl: string | null;
+                version: number;
+            };
+        };
+        InactiveLinkedSession: {
+            /** @constant */
+            active: false;
+            /** @enum {string} */
+            reason: "unknown" | "revoked" | "expired" | "disabled";
+        };
+        IdentityUserRef: {
+            userId: components["schemas"]["Uuid"];
+        };
+        IdentityUserInfo: {
+            id: components["schemas"]["Uuid"];
+            nickname: components["schemas"]["Nickname"];
+            email: components["schemas"]["Email"];
+            avatarUrl: string | null;
+            profileVersion: number;
+        };
+        SafeTimestamp: number;
+        OpaqueIdentifier: string;
+        /** @description 服务端先 trim 再转为小写；按大小写不敏感处理。 */
+        Email: string;
+        /** @description 界面称为用户名，仅作显示名称，允许重复，不用于登录。服务端 trim；业务层按 Unicode 码点限制为 1 至 32。 */
+        Nickname: string;
+        /** @description 不 trim、不归一化；业务层按 Unicode 码点限制为 8 至 64。 */
+        Password: string;
+        VerificationCode: string;
+        CaptchaSubmission: {
+            challengeId: components["schemas"]["OpaqueIdentifier"];
+            answer: string;
+        };
+        CaptchaChallenge: {
+            challengeId: components["schemas"]["OpaqueIdentifier"];
+            /** @description Base64-encoded PNG bytes, without a data URL prefix. */
+            imageBase64: string;
+            expiresAt: components["schemas"]["SafeTimestamp"];
+        };
+        Uuid: string;
+        NullableUuid: string | null;
+        JoinReviewRequest: Record<string, never>;
+        /** @description Only multipart: exactly one application/json part (application.json, at most 64 KiB), optional proofs. Unknown parts, duplicate application, truncation and forged markers are rejected; application and all bytes commit atomically. */
+        JoinApplicationRequest: components["schemas"]["JoinNewApplicationRequest"] | components["schemas"]["JoinExperiencedApplicationRequest"];
+        /** @description New application QQ; preserve leading zeroes. Account and legacy summary QQ retain 1?20 digits. */
+        JoinApplicationQq: string;
+        JoinNewAnswers: {
+            fiveMExperience: string;
+            emergencyRoleplayKnowledge: string;
+            emergencyProceduresKnowledge: string;
+            rpUnderstanding: string;
+            frpUnderstanding: string;
+        };
+        JoinExperiencedAnswers: {
+            previousServer: string;
+            leaveReason: string;
+            previousDepartment: string;
+            lawEnforcementExperience: string;
+            highestRank: string;
+            punishmentHistory: string;
+            deescalationEssay: string;
+            discretionEssay: string;
+            transferReason: string;
+        };
+        JoinNewCommitments: {
+            /** @constant */
+            informationAccurate: true;
+            /** @constant */
+            obeyCommunityRules: true;
+            /** @constant */
+            acceptAcademyAttendanceConsequences: true;
+        };
+        JoinExperiencedCommitments: {
+            /** @constant */
+            informationAccurate: true;
             /**
-             * @description 固定为 `ok`，表示 Mock Server 进程可用。
+             * @description Present on applications submitted by the current form; optional for previously stored version 1 forms.
              * @constant
              */
+            obeyCommunityRules?: true;
+        };
+        /** @description Answer and freeTime strings are trimmed then counted as Unicode code points. The server independently checks calendar and text semantics. */
+        JoinNewForm: {
+            /** @constant */
+            applicationType: "new";
+            /** @description Valid Gregorian YYYY-MM-DD date no later than server UTC today; never a timestamp. */
+            birthDate: string;
+            /** @enum {string} */
+            applicantCategory: "100" | "101" | "102a" | "102b";
+            /** @enum {string} */
+            department: "leo" | "ems";
+            /** @description Selected option or actual free text; trim before Unicode code point counting. */
+            freeTime: string;
+            discoveryChannels: ("bilibili" | "douyin" | "friends" | "other")[];
+            answers: components["schemas"]["JoinNewAnswers"];
+            commitments: components["schemas"]["JoinNewCommitments"];
+        };
+        JoinNewApplicationPayload: {
+            email: components["schemas"]["Email"];
+            nickname: components["schemas"]["Nickname"];
+            qq: components["schemas"]["JoinApplicationQq"];
+            form: components["schemas"]["JoinNewForm"];
+        };
+        JoinNewApplicationRequest: {
+            application: components["schemas"]["JoinNewApplicationPayload"];
+            /** @description Repeated same-name parts; private raw files must pair one-to-one with validated body markers. */
+            proofs?: string[];
+        };
+        /** @description Answer and freeTime strings are trimmed then counted as Unicode code points. The server independently checks calendar and text semantics. */
+        JoinExperiencedForm: {
+            /** @constant */
+            applicationType: "experienced";
+            /** @description Valid Gregorian YYYY-MM-DD date no later than server UTC today; never a timestamp. */
+            birthDate: string;
+            /** @enum {string} */
+            applicantCategory: "100" | "101" | "102a" | "102b";
+            /** @enum {string} */
+            department: "leo" | "ems";
+            /** @description Selected option or actual free text; trim before Unicode code point counting. */
+            freeTime: string;
+            discoveryChannels: ("bilibili" | "douyin" | "friends" | "other")[];
+            answers: components["schemas"]["JoinExperiencedAnswers"];
+            commitments: components["schemas"]["JoinExperiencedCommitments"];
+        };
+        JoinExperiencedApplicationPayload: {
+            email: components["schemas"]["Email"];
+            nickname: components["schemas"]["Nickname"];
+            qq: components["schemas"]["JoinApplicationQq"];
+            form: components["schemas"]["JoinExperiencedForm"];
+        };
+        JoinExperiencedApplicationRequest: {
+            application: components["schemas"]["JoinExperiencedApplicationPayload"];
+            /** @description Repeated same-name parts; private raw files must pair one-to-one with validated body markers. */
+            proofs?: string[];
+        };
+        JoinApplicationPayload: components["schemas"]["JoinNewApplicationPayload"] | components["schemas"]["JoinExperiencedApplicationPayload"];
+        JoinApplicationQueryRequest: {
+            email: components["schemas"]["Email"];
+        };
+        JoinApplicationResult: {
+            /** @constant */
+            status: "not_found";
+            /** @constant */
+            nextAction: "apply";
+        } | {
+            /** @constant */
+            status: "pending";
+            /** @constant */
+            nextAction: "wait";
+        } | {
+            /** @constant */
+            status: "approved";
+            /** @constant */
+            nextAction: "register";
+        } | {
+            /** @constant */
+            status: "rejected";
+            /** @constant */
+            nextAction: "contact_community";
+        } | {
+            /** @constant */
+            status: "invitation_expired";
+            /** @constant */
+            nextAction: "contact_community";
+        } | {
+            /** @constant */
+            status: "registered";
+            /** @constant */
+            nextAction: "login";
+        };
+        JoinApplicationAttachment: {
+            id: components["schemas"]["Uuid"];
+            /** @description Safe basename; reject path separators, controls, dot directory names and header injection characters. */
+            originalName: string;
+            /** @enum {string} */
+            extension: "png" | "jpg" | "jpeg" | "gif" | "bmp" | "svg" | "pdf" | "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx" | "txt" | "zip" | "rar" | "7z";
+            byteLength: number;
+            sha256: string;
+            ordinal: number;
+        };
+        JoinNewApplicationSummary: {
+            id: components["schemas"]["Uuid"];
+            email: components["schemas"]["Email"];
+            nickname: components["schemas"]["Nickname"];
+            qq: string;
+            /** @enum {string} */
+            status: "pending" | "approved" | "rejected";
+            createdAt: components["schemas"]["SafeTimestamp"];
+            reviewedAt: number | null;
+            reviewedByUserId: components["schemas"]["NullableUuid"];
+            /** @enum {string|null} */
+            invitationStatus: "active" | "expired" | "completed" | null;
+            /** @enum {string|null} */
+            deliveryStatus: "pending" | "sent" | "failed" | null;
+            /** @constant */
+            applicationType: "new";
+        };
+        JoinNewApplicationDetail: {
+            application: components["schemas"]["JoinNewApplicationSummary"];
+            invitation: components["schemas"]["InvitationSummary"] | null;
+            serverTime: components["schemas"]["SafeTimestamp"];
+            /** @constant */
+            formVersion: 1;
+            form: components["schemas"]["JoinNewForm"];
+            attachments: components["schemas"]["JoinApplicationAttachment"][];
+        };
+        JoinExperiencedApplicationSummary: {
+            id: components["schemas"]["Uuid"];
+            email: components["schemas"]["Email"];
+            nickname: components["schemas"]["Nickname"];
+            qq: string;
+            /** @enum {string} */
+            status: "pending" | "approved" | "rejected";
+            createdAt: components["schemas"]["SafeTimestamp"];
+            reviewedAt: number | null;
+            reviewedByUserId: components["schemas"]["NullableUuid"];
+            /** @enum {string|null} */
+            invitationStatus: "active" | "expired" | "completed" | null;
+            /** @enum {string|null} */
+            deliveryStatus: "pending" | "sent" | "failed" | null;
+            /** @constant */
+            applicationType: "experienced";
+        };
+        JoinExperiencedApplicationDetail: {
+            application: components["schemas"]["JoinExperiencedApplicationSummary"];
+            invitation: components["schemas"]["InvitationSummary"] | null;
+            serverTime: components["schemas"]["SafeTimestamp"];
+            /** @constant */
+            formVersion: 1;
+            form: components["schemas"]["JoinExperiencedForm"];
+            attachments: components["schemas"]["JoinApplicationAttachment"][];
+        };
+        JoinLegacyApplicationSummary: {
+            id: components["schemas"]["Uuid"];
+            email: components["schemas"]["Email"];
+            nickname: components["schemas"]["Nickname"];
+            qq: string;
+            /** @enum {string} */
+            status: "pending" | "approved" | "rejected";
+            createdAt: components["schemas"]["SafeTimestamp"];
+            reviewedAt: number | null;
+            reviewedByUserId: components["schemas"]["NullableUuid"];
+            /** @enum {string|null} */
+            invitationStatus: "active" | "expired" | "completed" | null;
+            /** @enum {string|null} */
+            deliveryStatus: "pending" | "sent" | "failed" | null;
+            /** @constant */
+            applicationType: "legacy";
+        };
+        JoinLegacyApplicationDetail: {
+            application: components["schemas"]["JoinLegacyApplicationSummary"];
+            invitation: components["schemas"]["InvitationSummary"] | null;
+            serverTime: components["schemas"]["SafeTimestamp"];
+            /** @constant */
+            formVersion: 0;
+            form: null;
+            attachments: components["schemas"]["JoinApplicationAttachment"][];
+        };
+        JoinApplicationReceived: {
+            /** @constant */
+            status: "received";
+        };
+        InvitationEligibilityRequest: {
+            email: components["schemas"]["Email"];
+        };
+        InvitationCodeRequest: {
+            email: components["schemas"]["Email"];
+        };
+        InvitationEligibility: {
+            /** @constant */
+            status: "eligible";
+            email: components["schemas"]["Email"];
+            serverTime: components["schemas"]["SafeTimestamp"];
+            resendAvailableAt: components["schemas"]["SafeTimestamp"];
+        };
+        InvitationCodeAccepted: {
+            /** @constant */
+            status: "accepted";
+            serverTime: components["schemas"]["SafeTimestamp"];
+            resendAvailableAt: components["schemas"]["SafeTimestamp"];
+        };
+        InvitationVerifyRequest: {
+            email: components["schemas"]["Email"];
+            code: components["schemas"]["VerificationCode"];
+        };
+        InvitationVerified: {
+            /** @constant */
+            status: "verified";
+            completionToken: components["schemas"]["OpaqueIdentifier"];
+            email: components["schemas"]["Email"];
+            nickname: components["schemas"]["Nickname"];
+            serverTime: components["schemas"]["SafeTimestamp"];
+            completionExpiresAt: components["schemas"]["SafeTimestamp"];
+        };
+        InvitationCompleteRequest: {
+            completionToken: components["schemas"]["OpaqueIdentifier"];
+            nickname: components["schemas"]["Nickname"];
+            password: components["schemas"]["Password"];
+        };
+        InvitationRegistrationCompleted: {
+            /** @constant */
+            status: "registered";
+            email: components["schemas"]["Email"];
+        };
+        JoinApplicationSummary: {
+            id: components["schemas"]["Uuid"];
+            email: components["schemas"]["Email"];
+            nickname: components["schemas"]["Nickname"];
+            qq: string;
+            /** @enum {string} */
+            status: "pending" | "approved" | "rejected";
+            createdAt: components["schemas"]["SafeTimestamp"];
+            reviewedAt: number | null;
+            reviewedByUserId: components["schemas"]["NullableUuid"];
+            /** @enum {string|null} */
+            invitationStatus: "active" | "expired" | "completed" | null;
+            /** @enum {string|null} */
+            deliveryStatus: "pending" | "sent" | "failed" | null;
+            /** @enum {string} */
+            applicationType: "new" | "experienced" | "legacy";
+        };
+        InvitationDeliverySummary: {
+            id: components["schemas"]["Uuid"];
+            /** @enum {string} */
+            status: "pending" | "sent" | "failed";
+            startedAt: components["schemas"]["SafeTimestamp"];
+            finishedAt: number | null;
+        };
+        InvitationSummary: {
+            id: components["schemas"]["Uuid"];
+            /** @enum {string} */
+            status: "active" | "expired" | "completed";
+            issuedAt: components["schemas"]["SafeTimestamp"];
+            expiresAt: components["schemas"]["SafeTimestamp"];
+            codeExpiresAt: number | null;
+            completedAt: number | null;
+            completedUserId: components["schemas"]["NullableUuid"];
+            resendAvailableAt: components["schemas"]["SafeTimestamp"];
+            latestDelivery: components["schemas"]["InvitationDeliverySummary"] | null;
+        };
+        /** @description Strict type/version/form/attachment pairing. Legacy is version 0, null form, no attachments. Corrupted version 1 records are never downgraded. */
+        JoinApplicationDetail: components["schemas"]["JoinNewApplicationDetail"] | components["schemas"]["JoinExperiencedApplicationDetail"] | components["schemas"]["JoinLegacyApplicationDetail"];
+        JoinApplicationList: {
+            items: components["schemas"]["JoinApplicationSummary"][];
+            total: components["schemas"]["SafeTimestamp"];
+            offset: components["schemas"]["SafeTimestamp"];
+            limit: number;
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        LoginRequest: {
+            email: components["schemas"]["Email"];
+            password: components["schemas"]["Password"];
+            captcha?: components["schemas"]["CaptchaSubmission"];
+        };
+        LoginResponse: {
+            token: components["schemas"]["OpaqueIdentifier"];
+            expiresAt: components["schemas"]["SafeTimestamp"];
+        };
+        CurrentUser: {
+            id: string;
+            email: components["schemas"]["Email"];
+            nickname: components["schemas"]["Nickname"];
+            qq?: string | null;
+            fivemId?: string | null;
+            /** Format: uri */
+            avatarUrl?: string | null;
+        };
+        UpdateCurrentUserRequest: {
+            nickname?: components["schemas"]["Nickname"];
+            qq?: string | null;
+            fivemId?: string | null;
+            /** @description Clear the current avatar reference. */
+            avatar?: null;
+        };
+        UploadAvatarRequest: {
+            /** @description Base64-encoded image bytes, without a data URL prefix. */
+            imageBase64: string;
+            /** @enum {string} */
+            mediaType: "image/png" | "image/jpeg" | "image/webp";
+        };
+        LogoutResponse: {
+            /** @constant */
+            status: "signed-out";
+        };
+        SsoRequestRef: {
+            ssoRequestId: components["schemas"]["OpaqueIdentifier"];
+        };
+        SsoPasswordRequest: {
+            ssoRequestId: components["schemas"]["OpaqueIdentifier"];
+            email: components["schemas"]["Email"];
+            password: components["schemas"]["Password"];
+            captcha?: components["schemas"]["CaptchaSubmission"];
+        };
+        SsoRequestInfo: {
+            ssoRequestId: components["schemas"]["OpaqueIdentifier"];
+            /** @enum {string} */
+            status: "pending" | "completed";
+            expiresAt: components["schemas"]["SafeTimestamp"];
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        SsoCompleted: {
+            /** @constant */
+            status: "completed";
+            ssoRequestId: components["schemas"]["OpaqueIdentifier"];
+        };
+        /** @enum {string} */
+        NotificationView: "unread" | "history";
+        /** @enum {string} */
+        NotificationScopeFilter: "all" | "community" | "personal";
+        /** @enum {string} */
+        NotificationCategory: "announcement" | "personal_update" | "service_notice";
+        /** @description 服务端签名的分页游标，绑定本人、视图、筛选与上界；不透明、不可猜测、不可跨身份或跨视图复用。 */
+        NotificationCursor: string;
+        /** @description 服务端签名的短时令牌，绑定本人、用途与到期时间；不可跨身份或跨用途复用。 */
+        NotificationToken: string;
+        NotificationItem: {
+            receiptId: components["schemas"]["Uuid"];
+            title: string;
+            summaryText: string;
+            /** @enum {string} */
+            scope: "community" | "personal";
+            category: components["schemas"]["NotificationCategory"];
+            /** @enum {string} */
+            necessity: "optional" | "necessary";
+            sequence: number;
+            deliveredAt: components["schemas"]["SafeTimestamp"];
+            readAt: number | null;
+            expired: boolean;
+            stateRevision: number;
+        };
+        NotificationList: {
+            items: components["schemas"]["NotificationItem"][];
+            nextCursor: string | null;
+            unreadCount: number;
+            upperSequence: number;
+            readThroughToken: components["schemas"]["NotificationToken"];
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        NotificationSummary: {
+            unreadCount: number;
+            stateVersion: number;
+            upperSequence: number;
+            readThroughToken: components["schemas"]["NotificationToken"];
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        NotificationContent: {
+            /** @constant */
+            format: "html";
+            /** @constant */
+            schemaVersion: 1;
+            /** @constant */
+            policyVersion: "notification-html-v1";
+            /** @description 已按当前策略规范化并重新校验的安全 HTML；正文不含脚本、事件属性、样式、内嵌资源或可执行组件。 */
+            html: string;
+            /** @description 由安全树派生的完整纯文本，供格式不可用时回退展示。 */
+            text: string;
+        };
+        NotificationAction: {
+            actionId: string;
+            /** @enum {string} */
+            kind: "navigate" | "command";
+            label: string;
+            /** @enum {string} */
+            emphasis: "primary" | "secondary";
+            enabled: boolean;
+            unavailableReason: null | ("unsupported" | "expired" | "forbidden" | "state_changed");
+            navigationTarget: {
+                /** @constant */
+                kind: "internal";
+                path: string;
+            } | null;
+        };
+        NotificationDetail: {
+            receiptId: components["schemas"]["Uuid"];
+            title: string;
+            /** @enum {string} */
+            scope: "community" | "personal";
+            category: components["schemas"]["NotificationCategory"];
+            /** @enum {string} */
+            necessity: "optional" | "necessary";
+            sequence: number;
+            deliveredAt: components["schemas"]["SafeTimestamp"];
+            readAt: number | null;
+            clearedAt: number | null;
+            /** @enum {string} */
+            lifecycle: "active" | "expired";
+            stateRevision: number;
+            clearRevision: number;
+            contentAvailable: boolean;
+            /** @description 当前策略下可安全渲染的正文；不可用时为 null，调用方必须改用 contentFallbackText，不得展示原始 HTML。 */
+            content: (components["schemas"]["NotificationContent"] | null) & components["schemas"]["NotificationContent"];
+            contentFallbackText: string | null;
+            actions: components["schemas"]["NotificationAction"][];
+            actionsAvailable: boolean;
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        NotificationState: {
+            receiptId: components["schemas"]["Uuid"];
+            read: boolean;
+            stateRevision: number;
+            unreadCount: number;
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        NotificationStateUpdateRequest: {
+            read: boolean;
+            expectedRevision: number;
+        };
+        NotificationReadAllRequest: {
+            requestId: components["schemas"]["Uuid"];
+            readThroughToken: components["schemas"]["NotificationToken"];
+        };
+        NotificationReadAllResult: {
+            requestId: components["schemas"]["Uuid"];
+            affectedCount: number;
+            watermarkSequence: number;
+            unreadCount: number;
+            replayed: boolean;
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        /** @description 封闭且为空；清理范围永远由服务端按当时全局未清理历史决定，不接受客户端筛选、行数或时间推断。 */
+        NotificationClearPreviewRequest: Record<string, never>;
+        NotificationClearPreview: {
+            batchId: components["schemas"]["Uuid"];
+            itemCount: number;
+            upperSequence: number;
+            clearSnapshotToken: components["schemas"]["NotificationToken"];
+            expiresAt: components["schemas"]["SafeTimestamp"];
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        NotificationClearAllRequest: {
+            requestId: components["schemas"]["Uuid"];
+            clearSnapshotToken: components["schemas"]["NotificationToken"];
+        };
+        NotificationClearResult: {
+            requestId: components["schemas"]["Uuid"];
+            batchId: components["schemas"]["Uuid"];
+            affectedCount: number;
+            skippedCount: number;
+            unreadCount: number;
+            replayed: boolean;
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        NotificationClearBatchItem: {
+            batchId: components["schemas"]["Uuid"];
+            itemCount: number;
+            affectedCount: number;
+            skippedCount: number;
+            restorableCount: number;
+            /** @enum {string} */
+            status: "applied" | "restored" | "partial";
+            createdAt: components["schemas"]["SafeTimestamp"];
+            appliedAt: number | null;
+            restoredAt: number | null;
+        };
+        NotificationClearBatchList: {
+            items: components["schemas"]["NotificationClearBatchItem"][];
+            nextCursor: string | null;
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        NotificationRestoreRequest: {
+            requestId: components["schemas"]["Uuid"];
+        };
+        NotificationRestoreResult: {
+            requestId: components["schemas"]["Uuid"];
+            batchId: components["schemas"]["Uuid"];
+            affectedCount: number;
+            skippedCount: number;
+            unreadCount: number;
+            replayed: boolean;
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        NotificationPreferences: {
+            revision: number;
+            optionalCategories: {
+                announcement: boolean;
+                personal_update: boolean;
+            };
+            /** @description 由 catalog 固定的必要类别，展示说明用，不可写入也不可关闭。 */
+            necessaryCategories: components["schemas"]["NotificationCategory"][];
+            serverTime: components["schemas"]["SafeTimestamp"];
+        };
+        NotificationPreferencesUpdateRequest: {
+            expectedRevision: number;
+            optionalCategories: {
+                announcement: boolean;
+                personal_update: boolean;
+            };
+        };
+        HealthResponse: {
+            /** @constant */
             status: "ok";
+        };
+        /** @description 相对存储路径，以 `/` 分段；每段只含小写字母、数字、点、下划线与连字符，段首为字母或数字且段尾不得为点。服务端另外逐段拒绝 Windows 保留设备名，并核对解析路径仍位于 uploads 根目录内；不清洗、不自动小写、不二次 URL 解码。 */
+        StorageKey: string;
+        /**
+         * @description 目标存储介质；缺省时取运行时配置 STORAGE_DEFAULT_ADAPTER，不回退。
+         * @enum {string}
+         */
+        StorageMedium: "file" | "cos";
+        /** @description 无参数的 ASCII `type/subtype` 内容声明。服务端不据此验证真实文件格式，也不按后缀推断类型。 */
+        StorageContentType: string;
+        /** @description 字节数；上界是 JS 安全整数，实际仍另受运行时 STORAGE_MAX_BYTES 限制。 */
+        StorageByteSize: number;
+        /** @description Unix 秒时间戳；与 SafeTimestamp 取值域相同，仅单位与语义不同。 */
+        StorageUnixSeconds: number;
+        /** @description 服务器用独立 HMAC 密钥签发的无状态上传凭据，绑定版本、用户、bucket、region、key、申报大小、内容类型与有效期。不写入日志，不缓存。 */
+        StorageUploadTicket: string;
+        StorageUploadCredential: {
+            tmpSecretId: string;
+            tmpSecretKey: string;
+            securityToken: string;
+            startTime: components["schemas"]["StorageUnixSeconds"];
+            expiredTime: components["schemas"]["StorageUnixSeconds"];
+        };
+        PrepareStorageUploadRequest: {
+            key: components["schemas"]["StorageKey"];
+            size: components["schemas"]["StorageByteSize"];
+            contentType: components["schemas"]["StorageContentType"];
+            medium?: components["schemas"]["StorageMedium"];
+        };
+        StorageFileUploadPlan: {
+            /** @constant */
+            medium: "file";
+            maxBytes: components["schemas"]["StorageByteSize"];
+        };
+        StorageCosUploadPlan: {
+            /** @constant */
+            medium: "cos";
+            maxBytes: components["schemas"]["StorageByteSize"];
+            bucket: string;
+            region: string;
+            key: components["schemas"]["StorageKey"];
+            credentials: components["schemas"]["StorageUploadCredential"];
+            uploadTicket: components["schemas"]["StorageUploadTicket"];
+        };
+        /** @description 按 medium const 区分的封闭联合；file 分支不签发任何凭据。 */
+        PrepareStorageUploadResponse: components["schemas"]["StorageFileUploadPlan"] | components["schemas"]["StorageCosUploadPlan"];
+        /** @description 仅用于 multipart。恰好一个二进制 data part，以及限定的 key、medium、contentType 文本字段；重复字段、未知字段、多文件与截断都被拒绝。data 的值是由解析器生成的占位标识，handler 必须核对可信解析上下文，伪造的 JSON 占位不能绕过真实解析。 */
+        StorageUploadRequest: {
+            key: components["schemas"]["StorageKey"];
+            medium?: components["schemas"]["StorageMedium"];
+            contentType?: components["schemas"]["StorageContentType"];
+            /** Format: binary */
+            data: string;
+        };
+        CompleteStorageUploadRequest: {
+            key: components["schemas"]["StorageKey"];
+            uploadTicket: components["schemas"]["StorageUploadTicket"];
+        };
+        StorageUploadResult: {
+            /**
+             * Format: uri
+             * @description 绝对 HTTP(S) 地址。本地 URL 由配置的公开 API 基址生成，在服务器可达期间有效；COS URL 是签发起一年的签名地址，不提供续签。
+             */
+            url: string;
         };
         ErrorEnvelope: {
             error: {
-                /** @description 稳定的机器可读错误码。 */
                 code: string;
-                /** @description 面向调用方的安全错误描述，不包含堆栈、SQL 或本地文件路径。 */
                 message: string;
-                /** @description Fastify request ID，用于把响应与日志关联起来。 */
                 requestId: string;
             };
         };
@@ -53,6 +1505,20 @@ export interface components {
         /** @description Safe application error response */
         ErrorResponse: {
             headers: {
+                "X-Request-Id": components["headers"]["RequestId"];
+                "Cache-Control": components["headers"]["CacheControl"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorEnvelope"];
+            };
+        };
+        /** @description Safe application error response with a retry delay */
+        RetryableErrorResponse: {
+            headers: {
+                "X-Request-Id": components["headers"]["RequestId"];
+                "Cache-Control": components["headers"]["CacheControl"];
+                "Retry-After": components["headers"]["RetryAfter"];
                 [name: string]: unknown;
             };
             content: {
@@ -62,7 +1528,18 @@ export interface components {
     };
     parameters: never;
     requestBodies: never;
-    headers: never;
+    headers: {
+        /** @description Server-generated request identifier. */
+        RequestId: string;
+        /** @description Authentication responses are not cacheable. */
+        CacheControl: "no-store";
+        /** @description Whole seconds before a retry is allowed. */
+        RetryAfter: string;
+        /** @description Always attachment; the filename is the last validated key segment, encoded as a quoted-string. */
+        ContentDisposition: string;
+        /** @description Disables MIME sniffing so stored bytes are never rendered inline. */
+        ContentTypeOptions: "nosniff";
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
@@ -76,15 +1553,1341 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Mock server is running */
+            /** @description Server is running */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
                 };
             };
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    createCaptchaChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Image challenge placeholder */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaptchaChallenge"];
+                };
+            };
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    submitJoinApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["JoinApplicationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful operation; not cacheable. */
+            202: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JoinApplicationReceived"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            408: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            413: components["responses"]["ErrorResponse"];
+            415: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RetryableErrorResponse"];
+            500: components["responses"]["ErrorResponse"];
+            503: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    queryJoinApplicationResult: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JoinApplicationQueryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful operation; not cacheable. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JoinApplicationResult"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RetryableErrorResponse"];
+            500: components["responses"]["ErrorResponse"];
+        };
+    };
+    listJoinApplications: {
+        parameters: {
+            query?: {
+                view?: "pending" | "all";
+                limit?: string;
+                offset?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful operation */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JoinApplicationList"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    getJoinApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful operation */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JoinApplicationDetail"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    approveJoinApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JoinReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful operation */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JoinApplicationDetail"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    rejectJoinApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JoinReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful operation */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JoinApplicationDetail"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    resendJoinInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JoinReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful operation */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JoinApplicationDetail"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    downloadJoinApplicationAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: components["schemas"]["Uuid"];
+                attachmentId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Original attachment bytes. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    /** @description attachment; safe ASCII filename fallback and UTF-8 filename*. */
+                    "Content-Disposition": string;
+                    "X-Content-Type-Options": "nosniff";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            500: components["responses"]["ErrorResponse"];
+            503: components["responses"]["RetryableErrorResponse"];
+        };
+    };
+    checkInvitationEligibility: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationEligibilityRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful operation */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationEligibility"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    requestInvitationCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful operation */
+            202: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationCodeAccepted"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    verifyInvitationCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful operation */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationVerified"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    completeInvitationRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful operation */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationRegistrationCompleted"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            429: components["responses"]["RetryableErrorResponse"];
+            503: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Session created */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            503: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    getCurrentUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authenticated user */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentUser"];
+                };
+            };
+            401: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    updateCurrentUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCurrentUserRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated user snapshot */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentUser"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    uploadCurrentUserAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadAvatarRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated user snapshot */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentUser"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            413: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    getAvatarImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                avatarId: components["schemas"]["OpaqueIdentifier"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description WebP avatar bytes */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/webp": string;
+                };
+            };
+            404: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session revoked */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogoutResponse"];
+                };
+            };
+            401: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    inspectSsoRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SsoRequestRef"];
+            };
+        };
+        responses: {
+            /** @description SSO request state */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SsoRequestInfo"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            410: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    loginForSso: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SsoPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description SSO request completed */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SsoCompleted"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            410: components["responses"]["ErrorResponse"];
+            503: components["responses"]["RetryableErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    confirmSsoWithSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SsoRequestRef"];
+            };
+        };
+        responses: {
+            /** @description SSO request completed */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SsoCompleted"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            410: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    inspectOidcRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OidcInspectRequest"];
+            };
+        };
+        responses: {
+            /** @description Approved client display information */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OidcInspectResponse"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            403: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    acceptOidcLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OidcChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description Browser redirect to Hydra */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OidcRedirectResponse"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            403: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    acceptOidcConsent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OidcChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description Browser redirect to Hydra */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OidcRedirectResponse"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            403: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    acceptOidcLogout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OidcChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description Browser redirect to Hydra */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OidcRedirectResponse"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            403: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    checkLinkedSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkedSessionRef"];
+            };
+        };
+        responses: {
+            /** @description Current linked session state */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionCheckResult"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    revokeLinkedSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkedSessionRevokeRequest"];
+            };
+        };
+        responses: {
+            /** @description Session group is no longer valid */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkedSessionRevokeResponse"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    inspectIdentityUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdentityUserRef"];
+            };
+        };
+        responses: {
+            /** @description Active account profile */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityUserInfo"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    prepareStorageUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrepareStorageUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Upload plan for the resolved medium */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrepareStorageUploadResponse"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            502: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    uploadStorageContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["StorageUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Stored content URL */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageUploadResult"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            408: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            413: components["responses"]["ErrorResponse"];
+            415: components["responses"]["ErrorResponse"];
+            500: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    completeStorageUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompleteStorageUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Stored content URL */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageUploadResult"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            403: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            413: components["responses"]["ErrorResponse"];
+            502: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    getStoredFile: {
+        parameters: {
+            query: {
+                /** @description Relative storage path previously used for the upload. */
+                key: components["schemas"]["StorageKey"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stored object bytes */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Content-Disposition": components["headers"]["ContentDisposition"];
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            408: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    listNotifications: {
+        parameters: {
+            query: {
+                /** @description Which personal predicate to read. */
+                view: components["schemas"]["NotificationView"];
+                /** @description Optional scope filter. Omitted means all scopes. */
+                scope?: components["schemas"]["NotificationScopeFilter"];
+                /** @description Optional closed category filter. Omitted means all categories. */
+                category?: components["schemas"]["NotificationCategory"];
+                /** @description Page size. Defaults to 20. */
+                limit?: number;
+                /** @description Opaque signed cursor returned by a previous page of the same view and filters. */
+                cursor?: components["schemas"]["NotificationCursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of notification metadata, without bodies. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationList"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            410: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    getNotificationSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Global unread count and a fresh read-through token. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSummary"];
+                };
+            };
+            401: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    getNotification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The caller's own receipt id. */
+                notificationId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The notification, its content and its resolved actions. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationDetail"];
+                };
+            };
+            401: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    updateNotificationState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The caller's own receipt id. */
+                notificationId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationStateUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated receipt state. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationState"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    markNotificationsReadThrough: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationReadAllRequest"];
+            };
+        };
+        responses: {
+            /** @description The terminal result for this request id. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationReadAllResult"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            410: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    previewNotificationClear: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationClearPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description The previewed clear scope and its signed token. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationClearPreview"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    clearNotificationsSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationClearAllRequest"];
+            };
+        };
+        responses: {
+            /** @description The terminal result for this request id. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationClearResult"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            410: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    listNotificationClearBatches: {
+        parameters: {
+            query?: {
+                /** @description Page size. Defaults to 20. */
+                limit?: number;
+                /** @description Opaque signed cursor returned by a previous page. */
+                cursor?: components["schemas"]["NotificationCursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of clear batches. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationClearBatchList"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            410: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    restoreNotificationClearBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The caller's own clear batch id. */
+                batchId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationRestoreRequest"];
+            };
+        };
+        responses: {
+            /** @description The terminal result for this request id. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationRestoreResult"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    getNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's effective notification preferences. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferences"];
+                };
+            };
+            401: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    updateNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationPreferencesUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description The stored preferences after the update. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferences"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
             default: components["responses"]["ErrorResponse"];
         };
     };

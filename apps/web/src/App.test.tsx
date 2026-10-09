@@ -1,0 +1,69 @@
+import { renderToStaticMarkup } from 'react-dom/server'
+import { MemoryRouter } from 'react-router'
+import { describe, expect, it, vi } from 'vitest'
+
+vi.mock('@workspace/components', () => ({
+  SiteHeader: ({ glassAtTop }: { glassAtTop?: boolean }) =>
+    <header data-glass-at-top={String(Boolean(glassAtTop))}>Site header</header>,
+}))
+
+vi.mock('@web/src/pages/Home', () => ({
+  Home: () => <main>Home</main>,
+}))
+
+vi.mock('@web/src/pages/NotFound', () => ({
+  NotFound: () => <main>Page not found</main>,
+}))
+
+vi.mock('@web/src/pages/JoinResultPage', () => ({ JoinResultPage: () => <main>Application result query</main> }))
+vi.mock('@web/src/pages/JoinPage/Rifling-911', () => ({ JoinPage: () => <main>Rifling 911 join</main> }))
+vi.mock('@web/src/pages/JoinPage/CAEP', () => ({ CAEPJoinPage: () => <main>CAEP join placeholder</main> }))
+
+import { App } from '@web/src/App'
+
+describe('App', () => {
+  it('serves both community routes inside the site layout', () => {
+    const rifling = renderToStaticMarkup(<MemoryRouter initialEntries={['/communities/rifling-911']}><App /></MemoryRouter>)
+    const caep = renderToStaticMarkup(<MemoryRouter initialEntries={['/communities/caep']}><App /></MemoryRouter>)
+    expect(rifling).toContain('Site header')
+    expect(rifling).toContain('Rifling 911 join')
+    expect(caep).toContain('Site header')
+    expect(caep).toContain('CAEP join placeholder')
+  })
+  it('serves the join page at the Rifling 911 route', () => {
+    const markup = renderToStaticMarkup(<MemoryRouter initialEntries={['/join/rifling-911']}><App /></MemoryRouter>)
+    expect(markup).toContain('Rifling 911 join')
+    expect(markup).not.toContain('Page not found')
+  })
+  it('does not serve CAEP at the Join route', () => {
+    const markup = renderToStaticMarkup(<MemoryRouter initialEntries={['/join/caep']}><App /></MemoryRouter>)
+    expect(markup).toContain('Site header')
+    expect(markup).toContain('Page not found')
+  })
+  it('does not serve the join page at the former route', () => {
+    const markup = renderToStaticMarkup(<MemoryRouter initialEntries={['/join']}><App /></MemoryRouter>)
+    expect(markup).toContain('Page not found')
+  })
+  it('renders application result queries inside the site layout', () => {
+    const markup = renderToStaticMarkup(<MemoryRouter initialEntries={['/join/result']}><App /></MemoryRouter>)
+    expect(markup).toContain('Site header')
+    expect(markup).toContain('Application result query')
+    expect(markup).not.toContain('Page not found')
+  })
+  it('keeps the site header around an unmatched route', () => {
+    const markup = renderToStaticMarkup(
+      <MemoryRouter initialEntries={['/not-found']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(markup).toContain('<header')
+    expect(markup).toContain('data-glass-at-top="true"')
+    expect(markup).toContain('Page not found')
+  })
+
+  it('keeps the ordinary top-of-page header behavior on a matched route', () => {
+    const markup = renderToStaticMarkup(<MemoryRouter initialEntries={['/']}><App /></MemoryRouter>)
+    expect(markup).toContain('data-glass-at-top="false"')
+  })
+})

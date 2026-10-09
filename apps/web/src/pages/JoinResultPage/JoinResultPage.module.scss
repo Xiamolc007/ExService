@@ -1,0 +1,2 @@
+﻿.page { width: min(calc(100% - 3rem), 42rem); margin: 3rem auto; }.page h1 { font-size: 2rem; }.page p { color: var(--exui-text-secondary); line-height: 1.8; }.card { padding: 1.5rem; }.form { display: grid; gap: 1.25rem; }.result { border-top: 1px solid var(--exui-border-default); margin-top: 1.5rem; padding-top: 1rem; overflow-wrap: anywhere; }.result h2 { font-size: 1.5rem; }
+@media (max-width: 52rem) { .page { width: calc(100% - 2rem); margin: 2rem auto; }.card { padding: 1.25rem; } }
