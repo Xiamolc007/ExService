@@ -50,7 +50,8 @@ export function NotificationBell({
       <Button ref={bell as RefObject<HTMLButtonElement | null>} type="button" variant="ghost"
         size="icon" className={styles.bell} aria-label={bellLabel(countState)}>
         <Bell aria-hidden="true" />
-        {countState.kind !== 'hidden' &&
+        {(countState.kind === 'loading' || countState.kind === 'error'
+          || (countState.kind === 'ready' && countState.count > 0)) &&
           <span className={styles.badge} data-tone={badgeTone(countState)} aria-hidden="true">
             {badgeText(countState)}
           </span>}
@@ -64,8 +65,8 @@ export function NotificationBell({
         viewAll.current?.focus()
       }}
       onCloseAutoFocus={event => {
+        event.preventDefault()
         if (restoreFocusOnClose) {
-          event.preventDefault()
           bell.current?.focus()
         }
       }}>
@@ -93,7 +94,6 @@ export function NotificationBell({
                 <p className={styles.emptyBody}>有新通知时会显示在这里，历史仍可查看。</p>
               </div>} />}
       </div>
-      <p className={styles.foot}>打开面板不会自动标为已读。</p>
     </PopoverContent>
   </Popover>
 }

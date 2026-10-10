@@ -2,12 +2,12 @@
 
 **结论：Contract 允许把查询参数声明成 `integer` / `number` / `boolean`，但 HTTP 查询串到达 Fastify 时一律是字符串。全局 `coerceTypes: false` 下，这类参数任何合法取值都会 400，而且与「正确拒绝越界取值」长得一模一样。**
 
-_最后更新：2026-10-08_
+_最后更新：2026-10-09_
 
 ## 失败模式
 
-`api/openapi.yaml` 里 `listNotifications.limit` 与 `listNotificationClearBatches.limit` 是 `type: integer`
-（全 Contract 仅有的两个 integer 查询参数，由通知模块首次引入）。路由 schema 由
+`api/openapi.yaml` 里 `listNotifications.limit` 是 `type: integer`
+（通知模块引入的标量查询参数；Contract 0.6.0 已删除清理记录入口）。路由 schema 由
 `fastify-openapi-glue` 直接取自 Contract，而 `apps/server/src/app.ts` 的 Ajv 关掉了类型强制，于是：
 
 | 请求 | 状态 |
@@ -15,8 +15,7 @@ _最后更新：2026-10-08_
 | `GET /api/notifications?view=history` | 200 |
 | `GET /api/notifications?view=history&limit=20` | **400** `querystring/limit must be integer` |
 
-客户端恒发 `limit`（`useNotificationsController.ts` 的两个列表入口），因此**通知的 Popup、历史 Modal 与
-清理记录在真实 Server 下全部打不开**，只有走 `/notifications/summary`（无查询参数）的徽标可用。
+客户端恒发 `limit`（`useNotificationsController.ts` 的两个列表入口），因此**通知的 Popup 与历史 Modal 在真实 Server 下全部打不开**，只有走 `/notifications/summary`（无查询参数）的徽标可用。
 
 ## 为什么之前没发现
 
@@ -56,8 +55,8 @@ _最后更新：2026-10-08_
 
 - `apps/server/src/http/query-coercion.test.ts`（纯函数边界：空串、非数字、`Infinity`、布尔字面量、
   `type` 数组、重复参数、`$ref` 属性，以及 `0x10` / `+20` / `.5` / `20.` / `007` 这类非 JSON 数字写法）
-- `tests/contract/notifications.test.ts` 的 `accepts every legal limit on both paginated collections`
-  （`limit` 取 1 / 20 / 50 与 `clear-batches` 全部 200，并用 `limit=1` 翻页证明值真的传到了 service）
+- `tests/contract/notifications.test.ts` 的 `accepts every legal limit on the notification list`
+  （`limit` 取 1 / 20 / 50 全部 200，并用 `limit=1` 翻页证明值真的传到了 service）
 - `tests/contract/notifications.test.ts` 的 `never coerces the request body while the query string is coerced`
   （请求体 `expectedRevision: '0'` 与 `readThroughToken: 42` 都仍 400）
 - 反向验证：临时摘掉钩子后该用例红，报的正是 `querystring/limit must be integer`。

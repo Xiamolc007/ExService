@@ -35,7 +35,7 @@ export type { NotificationItemListProps } from '@components/src/notifications/No
 export { NotificationHistoryModal } from '@components/src/notifications/NotificationHistoryModal'
 export type {
   NotificationHistoryModalProps, NotificationAsyncStatus, NotificationListSlice,
-  NotificationDetailSlice, NotificationBulkSlice, NotificationRecordsSlice,
+  NotificationDetailSlice, NotificationBulkSlice,
   NotificationConfirmSlice,
 } from '@components/src/notifications/NotificationHistoryModal'
 export { NotificationPreferencesForm } from '@components/src/notifications/NotificationPreferencesForm'
@@ -49,11 +49,11 @@ export type {
   NotificationContentInput, SafeContentNode, SafeElementNode, SafeTextNode, SafeContentTag,
 } from '@components/src/notifications/notificationContent'
 export {
-  formatClearBatchTime, formatNotificationTime, formatUnreadBadge, isNotificationUnread,
+  formatNotificationTime, formatUnreadBadge, isNotificationUnread,
   notificationActionReasonLabel, notificationCategoryLabel, notificationStateLabel,
 } from '@components/src/notifications/notificationsView'
 export type {
-  NotificationActionView, NotificationCategory, NotificationClearBatchView, NotificationCountState,
+  NotificationActionView, NotificationCategory, NotificationCountState,
   NotificationDetailView, NotificationHistoryFilter, NotificationItemView, NotificationLifecycle,
   NotificationNecessity, NotificationScope, NotificationActionUnavailableReason,
 } from '@components/src/notifications/notificationsView'

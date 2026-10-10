@@ -39,9 +39,9 @@ import { registerHttpFoundation } from '@server/src/http/cors.js'
 import { coerceQueryStringTypes } from '@server/src/http/query-coercion.js'
 import type { NotificationModule } from '@server/src/modules/notifications/factory.js'
 import {
-  getNotification, getNotificationPreferences, getNotificationSummary, listNotificationClearBatches,
+  getNotification, getNotificationPreferences, getNotificationSummary,
   listNotifications, markNotificationsReadThrough, previewNotificationClear, clearNotificationsSnapshot,
-  restoreNotificationClearBatch, updateNotificationPreferences, updateNotificationState,
+  updateNotificationPreferences, updateNotificationState,
 } from '@server/src/modules/notifications/handlers.js'
 
 /**
@@ -121,8 +121,6 @@ export const serviceHandlers = {
   markNotificationsReadThrough,
   previewNotificationClear,
   clearNotificationsSnapshot,
-  listNotificationClearBatches,
-  restoreNotificationClearBatch,
   getNotificationPreferences,
   updateNotificationPreferences,
 } as const

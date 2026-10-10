@@ -1,24 +1,16 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
-import { ChevronLeft } from 'lucide-react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { Bell, ChevronLeft } from 'lucide-react'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
-  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, Badge, Button, Dialog, DialogContent,
-  DialogTitle, SelectContent, SelectField, SelectItem, SelectTrigger, SelectValue, Skeleton,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, Badge, Button, Modal, Skeleton,
+  Tabs, TabsContent, TabsList, TabsTrigger,
 } from '@exre/exui'
 import { NotificationBody, hasRenderableNotificationBody } from '@components/src/notifications/NotificationBody'
 import { NotificationItemList } from '@components/src/notifications/NotificationItemList'
 import {
-  formatClearBatchTime,
-  formatNotificationTime,
-  isNotificationUnread,
-  notificationActionReasonLabel,
-  notificationCategoryLabel,
-  notificationCopy,
-  notificationStateLabel,
-  type NotificationClearBatchView,
-  type NotificationDetailView,
-  type NotificationHistoryFilter,
-  type NotificationItemView,
+  formatNotificationTime, notificationActionReasonLabel, notificationCategoryLabel,
+  notificationCopy, notificationStateLabel, type NotificationCountState,
+  type NotificationDetailView, type NotificationHistoryFilter, type NotificationItemView,
 } from '@components/src/notifications/notificationsView'
 import styles from '@components/src/notifications/NotificationHistoryModal.module.scss'
 
@@ -28,10 +20,13 @@ export interface NotificationListSlice {
   status: NotificationAsyncStatus
   items: NotificationItemView[]
   hasMore: boolean
+  canAutoLoad: boolean
+  resetVersion: number
   nextPageStatus: 'idle' | 'loading' | 'error'
   filter: NotificationHistoryFilter
   onFilterChange: (filter: NotificationHistoryFilter) => void
   onLoadMore: () => void
+  onRetryPage: () => void
   onRetry: () => void
 }
 
@@ -47,21 +42,11 @@ export interface NotificationDetailSlice {
 }
 
 export interface NotificationBulkSlice {
-  pending: 'read-all' | 'clear' | 'restore' | null
-  message: string | null
-  lastClearedBatchId: string | null
+  pending: 'read-all' | 'clear' | null
+  preparing: 'read-all' | 'clear' | null
+  error: string | null
   onReadAll: () => void
   onClearAll: () => void
-  onUndoClear: () => void
-}
-
-export interface NotificationRecordsSlice {
-  open: boolean
-  status: NotificationAsyncStatus
-  items: NotificationClearBatchView[]
-  onOpen: () => void
-  onClose: () => void
-  onRestore: (batchId: string) => void
 }
 
 export interface NotificationConfirmSlice {
@@ -69,6 +54,7 @@ export interface NotificationConfirmSlice {
   count: number
   pending: boolean
   expired: boolean
+  error: string | null
   onCancel: () => void
   onSubmit: () => void
 }
@@ -76,185 +62,174 @@ export interface NotificationConfirmSlice {
 export interface NotificationHistoryModalProps {
   open: boolean
   onClose: () => void
+  countState: NotificationCountState
   selectedId: string | null
   onSelect: (receiptId: string) => void
   list: NotificationListSlice
   detail: NotificationDetailSlice
   bulk: NotificationBulkSlice
-  records: NotificationRecordsSlice
   confirm: NotificationConfirmSlice
-  /** 关闭后焦点回到的元素（通常是铃铛）；由调用方决定，组件不假设顶栏结构。 */
   finalFocusRef?: React.RefObject<HTMLElement | null>
 }
 
-/**
- * 通知历史 Modal：左侧全部未清理历史，右侧选中通知正文。
- *
- * 移动端**不新增路由、不另开 Sheet**：仍是同一个 Modal，靠 `detailMode` 在列表与正文之间
- * 切换，返回时恢复列表滚动位置并把焦点还给原条目。桌面端两列同时可见。
- *
- * 两个列各自独立滚动，`DialogContent` 本身不滚动。
- */
+/** Shared UI owns geometry and focus; the Website controller owns requests and count authority. */
 export function NotificationHistoryModal(props: NotificationHistoryModalProps) {
   const narrow = useIsNarrow()
-  const [detailMode, setDetailMode] = useState(false)
+  const [detailMode, setDetailMode] = useState(props.selectedId !== null)
   const listScroll = useRef<HTMLDivElement>(null)
+  const [listElement, setListElement] = useState<HTMLDivElement | null>(null)
+  const bindListScroll = useCallback((element: HTMLDivElement | null) => {
+    listScroll.current = element
+    setListElement(element)
+  }, [])
+  const sentinel = useRef<HTMLDivElement>(null)
+  const tabList = useRef<HTMLDivElement>(null)
   const savedScrollTop = useRef(0)
-  const heading = useRef<HTMLHeadingElement>(null)
-  const filterId = `${useId()}-filter`
+  const savedFilter = useRef(props.list.filter)
+  const restoreList = useRef(false)
+  const lastPreparation = useRef<'read-all' | 'clear' | null>(null)
+  const listVisible = !narrow || !detailMode
 
-  const showDetailPane = detailMode || props.records.open
-
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!props.open) {
       setDetailMode(false)
       savedScrollTop.current = 0
+    } else if (props.selectedId !== null) setDetailMode(true)
+    else setDetailMode(false)
+  }, [props.open, props.selectedId])
+
+  useLayoutEffect(() => {
+    if (listScroll.current) listScroll.current.scrollTop = 0
+    // Background writes replace the page while the phone body is open;
+    // preserve its return position until Back, but reset on a filter change.
+    if (savedFilter.current !== props.list.filter || !detailMode) savedScrollTop.current = 0
+    savedFilter.current = props.list.filter
+  }, [props.list.filter, props.list.resetVersion])
+
+  useLayoutEffect(() => {
+    if (!listVisible || !restoreList.current) return
+    restoreList.current = false
+    if (listScroll.current) listScroll.current.scrollTop = savedScrollTop.current
+    const row = Array.from(listScroll.current?.querySelectorAll<HTMLElement>('[data-notification-select]') ?? [])
+      .find(element => element.dataset.notificationSelect === props.selectedId)
+    const target = row ?? tabList.current?.querySelector<HTMLElement>('[aria-selected="true"]')
+    target?.focus({ preventScroll: true })
+  }, [listVisible, props.selectedId])
+
+  useEffect(() => {
+    const root = listElement, target = sentinel.current
+    if (!props.open || !listVisible || !props.list.canAutoLoad || !props.list.hasMore
+      || props.list.nextPageStatus !== 'idle' || props.confirm.kind !== null
+      || props.bulk.preparing !== null || props.bulk.pending !== null || !root || !target) return
+    let fired = false
+    let active = true
+    let frame = 0
+    const load = () => {
+      if (!active || fired) return
+      fired = true
+      props.list.onLoadMore()
     }
-  }, [props.open])
+    const check = () => {
+      const container = root.getBoundingClientRect(), end = target.getBoundingClientRect()
+      if (container.height > 0 && end.top <= container.bottom && end.bottom >= container.top) load()
+    }
+    const schedule = () => {
+      if (!active) return
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(check)
+    }
+    const observer = typeof IntersectionObserver === 'undefined' ? null : new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) load()
+    }, { root, rootMargin: '0px' })
+    observer?.observe(target)
+    const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule)
+    resize?.observe(root)
+    root.addEventListener('scroll', schedule)
+    // Recheck each accepted page, even if a short page never changes intersection.
+    schedule()
+    return () => {
+      active = false
+      observer?.disconnect(); resize?.disconnect(); cancelAnimationFrame(frame)
+      root.removeEventListener('scroll', schedule)
+    }
+  }, [listElement, props.open, listVisible, props.list.items, props.list.filter, props.list.resetVersion,
+    props.list.canAutoLoad, props.list.hasMore, props.list.nextPageStatus, props.list.onLoadMore,
+    props.confirm.kind, props.bulk.preparing, props.bulk.pending])
 
   const select = (receiptId: string) => {
-    if (narrow) {
-      savedScrollTop.current = listScroll.current?.scrollTop ?? 0
-      setDetailMode(true)
-    }
-    if (props.records.open) props.records.onClose()
+    savedScrollTop.current = listScroll.current?.scrollTop ?? 0
+    setDetailMode(true)
     props.onSelect(receiptId)
   }
+  const backToList = () => { restoreList.current = true; setDetailMode(false) }
+  const operation = props.confirm.kind ?? props.bulk.preparing ?? props.bulk.pending
+  useEffect(() => {
+    if (!props.open) lastPreparation.current = null
+    else if (operation !== null) lastPreparation.current = operation
+  }, [operation, props.open])
+  const count = props.countState.kind === 'ready' ? props.countState.count : null
+  const ready = count !== null
+  const readAll = operation === 'read-all' || (operation === null && count !== null && count > 0)
+  const knownEmptyHistory = props.list.filter === 'all' && props.list.status === 'ready'
+    && props.list.items.length === 0 && !props.list.hasMore && props.list.nextPageStatus === 'idle'
+  const disabled = !ready || operation !== null || (!readAll && knownEmptyHistory)
+  const label = operation === null && !ready ? '加载中…' : readAll ? '已读全部' : '清理全部'
+  const retryKind = lastPreparation.current ?? (ready ? readAll ? 'read-all' : 'clear' : null)
 
-  const backToList = () => {
-    setDetailMode(false)
-    if (props.records.open) props.records.onClose()
-    requestAnimationFrame(() => {
-      if (listScroll.current) listScroll.current.scrollTop = savedScrollTop.current
-      focusSelectedRow(listScroll.current, props.selectedId)
-    })
-  }
-
-  const openRecords = () => {
-    if (narrow) {
-      savedScrollTop.current = listScroll.current?.scrollTop ?? 0
-      setDetailMode(true)
-    }
-    props.records.onOpen()
-  }
-
-  const bulkPending = props.bulk.pending !== null
-
-  return <Dialog open={props.open} onOpenChange={open => { if (!open && !bulkPending) props.onClose() }}>
-    <DialogContent className={styles.dialog} closeLabel="关闭通知历史"
-      aria-describedby={undefined}
-      onOpenAutoFocus={event => {
-        event.preventDefault()
-        heading.current?.focus()
-      }}
-      onCloseAutoFocus={event => {
-        event.preventDefault()
-        props.finalFocusRef?.current?.focus()
-      }}>
-      <div className={styles.head}>
-        <DialogTitle ref={heading} tabIndex={-1} className={styles.title}>通知历史</DialogTitle>
-      </div>
-
-      <div className={`${styles.grid}${showDetailPane ? ` ${styles.detailMode}` : ''}`}>
-        <section className={styles.listColumn} aria-label="通知列表">
+  return <Modal title="通知历史" size="xl" height="min(48rem, calc(100dvh - 2rem))" padding={0}
+    mobileFullscreen closeLabel="关闭通知历史" className={styles.modal} bodyClassName={styles.modalBody}
+    open={props.open} dismissible={props.bulk.pending === null}
+    onOpenChange={open => { if (!open) props.onClose() }}
+    onCloseAutoFocus={event => { event.preventDefault(); props.finalFocusRef?.current?.focus() }}>
+    <div className={`${styles.grid}${detailMode ? ` ${styles.detailMode}` : ''}`}>
+      <section className={styles.listColumn} aria-label="通知列表">
+        <Tabs className={styles.listTabs} value={props.list.filter} onValueChange={value => {
+          if (value !== 'all' && value !== 'unread') return
+          setDetailMode(false)
+          props.list.onFilterChange(value)
+        }}>
           <div className={styles.listTools}>
-            <div className={styles.actions}>
-              <Button type="button" variant="outline" size="sm"
-                disabled={props.list.status !== 'ready' || props.list.items.length === 0 || bulkPending}
-                onClick={props.bulk.onClearAll}>清除全部</Button>
-              <Button type="button" variant="outline" size="sm"
-                disabled={props.list.status !== 'ready'
-                  || !props.list.items.some(isNotificationUnread) || bulkPending}
-                onClick={props.bulk.onReadAll}>全部已读</Button>
-              <Button type="button" variant="ghost" size="sm"
-                disabled={bulkPending} onClick={openRecords}>恢复清理记录</Button>
-            </div>
-            <div className={styles.filters}>
-              <span className={styles.filterLabel} id={filterId}>显示</span>
-              <SelectField value={props.list.filter}
-                onValueChange={value => {
-                  if (value === 'all' || value === 'unread') props.list.onFilterChange(value)
-                }}>
-                <SelectTrigger className={styles.filterTrigger} aria-labelledby={filterId}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部历史</SelectItem>
-                  <SelectItem value="unread">仅未读</SelectItem>
-                </SelectContent>
-              </SelectField>
-              <span className={styles.count}>
-                {notificationCopy.historyCount(props.list.items.length)}
-              </span>
-            </div>
+            <TabsList ref={tabList} variant="default" aria-label="通知筛选" className={styles.tabList}>
+              <TabsTrigger value="all" className={styles.tabTrigger}>全部</TabsTrigger>
+              <TabsTrigger value="unread" className={styles.tabTrigger}>未读</TabsTrigger>
+            </TabsList>
+            <Button type="button" variant={readAll ? 'outline' : 'ghost'} size="sm" disabled={disabled}
+              className={readAll ? undefined : styles.clearAllButton}
+              onClick={readAll ? props.bulk.onReadAll : props.bulk.onClearAll}>{label}</Button>
           </div>
-
-          <div ref={listScroll} className={styles.listScroll}>
+          {props.bulk.error && <div role="alert" className={styles.pageError}>
+            <p>{props.bulk.error}</p>
+            <Button type="button" variant="ghost" size="sm" disabled={operation !== null || retryKind === null}
+              onClick={retryKind === 'read-all' ? props.bulk.onReadAll : props.bulk.onClearAll}>重新准备</Button>
+          </div>}
+          <TabsContent ref={bindListScroll} value={props.list.filter} className={styles.listScroll}>
             {props.list.status === 'error'
-              ? <div className={styles.notice} role="alert">
-                <p>通知暂时无法加载，计数未更新。</p>
-                <Button type="button" variant="outline" size="sm"
-                  onClick={props.list.onRetry}>重试加载</Button>
-              </div>
+              ? <div className={styles.notice} role="alert"><p>通知暂时无法加载，计数未更新。</p>
+                <Button type="button" variant="outline" size="sm" onClick={props.list.onRetry}>重试加载</Button></div>
               : props.list.status !== 'ready'
                 ? <div role="status" aria-label="正在加载通知" className={styles.skeletons}>
-                  <Skeleton className={styles.skeleton} />
-                  <Skeleton className={styles.skeleton} />
-                  <Skeleton className={styles.skeleton} />
+                  <Skeleton className={styles.skeleton} /><Skeleton className={styles.skeleton} /><Skeleton className={styles.skeleton} />
                 </div>
-                : <>
-                  <NotificationItemList items={props.list.items} selectedId={props.selectedId}
-                    onSelect={select} empty={listEmptyState(props.list.filter)} />
-                  {(props.list.hasMore || props.list.nextPageStatus !== 'idle') &&
-                    <div className={styles.listFooter}>
-                      {props.list.hasMore && <Button type="button" variant="outline" size="sm"
-                        disabled={props.list.nextPageStatus === 'loading'}
-                        onClick={props.list.onLoadMore}>
-                        {props.list.nextPageStatus === 'loading' ? '正在加载' : '加载更多'}
-                      </Button>}
-                      {/*
-                        分页失败后游标已被丢弃（`hasMore` 为 false），此时重试做的是
-                        **从第一页重读**以换取一个新游标 —— 按钮文案必须照实说，
-                        不能写成「重试下一页」却把整份列表重读一遍。
-                      */}
-                      {props.list.nextPageStatus === 'loading' && !props.list.hasMore &&
-                        <p className={styles.pageRetrying} role="status">
-                          {notificationCopy.pageRetrying}
-                        </p>}
-                      {props.list.nextPageStatus === 'error' &&
-                        <div role="alert" className={styles.pageError}>
-                          <p>{notificationCopy.nextPageError}</p>
-                          <Button type="button" variant="ghost" size="sm"
-                            onClick={props.list.onLoadMore}>{notificationCopy.retryNextPage}</Button>
-                        </div>}
-                    </div>}
+                : <><NotificationItemList items={props.list.items} selectedId={props.selectedId}
+                  onSelect={select} empty={listEmptyState(props.list.filter)} />
+                  {props.list.nextPageStatus === 'loading' && <p className={styles.pageRetrying} role="status">
+                    {props.list.hasMore ? '正在加载…' : notificationCopy.pageRetrying}</p>}
+                  {props.list.nextPageStatus === 'error' && <div role="alert" className={styles.pageError}>
+                    <p>{notificationCopy.nextPageError}</p><Button type="button" variant="ghost" size="sm"
+                      onClick={props.list.onRetryPage}>{notificationCopy.retryNextPage}</Button></div>}
+                  {props.list.hasMore && <div ref={sentinel} className={styles.sentinel} aria-hidden="true" />}
                 </>}
-          </div>
-        </section>
-
-        <section className={styles.detailColumn} aria-label="通知正文">
-          {showDetailPane &&
-            <Button type="button" variant="ghost" size="sm" className={styles.backButton}
-              onClick={backToList}>
-              <ChevronLeft aria-hidden="true" />返回列表
-            </Button>}
-          {props.records.open
-            ? <RecordsPanel records={props.records} pending={props.bulk.pending === 'restore'} />
-            : <DetailPane {...props} narrow={narrow} />}
-        </section>
-      </div>
-
-      {props.bulk.message &&
-        <div className={styles.status} role="status">
-          <span>{props.bulk.message}</span>
-          {props.bulk.lastClearedBatchId && <Button type="button" variant="link" size="sm"
-            className={styles.undo} disabled={bulkPending}
-            onClick={props.bulk.onUndoClear}>撤销此次清理</Button>}
-        </div>}
-
-      <ConfirmDialog {...props.confirm} />
-    </DialogContent>
-  </Dialog>
+          </TabsContent>
+        </Tabs>
+      </section>
+      <section className={styles.detailColumn} aria-label="通知正文">
+        {detailMode && <Button type="button" variant="ghost" size="sm" className={styles.backButton} onClick={backToList}>
+          <ChevronLeft aria-hidden="true" />返回列表</Button>}
+        <DetailPane {...props} narrow={narrow} />
+      </section>
+    </div>
+    <ConfirmDialog {...props.confirm} />
+  </Modal>
 }
 
 function DetailPane(props: NotificationHistoryModalProps & { narrow: boolean }) {
@@ -268,9 +243,9 @@ function DetailPane(props: NotificationHistoryModalProps & { narrow: boolean }) 
   }, [selectedId, props.narrow])
 
   if (selectedId === null) {
-    return <div className={styles.empty}>
-      <h3 className={styles.emptyTitle}>选择通知</h3>
-      <p className={styles.emptyBody}>左侧是全部未清理历史。选择通知后，在这里查看正文与行动。</p>
+    return <div className={styles.detailEmpty}>
+      <Bell aria-hidden="true" className={styles.emptyIcon} />
+      <p className={styles.emptyBody}>点击通知查看内容</p>
     </div>
   }
 
@@ -315,10 +290,10 @@ function DetailPane(props: NotificationHistoryModalProps & { narrow: boolean }) 
       {hasRenderableNotificationBody(value.content, value.contentFallbackText)
         ? <NotificationBody content={value.content} fallbackText={value.contentFallbackText} />
         : retryDetail}
-      <ActionRow detail={detail} disabled={props.bulk.pending !== null} />
+      <ActionRow detail={detail} disabled={props.bulk.pending !== null || props.bulk.preparing !== null || props.confirm.kind !== null} />
       <div className={styles.readTools}>
         <Button type="button" variant="outline" size="sm"
-          disabled={detail.readPending || props.bulk.pending !== null}
+          disabled={detail.readPending || props.bulk.pending !== null || props.bulk.preparing !== null || props.confirm.kind !== null}
           onClick={detail.onToggleRead}>
           {value.readAt === null ? '标为已读' : '标为未读'}
         </Button>
@@ -364,57 +339,23 @@ function ActionRow({ detail, disabled }: { detail: NotificationDetailSlice; disa
   </div>
 }
 
-function RecordsPanel({ records, pending }: {
-  records: NotificationRecordsSlice
-  pending: boolean
-}) {
-  const heading = useRef<HTMLHeadingElement>(null)
-  useEffect(() => { heading.current?.focus() }, [])
-  return <div className={styles.records}>
-    <h2 ref={heading} tabIndex={-1} className={styles.recordsTitle}>恢复清理记录</h2>
-    <p className={styles.recordsIntro}>仅显示你的清理批次。恢复保留原已读状态，过期通知不增加未读。</p>
-    {records.status === 'error'
-      ? <div className={styles.notice} role="alert"><p>清理记录暂时无法加载。</p></div>
-      : records.status !== 'ready'
-        ? <div role="status" aria-label="正在加载清理记录">
-          <Skeleton className={styles.bodySkeleton} />
-        </div>
-        : records.items.length === 0
-          ? <div className={styles.empty}>
-            <h3 className={styles.emptyTitle}>还没有清理记录</h3>
-            <p className={styles.emptyBody}>执行清除全部后，可在这里恢复。</p>
-          </div>
-          : <div className={styles.batchList}>
-            {records.items.map(batch => <article key={batch.batchId} className={styles.batch}>
-              <h3 className={styles.batchDate}>{formatClearBatchTime(batch.createdAt)}</h3>
-              <p className={styles.batchCounts}>
-                <span>当时清理 {batch.affectedCount} 条</span>
-                <span>当前可恢复 {batch.restorableCount} 条</span>
-              </p>
-              <Button type="button" variant="outline" size="sm"
-                disabled={batch.restorableCount === 0 || pending}
-                onClick={() => records.onRestore(batch.batchId)}>恢复此次清理</Button>
-            </article>)}
-          </div>}
-  </div>
-}
-
 function ConfirmDialog(props: NotificationConfirmSlice) {
   if (props.kind === null) return null
   const clear = props.kind === 'clear'
   return <AlertDialog open onOpenChange={open => { if (!open && !props.pending) props.onCancel() }}>
     <AlertDialogContent className={styles.confirm} aria-describedby={undefined}>
       <AlertDialogHeader>
-        <AlertDialogTitle>{clear ? '清除全部通知？' : '全部标为已读？'}</AlertDialogTitle>
+        <AlertDialogTitle>{clear ? `清理这 ${props.count} 条通知？` : '全部标为已读？'}</AlertDialogTitle>
         <AlertDialogDescription asChild>
           <div className={styles.confirmBody}>
             <p>{clear
               ? `将清理预览时的 ${props.count} 条通知，包括未读、已读和过期历史，覆盖所有分页。`
               : `将预览上界内的 ${props.count} 条未读通知标为已读，包含未加载的分页。新到通知保留未读。`}</p>
             {clear && <>
-              <p>之后到达的通知会保留。可以撤销，也可在历史中的“恢复清理记录”中恢复。</p>
+              <p>清理后无法恢复。之后到达的通知会保留。</p>
               <p className={styles.confirmNote}>清理消息不会取消活动参与。</p>
             </>}
+            {props.error && <p role="alert" className={styles.confirmExpired}>{props.error}</p>}
             {props.expired && <p className={styles.confirmExpired} role="alert">预览已过期，请重新预览。</p>}
           </div>
         </AlertDialogDescription>
@@ -443,31 +384,16 @@ function listEmptyState(filter: NotificationHistoryFilter): ReactNode {
   </div>
 }
 
-function focusSelectedRow(container: HTMLDivElement | null, receiptId: string | null) {
-  if (!container || receiptId === null) return
-  const selector = `[data-notification-select="${escapeAttribute(receiptId)}"]`
-  container.querySelector<HTMLElement>(selector)?.focus({ preventScroll: true })
-}
-
-function escapeAttribute(value: string): string {
-  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(value)
-  return value.replace(/["\\]/g, '\\$&')
-}
-
-/**
- * 与样式表同一断点：≤ 42rem 时列表与正文切换显示。
- *
- * 用 `matchMedia` 而不是宽度 state，避免在 resize 时把整个 Modal 重挂一遍。
- */
-function useIsNarrow(query = '(max-width: 42rem)'): boolean {
-  const [narrow, setNarrow] = useState(false)
+/** Same breakpoint as ExUI; initializing from media avoids a Popup-to-body list flash. */
+function useIsNarrow(query = '(width < 768px)'): boolean {
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function' && window.matchMedia(query).matches)
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
-    const list = window.matchMedia(query)
-    const sync = () => setNarrow(list.matches)
-    sync()
-    list.addEventListener('change', sync)
-    return () => list.removeEventListener('change', sync)
+    const media = window.matchMedia(query)
+    const sync = () => setNarrow(media.matches)
+    sync(); media.addEventListener('change', sync)
+    return () => media.removeEventListener('change', sync)
   }, [query])
   return narrow
 }

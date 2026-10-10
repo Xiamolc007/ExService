@@ -64,6 +64,6 @@ export function NotificationHistoryModalSlot() {
     list={notifications.list}
     detail={notifications.detail}
     bulk={notifications.bulk}
-    records={notifications.records}
+    countState={notifications.countState}
     confirm={notifications.confirm} />
 }

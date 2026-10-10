@@ -2,7 +2,7 @@
 
 本文件记录表的业务职责、关系和必须保留的数据规则。它是修改模型前的设计入口，不代替可执行结构：PostgreSQL 结构以 `apps/server/src/db/schema.ts` 和 `apps/server/drizzle/` 为准；HTTP 字段与行为以 `api/openapi.yaml` 为准。
 
-_最后更新：2026-10-08_
+_最后更新：2026-10-09_
 
 ## 适用范围
 
@@ -105,13 +105,13 @@ erDiagram
 | `notification_event_recipients` | 保存提交时精确的账号受众快照，不按昵称、邮箱或后来的成员关系推断。 | `(eventId, userId)` 唯一；状态为 pending、delivered、suppressed_preference、skipped_disabled、expired、withdrawn。终态不重投，suppressed 不算 delivered。 |
 | `notification_contents` | 保存单个 publication 的标题与规范化受限 HTML、纯文本、派生摘要，以及模板/策略版本、scope、类别、catalog 必要性、结构化 actions 与生效/过期/撤回时间。 | `contentId` 主键；内容为不可变 publication，修正产生新 publication 而非原地改写。只保存已通过安全策略的规范化 HTML，不保存不受控原始输入。 |
 | `notification_user_streams` | 保存每人序列分配与状态版本，供 keyset 分页、清理上界和投影串行化使用。 | `userId` 主键；`lastSequence` 在同事务内分配，`stateVersion` 只用于状态变化提示，不保存易漂移的未读计数。 |
-| `notification_receipts` | 保存本人的收件状态：投递、已读、可恢复清理与个人状态版本。 | `receiptId` 主键；`(contentId, userId)` 唯一保证同一内容不重复投影，`(userId, sequence)` 唯一保证序列稳定。外键限制删除。清理只改本人行，不删源内容、事件或业务记录；不含 `archivedAt`。 |
+| `notification_receipts` | 保存本人的收件状态：投递、已读、不可恢复的清理与个人状态版本。 | `receiptId` 主键；`(contentId, userId)` 唯一保证同一内容不重复投影，`(userId, sequence)` 唯一保证序列稳定。外键限制删除。清理只改本人行，不删源内容、事件或业务记录；`clearedAt`、`clearBatchId`、`clearRevision` 保留清理事实与并发核验；不含 `archivedAt`。 |
 | `notification_preferences` | 保存本人可选类别的站内开关与 revision。 | `userId` 主键；无行按默认值处理。必要通知由 catalog 决定，不接受关闭，也不接受未启用渠道或服务器字段。 |
-| `notification_mutations` | 保存本人命令的终态结果，供 read-all、clear、restore 按 `(userId, requestId)` 去重重放。 | `(userId, requestId)` 唯一；保存输入摘要与终态结果，不保存正文或凭据。 |
-| `notification_clear_batches` | 保存本人清理预览与执行事实：快照标识、上界序列、预览到期、状态和计数。 | `batchId` 主键；状态为 preview、applied、restored。它不是内容历史列表，不保存正文。 |
-| `notification_clear_batch_items` | 保存预览时的精确 receipt 集合及各 `expectedClearRevision`，执行时记录 `appliedClearRevision`。 | `(batchId, receiptId)` 唯一；用于避免后到、已恢复或已被再次清理的项被旧命令覆盖。 |
+| `notification_mutations` | 保存本人命令的终态结果，供 read-all、clear 按 `(userId, requestId)` 去重重放。 | `(userId, requestId)` 唯一；新命令只写入 `read_through` 或 `clear`。历史 `restore` 行仍可读取，复用其 requestId 必须按 kind 与摘要判定为冲突。保存输入摘要与终态结果，不保存正文或凭据。 |
+| `notification_clear_batches` | 保存本人清理预览与执行事实：快照标识、上界序列、预览到期、状态和计数。 | `batchId` 主键；新批次状态为 preview、applied。历史 `restored` 状态及 `restored_at` 字段保留，不提供恢复或批次列表 API。它不是内容历史列表，不保存正文。 |
+| `notification_clear_batch_items` | 保存预览时的精确 receipt 集合及各 `expectedClearRevision`，执行时记录 `appliedClearRevision`。 | `(batchId, receiptId)` 唯一；用于避免后到或 clear revision 已变化的项被旧命令覆盖。 |
 
-规则：源事实、受众快照与内容在一次短写事务中提交，任一步失败全部回滚；投影只消费已提交事实，不扩大受众。服务级通知、活动/报名表、真实第三方 webhook 表与业务 Action 命令表都没有真实业务或授权模型支撑，当前不建表、不注册可用能力。N1 不自动物理删除，清理是本人可恢复的软清理。
+规则：源事实、受众快照与内容在一次短写事务中提交，任一步失败全部回滚；投影只消费已提交事实，不扩大受众。服务级通知、活动/报名表、真实第三方 webhook 表与业务 Action 命令表都没有真实业务或授权模型支撑，当前不建表、不注册可用能力。清理是本人不可恢复的软清理，只作用于精确预览集合，之后到达的通知保留；仍有效的预览各自独立，回收只删除不可再提交的过期 preview。已执行批次、items、历史恢复行与物理约束原样保留，本次不修改 schema、migration 或历史数据。
 
 ## 头像与社区身份
 

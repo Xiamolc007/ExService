@@ -4,7 +4,6 @@ import type { components } from '@workspace/api-client'
 export type NotificationItem = components['schemas']['NotificationItem']
 export type NotificationDetail = components['schemas']['NotificationDetail']
 export type NotificationSummary = components['schemas']['NotificationSummary']
-export type NotificationClearBatchItem = components['schemas']['NotificationClearBatchItem']
 export type NotificationPreferences = components['schemas']['NotificationPreferences']
 
 export type NotificationPageStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -45,11 +44,6 @@ export const notificationsConfig = proxy({
   },
   unread: emptyPage(),
   history: emptyPage(),
-  batches: {
-    status: 'idle' as NotificationPageStatus,
-    items: [] as NotificationClearBatchItem[],
-    error: null as string | null,
-  },
   preferences: {
     status: 'idle' as NotificationPageStatus,
     snapshot: null as NotificationPreferences | null,
@@ -74,7 +68,7 @@ function emptyPage(): NotificationPageSlice {
  * `seq`     —— 写代次。任何批量/单项写操作开始时递增；它之前发起的读响应即视为过期，
  *              因为读到的快照已经不能描述「写之后」的状态。
  *
- * 写响应只在自己仍是最新写时代次时落地：因此迟到的清理响应不会覆盖之后的恢复，
+ * 写响应只在自己仍是最新写时代次时落地：因此迟到的清理响应不会覆盖之后的清理，
  * 迟到的已读响应不会覆盖之后另一设备标未读的结果。
  */
 
@@ -98,9 +92,6 @@ export function bindNotificationsToken(token: string | null) {
   notificationsConfig.summary.error = null
   notificationsConfig.unread = emptyPage()
   notificationsConfig.history = emptyPage()
-  notificationsConfig.batches.status = 'idle'
-  notificationsConfig.batches.items = []
-  notificationsConfig.batches.error = null
   notificationsConfig.preferences.status = 'idle'
   notificationsConfig.preferences.snapshot = null
   notificationsConfig.preferences.error = null
@@ -149,7 +140,7 @@ export function mergeNotificationPage(
   return merged
 }
 
-/** 用一次写操作返回的未读数纠正计数，避免多一次往返。 */
+/** 应用已接受的全局 summary 读取；命令重放结果不得作为当前计数。 */
 export function applyUnreadCount(count: number, readThroughToken?: string | null) {
   notificationsConfig.summary.unreadCount = count
   notificationsConfig.summary.status = 'ready'

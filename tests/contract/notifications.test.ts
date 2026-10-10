@@ -50,8 +50,6 @@ const validators = {
   readAll: compile('NotificationReadAllResult'),
   preview: compile('NotificationClearPreview'),
   clear: compile('NotificationClearResult'),
-  batches: compile('NotificationClearBatchList'),
-  restore: compile('NotificationRestoreResult'),
   preferences: compile('NotificationPreferences'),
   error: compile('ErrorEnvelope'),
 }
@@ -167,7 +165,7 @@ describe('notification contract over HTTP', () => {
     expect((history.json() as { items: unknown[] }).items).toHaveLength(1)
   })
 
-  it('runs the read-through, clear preview, clear and restore flow', async () => {
+  it('runs the read-through, clear preview and clear flow', async () => {
     await publish('一', [userId])
     await publish('二', [userId])
 
@@ -182,22 +180,15 @@ describe('notification contract over HTTP', () => {
       headers: { authorization }, payload: {} })
     expect(preview.statusCode, preview.body).toBe(200)
     expect(validators.preview(preview.json())).toBe(true)
-    const { batchId, clearSnapshotToken } = preview.json() as { batchId: string; clearSnapshotToken: string }
+    const { clearSnapshotToken } = preview.json() as { clearSnapshotToken: string }
 
     const cleared = await app.inject({ method: 'POST', url: '/api/notifications/clear-all', headers: { authorization },
       payload: { requestId: randomUUID(), clearSnapshotToken } })
     expect(cleared.statusCode, cleared.body).toBe(200)
     expect(validators.clear(cleared.json())).toBe(true)
 
-    const batches = await app.inject({ method: 'GET', url: '/api/notifications/clear-batches', headers: { authorization } })
-    expect(batches.statusCode).toBe(200)
-    expect(validators.batches(batches.json())).toBe(true)
-
-    const restored = await app.inject({ method: 'POST',
-      url: `/api/notifications/clear-batches/${batchId}/restore`, headers: { authorization },
-      payload: { requestId: randomUUID() } })
-    expect(restored.statusCode, restored.body).toBe(200)
-    expect(validators.restore(restored.json())).toBe(true)
+    const history = await app.inject({ method: 'GET', url: '/api/notifications?view=history', headers: { authorization } })
+    expect((history.json() as { items: unknown[] }).items).toHaveLength(0)
   })
 
   it('reads and replaces notification preferences', async () => {
@@ -252,7 +243,7 @@ describe('notification contract over HTTP', () => {
     expect(missingView.statusCode).toBe(400)
   })
 
-  it('accepts every legal limit on both paginated collections', async () => {
+  it('accepts every legal limit on the notification list', async () => {
     // 反向对照：越界 limit 仍必须 400，否则「合法 limit 全绿」可能只是校验被整体跳过。
     await publish('甲', [userId])
     await publish('乙', [userId])
@@ -262,10 +253,6 @@ describe('notification contract over HTTP', () => {
         headers: { authorization } })
       expect(page.statusCode, `limit=${limit}: ${page.body}`).toBe(200)
       expect(validators.list(page.json())).toBe(true)
-      const batches = await app.inject({ method: 'GET', url: `/api/notifications/clear-batches?limit=${limit}`,
-        headers: { authorization } })
-      expect(batches.statusCode, `clear-batches limit=${limit}: ${batches.body}`).toBe(200)
-      expect(validators.batches(batches.json())).toBe(true)
     }
 
     // limit 真的传到了 service，而不是被忽略后按默认 20 返回全部。
@@ -288,6 +275,38 @@ describe('notification contract over HTTP', () => {
     const response = await app.inject({ method: 'GET', url: '/api/notifications/not-a-uuid', headers: { authorization } })
     expect(response.statusCode).toBe(400)
     expect(validators.error(response.json())).toBe(true)
+  })
+
+  it('offers no clear-batch listing or restore capability after clearing', async () => {
+    await publish('Non-restorable', [userId])
+    const preview = await app.inject({ method: 'POST', url: '/api/notifications/clear-preview',
+      headers: { authorization }, payload: {} })
+    const { batchId, clearSnapshotToken } = preview.json() as { batchId: string; clearSnapshotToken: string }
+    const clear = await app.inject({ method: 'POST', url: '/api/notifications/clear-all',
+      headers: { authorization }, payload: { requestId: randomUUID(), clearSnapshotToken } })
+    expect(clear.statusCode, clear.body).toBe(200)
+    const batches = await app.inject({ method: 'GET', url: '/api/notifications/clear-batches',
+      headers: { authorization } })
+    expect([400, 404]).toContain(batches.statusCode)
+    expect(validators.error(batches.json())).toBe(true)
+    const restore = await app.inject({ method: 'POST', url: `/api/notifications/clear-batches/${batchId}/restore`,
+      headers: { authorization }, payload: { requestId: randomUUID() } })
+    expect(restore.statusCode).toBe(404)
+    expect(validators.error(restore.json())).toBe(true)
+    const history = await app.inject({ method: 'GET', url: '/api/notifications?view=history',
+      headers: { authorization } })
+    expect((history.json() as { items: unknown[] }).items).toHaveLength(0)
+    expect(Object.keys(serviceHandlers)).not.toContain('listNotificationClearBatches')
+    expect(Object.keys(serviceHandlers)).not.toContain('restoreNotificationClearBatch')
+    const document = parseYaml(readFileSync(contractPath, 'utf8')) as {
+      paths: Record<string, unknown>; components: { schemas: Record<string, unknown> }
+    }
+    expect(document.paths).not.toHaveProperty('/notifications/clear-batches')
+    expect(document.paths).not.toHaveProperty('/notifications/clear-batches/{batchId}/restore')
+    for (const schema of ['NotificationClearBatchItem', 'NotificationClearBatchList',
+      'NotificationRestoreRequest', 'NotificationRestoreResult']) {
+      expect(document.components.schemas).not.toHaveProperty(schema)
+    }
   })
 
   it('registers no notification action execute endpoint', async () => {
@@ -330,18 +349,18 @@ describe('notification contract over HTTP', () => {
     expect(validators.error(conflict.json())).toBe(true)
   })
 
-  it('refuses an expired clear token and never restores another user batch', async () => {
+  it('refuses an expired clear token and never applies another user snapshot', async () => {
     await publish('私人', [userId])
     const preview = await app.inject({ method: 'POST', url: '/api/notifications/clear-preview',
       headers: { authorization }, payload: {} })
     expect(preview.statusCode, preview.body).toBe(200)
-    const { batchId, clearSnapshotToken } = preview.json() as { batchId: string; clearSnapshotToken: string }
+    const { clearSnapshotToken } = preview.json() as { clearSnapshotToken: string }
 
-    // 别人的 batchId：中性 404，不泄露该批次是否存在。
+    // 预览 token 绑定本人，不能用于其他账号。
     const foreign = await app.inject({ method: 'POST',
-      url: `/api/notifications/clear-batches/${batchId}/restore`, headers: { authorization: otherAuthorization },
-      payload: { requestId: randomUUID() } })
-    expect(foreign.statusCode).toBe(404)
+      url: '/api/notifications/clear-all', headers: { authorization: otherAuthorization },
+      payload: { requestId: randomUUID(), clearSnapshotToken } })
+    expect(foreign.statusCode).toBe(400)
     expect(validators.error(foreign.json())).toBe(true)
 
     // 预览 token 过了 10 分钟：410，由服务端时钟判定，不是按客户端时间推断。
@@ -427,7 +446,7 @@ describe('registered notification handler output', () => {
   })
 
   it('returns raw write results that already satisfy the contract schemas', async () => {
-    // 这 6 个 operation 此前只经过 HTTP，序列化会掩盖它们的 handler 回归。
+    // 直接验证写 operation 的原始返回值，防止序列化掩盖 handler 回归。
     await publish('一', [userId])
     await publish('二', [userId])
     const call = (handler: (...args: never[]) => unknown, request: Record<string, unknown>) =>
@@ -454,12 +473,9 @@ describe('registered notification handler output', () => {
       { body: { requestId: randomUUID(), clearSnapshotToken: preview.clearSnapshotToken } })
     expect(validators.clear(clear)).toBe(true)
 
-    const batches = await call(serviceHandlers.listNotificationClearBatches, { query: {} })
-    expect(validators.batches(batches)).toBe(true)
-
-    const restore = await call(serviceHandlers.restoreNotificationClearBatch,
-      { params: { batchId: preview.batchId }, body: { requestId: randomUUID() } })
-    expect(validators.restore(restore)).toBe(true)
+    const preferences = await call(serviceHandlers.updateNotificationPreferences,
+      { body: { expectedRevision: 0, optionalCategories: { announcement: false, personal_update: true } } })
+    expect(validators.preferences(preferences)).toBe(true)
   })
 
   it('exposes only the fields the contract declares on the clear results', async () => {

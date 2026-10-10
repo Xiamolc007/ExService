@@ -25,12 +25,11 @@ export type SettingsField = 'nickname' | 'qq' | 'fivemId'
  * 通知分区的独立切片。
  *
  * 它**刻意不与资料共享状态**：资料读取/保存失败不能阻塞通知分区，反之亦然。
- * 共享组件只收 props/callback，读写代次与草稿所有权仍在 `apps/web`。
+ * 共享组件只收 props/callback，读写代次与已确认值仍在 `apps/web`。
  */
 export interface SettingsNotificationsSlice {
   /**
-   * 身份代次：换号/退出时递增。通知偏好的**草稿**由它界定归属，
-   * 少了它，上一个身份未保存的开关会被带到新身份。
+   * 身份代次：换号/退出时递增，隔离表单值与在途即时保存。
    */
   identityEpoch: number
   preferences: NotificationPreferencesDraft | null
@@ -40,7 +39,7 @@ export interface SettingsNotificationsSlice {
   message: string | null
   conflict: boolean
   necessaryCategories: NotificationCategory[]
-  onSave: (draft: NotificationPreferencesDraft) => Promise<void>
+  onSave: (draft: NotificationPreferencesDraft) => Promise<NotificationPreferencesDraft>
   onRefresh: () => void
 }
 
@@ -145,9 +144,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
           errorMessage={props.profileError ?? '无法读取设置资料'} onRetry={props.onRetry} /> :
           <ContentAreaState status="loading" skeleton={<SettingsContentSkeleton profile={props.category === 'profile'} />} />}
       {/*
-        通知表单**始终挂载，不参与上面的分类门控**：`active` 由分类驱动，切到别的分类只是
-        让它返回 `null`。如果把它放进 `category === 'notifications'` 分支里渲染，
-        通知 → 个人资料 → 通知 会卸载重挂，React Hook Form 的草稿（未保存的开关）随之丢失。
+        通知表单始终挂载：分类只控制可见性，保存请求与失败重试意图保持同一个身份所有者。
         加载/失败/重试三态由表单自己按通知来源渲染，不共用资料门控。
       */}
       <NotificationPreferencesForm active={props.category === 'notifications'}
@@ -158,9 +155,8 @@ export function SettingsPanel(props: SettingsPanelProps) {
         saving={props.notifications.saving}
         message={props.notifications.message}
         conflict={props.notifications.conflict}
-        necessaryCategories={props.notifications.necessaryCategories}
         onSave={props.notifications.onSave}
-        onRefresh={props.notifications.onRefresh} />
+        />
     </div>
   </div>
 }

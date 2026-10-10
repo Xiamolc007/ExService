@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: ExWebsite Server API
-  version: 0.5.0
+  version: 0.6.0
   description: |
     Frontend 与 Backend 之间的唯一 HTTP API Contract。
 
@@ -20,7 +20,7 @@ tags:
   - name: storage
     description: 通用内容存储的上传、直传确认与本地公开读取。
   - name: notifications
-    description: 站内持久通知的收件箱、已读、可恢复清理与通知偏好。
+    description: 站内持久通知的收件箱、已读、不可恢复清理与通知偏好。
 paths:
   /health:
     get:
@@ -1369,8 +1369,8 @@ paths:
   /notifications/clear-preview:
     post:
       operationId: previewNotificationClear
-      summary: Preview a recoverable clear of the whole personal history
-      description: 'Snapshots every uncleared receipt the caller could see at preview time, regardless of the current filter or of which pages were loaded, and records the exact receipt set with each receipt''s clear revision. The body is closed and empty. The returned token is bound to the caller and expires in 10 minutes; a preview that was never submitted stops being executable when it expires and never stores a body.'
+      summary: Preview a non-restorable clear of the whole personal history
+      description: 'Snapshots every uncleared receipt the caller could see at preview time, regardless of the current filter or of which pages were loaded, and records the exact receipt set with each receipt''s clear revision. Clearing cannot be restored, and later arrivals are preserved. The body is closed and empty. The returned token is bound to the caller and expires in 10 minutes; a preview that was never submitted stops being executable when it expires and never stores a body.'
       security:
         - bearerAuth: []
       tags: [notifications]
@@ -1401,8 +1401,8 @@ paths:
   /notifications/clear-all:
     post:
       operationId: clearNotificationsSnapshot
-      summary: Clear exactly the previewed personal history, recoverably
-      description: 'Applies the snapshot recorded by `previewNotificationClear`. Only receipts that still belong to the caller, are still visible, are still uncleared and still carry the previewed clear revision are cleared; a receipt that was restored, cleared again or cleared later from another device is skipped rather than overwritten. Clearing sets the personal clear state only: it never writes `readAt`, never deletes the source content, event or business record, and never emits a business event or webhook. The result is idempotent per `requestId`.'
+      summary: Clear exactly the previewed personal history without restoration
+      description: 'Applies the snapshot recorded by `previewNotificationClear`. Only receipts that still belong to the caller, are still visible, are still uncleared and still carry the previewed clear revision are cleared; a receipt whose clear revision changed or that was cleared from another device is skipped rather than overwritten. Clearing cannot be restored, and later arrivals are preserved. Clearing sets the personal clear state only: it never writes `readAt`, never deletes the source content, event or business record, and never emits a business event or webhook. The result is idempotent per `requestId`.'
       security:
         - bearerAuth: []
       tags: [notifications]
@@ -1431,92 +1431,6 @@ paths:
         '409':
           $ref: '#/components/responses/ErrorResponse'
         '410':
-          $ref: '#/components/responses/ErrorResponse'
-        default:
-          $ref: '#/components/responses/ErrorResponse'
-  /notifications/clear-batches:
-    get:
-      operationId: listNotificationClearBatches
-      summary: List the authenticated user's own clear batches
-      description: 'Returns clear-batch metadata only: date, counts, status and how many of that batch''s items are currently restorable. It never lists preview-only batches, never returns notification bodies or titles and never mixes cleared notifications into the notification list.'
-      security:
-        - bearerAuth: []
-      tags: [notifications]
-      parameters:
-        - name: limit
-          in: query
-          required: false
-          description: 'Page size. Defaults to 20.'
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 50
-        - name: cursor
-          in: query
-          required: false
-          description: 'Opaque signed cursor returned by a previous page.'
-          schema:
-            $ref: '#/components/schemas/NotificationCursor'
-      responses:
-        '200':
-          description: 'One page of clear batches.'
-          headers:
-            X-Request-Id:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NotificationClearBatchList'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '401':
-          $ref: '#/components/responses/ErrorResponse'
-        '410':
-          $ref: '#/components/responses/ErrorResponse'
-        default:
-          $ref: '#/components/responses/ErrorResponse'
-  /notifications/clear-batches/{batchId}/restore:
-    post:
-      operationId: restoreNotificationClearBatch
-      summary: Restore the items one clear batch actually cleared
-      description: 'Restores only the receipts that this batch cleared and that are still cleared by this same batch at the same applied clear revision; receipts cleared again later are not swept in. Each receipt is re-checked against the current read predicate: withdrawn or unauthorized items are skipped without returning private content, and expired items return to history without becoming unread again. Unread and unexpired receipts therefore re-enter the unread count. A partial restore is a normal outcome. `requestId` is the idempotency key for this restore intent.'
-      security:
-        - bearerAuth: []
-      tags: [notifications]
-      parameters:
-        - name: batchId
-          in: path
-          required: true
-          description: 'The caller''s own clear batch id.'
-          schema:
-            $ref: '#/components/schemas/Uuid'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NotificationRestoreRequest'
-      responses:
-        '200':
-          description: 'The terminal result for this request id.'
-          headers:
-            X-Request-Id:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NotificationRestoreResult'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '401':
-          $ref: '#/components/responses/ErrorResponse'
-        '404':
-          $ref: '#/components/responses/ErrorResponse'
-        '409':
           $ref: '#/components/responses/ErrorResponse'
         default:
           $ref: '#/components/responses/ErrorResponse'
@@ -3058,59 +2972,6 @@ components:
         requestId: {$ref: '#/components/schemas/Uuid'}
         clearSnapshotToken: {$ref: '#/components/schemas/NotificationToken'}
     NotificationClearResult:
-      type: object
-      additionalProperties: false
-      required: [requestId, batchId, affectedCount, skippedCount, unreadCount, replayed, serverTime]
-      properties:
-        requestId: {$ref: '#/components/schemas/Uuid'}
-        batchId: {$ref: '#/components/schemas/Uuid'}
-        affectedCount: {type: integer, minimum: 0, maximum: 9007199254740991}
-        skippedCount: {type: integer, minimum: 0, maximum: 9007199254740991}
-        unreadCount: {type: integer, minimum: 0, maximum: 9007199254740991}
-        replayed: {type: boolean}
-        serverTime: {$ref: '#/components/schemas/SafeTimestamp'}
-    NotificationClearBatchItem:
-      type: object
-      additionalProperties: false
-      required: [batchId, itemCount, affectedCount, skippedCount, restorableCount, status, createdAt, appliedAt, restoredAt]
-      properties:
-        batchId: {$ref: '#/components/schemas/Uuid'}
-        itemCount: {type: integer, minimum: 0, maximum: 9007199254740991}
-        affectedCount: {type: integer, minimum: 0, maximum: 9007199254740991}
-        skippedCount: {type: integer, minimum: 0, maximum: 9007199254740991}
-        restorableCount: {type: integer, minimum: 0, maximum: 9007199254740991}
-        status: {type: string, enum: [applied, restored, partial]}
-        createdAt: {$ref: '#/components/schemas/SafeTimestamp'}
-        appliedAt:
-          type: [integer, 'null']
-          minimum: 0
-          maximum: 9007199254740991
-        restoredAt:
-          type: [integer, 'null']
-          minimum: 0
-          maximum: 9007199254740991
-    NotificationClearBatchList:
-      type: object
-      additionalProperties: false
-      required: [items, nextCursor, serverTime]
-      properties:
-        items:
-          type: array
-          maxItems: 50
-          items: {$ref: '#/components/schemas/NotificationClearBatchItem'}
-        nextCursor:
-          type: [string, 'null']
-          minLength: 16
-          maxLength: 512
-          pattern: '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
-        serverTime: {$ref: '#/components/schemas/SafeTimestamp'}
-    NotificationRestoreRequest:
-      type: object
-      additionalProperties: false
-      required: [requestId]
-      properties:
-        requestId: {$ref: '#/components/schemas/Uuid'}
-    NotificationRestoreResult:
       type: object
       additionalProperties: false
       required: [requestId, batchId, affectedCount, skippedCount, unreadCount, replayed, serverTime]

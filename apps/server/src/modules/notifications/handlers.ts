@@ -16,17 +16,8 @@ interface ListQuery {
   cursor?: string
 }
 
-interface ClearBatchesQuery {
-  limit?: number
-  cursor?: string
-}
-
 interface NotificationIdParams {
   notificationId: string
-}
-
-interface BatchIdParams {
-  batchId: string
 }
 
 interface StateBody {
@@ -98,21 +89,6 @@ export async function clearNotificationsSnapshot(request: FastifyRequest, reply:
   const body = request.body as ClearAllBody
   return request.server.notifications.service.clearSnapshot(
     requireSession(request).userId, body.requestId, body.clearSnapshotToken)
-}
-
-export async function listNotificationClearBatches(request: FastifyRequest, reply: FastifyReply) {
-  void reply.header('Cache-Control', 'no-store')
-  const query = request.query as ClearBatchesQuery
-  return request.server.notifications.service.listClearBatches(
-    requireSession(request).userId, query.limit ?? null, query.cursor ?? null)
-}
-
-export async function restoreNotificationClearBatch(request: FastifyRequest, reply: FastifyReply) {
-  void reply.header('Cache-Control', 'no-store')
-  const { batchId } = request.params as BatchIdParams
-  const body = request.body as { requestId: string }
-  return request.server.notifications.service.restoreBatch(
-    requireSession(request).userId, batchId, body.requestId)
 }
 
 export async function getNotificationPreferences(request: FastifyRequest, reply: FastifyReply) {

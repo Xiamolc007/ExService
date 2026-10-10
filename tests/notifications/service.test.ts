@@ -406,7 +406,7 @@ describe('read state', () => {
   })
 })
 
-describe('recoverable clear', () => {
+describe('precise clear', () => {
   it('clears exactly the previewed set and keeps a later arrival', async () => {
     const user = await seedUser()
     await publishAnnouncement({ title: '一', audience: { kind: 'users', userIds: [user] } })
@@ -422,6 +422,11 @@ describe('recoverable clear', () => {
     const cleared = await notifications.service.clearSnapshot(user, randomUUID(), preview.clearSnapshotToken)
     expect(cleared.affectedCount).toBe(2)
     expect(cleared.skippedCount).toBe(0)
+    const clearedStates = await db.query<{ read_at: number | null; clear_revision: number }>(
+      'SELECT read_at, clear_revision FROM notification_receipts WHERE user_id = $1 AND cleared_at IS NOT NULL', [user])
+    expect(clearedStates.rows).toEqual([
+      { read_at: null, clear_revision: 1 }, { read_at: null, clear_revision: 1 },
+    ])
     const history = await notifications.service.list({ userId: user, view: 'history', scope: null, category: null, limit: null, cursor: null })
     expect(history.items).toHaveLength(1)
     expect(history.items[0]!.title).toBe('迟到')
@@ -429,7 +434,7 @@ describe('recoverable clear', () => {
     expect(history.unreadCount).toBe(1)
   })
 
-  it('replays the same clear request and restores the batch afterwards', async () => {
+  it('replays the same clear request without changing its clear facts', async () => {
     const user = await seedUser()
     await publishAnnouncement({ title: '一', audience: { kind: 'users', userIds: [user] } })
     await publishAnnouncement({ title: '二', audience: { kind: 'users', userIds: [user] } })
@@ -442,27 +447,23 @@ describe('recoverable clear', () => {
     expect(replay.replayed).toBe(true)
     expect(replay.affectedCount).toBe(first.affectedCount)
 
-    const restored = await notifications.service.restoreBatch(user, preview.batchId, randomUUID())
-    expect(restored.affectedCount).toBe(2)
-    expect(restored.unreadCount).toBe(2)
-
-    const batches = await notifications.service.listClearBatches(user, null, null)
-    expect(batches.items).toHaveLength(1)
-    expect(batches.items[0]!.status).toBe('restored')
-    expect(batches.items[0]!.restorableCount).toBe(0)
+    const facts = await db.query<{ status: string; affected_count: number; applied_clear_revision: number }>(
+      `SELECT b.status, b.affected_count, i.applied_clear_revision FROM notification_clear_batches b
+        JOIN notification_clear_batch_items i ON i.batch_id = b.batch_id WHERE b.batch_id = $1`, [preview.batchId])
+    expect(facts.rows).toHaveLength(2)
+    expect(facts.rows.every(row => row.status === 'applied' && row.affected_count === 2 && row.applied_clear_revision === 1)).toBe(true)
+    const history = await notifications.service.list({ userId: user, view: 'history', scope: null, category: null, limit: null, cursor: null })
+    expect(history.items).toHaveLength(0)
   })
 
-  it('skips an item another device cleared and restored after the preview', async () => {
+  it('skips a receipt whose clear revision changed after the preview', async () => {
     const user = await seedUser()
     await publishAnnouncement({ title: '一', audience: { kind: 'users', userIds: [user] } })
     await project()
 
     const stale = await notifications.service.previewClear(user)
-    // 预览之后、提交之前，另一台设备用自己的批次清理并恢复了同一项：
-    // clearRevision 已经从 0 变成 2，旧 preview 的精确集合不再匹配。
-    const otherPreview = await notifications.service.previewClear(user)
-    await notifications.service.clearSnapshot(user, randomUUID(), otherPreview.clearSnapshotToken)
-    await notifications.service.restoreBatch(user, otherPreview.batchId, randomUUID())
+    // 隔离数据库夹具模拟历史状态变化，旧预览不能覆盖更新后的 clear revision。
+    await db.query('UPDATE notification_receipts SET clear_revision = 2, state_revision = 2 WHERE user_id = $1', [user])
 
     const again = await notifications.service.clearSnapshot(user, randomUUID(), stale.clearSnapshotToken)
     expect(again.skippedCount).toBe(1)
@@ -499,6 +500,37 @@ describe('recoverable clear', () => {
       .rejects.toThrowError(/NOTIFICATION_TOKEN_EXPIRED/)
     const cleared = await notifications.service.clearSnapshot(user, randomUUID(), third.clearSnapshotToken)
     expect(cleared.affectedCount).toBe(1)
+  })
+
+  it('keeps live previews independent and preserves executed batches during expiry cleanup', async () => {
+    const user = await seedUser()
+    await publishAnnouncement({ audience: { kind: 'users', userIds: [user] } })
+    await project()
+    const first = await notifications.service.previewClear(user)
+    const second = await notifications.service.previewClear(user)
+    expect(first.batchId).not.toBe(second.batchId)
+    const cleared = await notifications.service.clearSnapshot(user, randomUUID(), first.clearSnapshotToken)
+    expect(cleared.affectedCount).toBe(1)
+    const skipped = await notifications.service.clearSnapshot(user, randomUUID(), second.clearSnapshotToken)
+    expect(skipped.affectedCount).toBe(0)
+    expect(skipped.skippedCount).toBe(1)
+
+    // 历史恢复允许值保持可读取，过期预览回收不触碰历史执行事实。
+    await db.query("UPDATE notification_clear_batches SET status = 'restored', restored_at = $2 WHERE batch_id = $1",
+      [second.batchId, now()])
+    currentTime += 11 * 60 * 1000
+    await notifications.service.previewClear(user)
+    const batches = await db.query<{ batch_id: string; status: string }>(
+      'SELECT batch_id, status FROM notification_clear_batches WHERE user_id = $1 AND status <> $2 ORDER BY batch_id',
+      [user, 'preview'])
+    expect(batches.rows).toEqual([
+      { batch_id: first.batchId, status: 'applied' }, { batch_id: second.batchId, status: 'restored' },
+    ].sort((left, right) => left.batch_id.localeCompare(right.batch_id)))
+    expect(await countPreviewBatchItems(user)).toBe(0)
+    const items = await db.query<{ count: string }>(
+      'SELECT count(*)::text AS count FROM notification_clear_batch_items WHERE batch_id IN ($1, $2)',
+      [first.batchId, second.batchId])
+    expect(items.rows[0]!.count).toBe('2')
   })
 
   it('does not let abandoned previews accumulate across repeated windows', async () => {
@@ -543,92 +575,77 @@ describe('recoverable clear', () => {
       .rejects.toThrowError(/NOTIFICATION_NOT_FOUND/)
   })
 
-  it('refuses to reuse one request id across kinds instead of re-running the command', async () => {
+  it.each(['clear', 'read_through'] as const)('refuses to reuse a %s request id for the other kind', async firstKind => {
     const user = await seedUser()
     await publishAnnouncement({ title: '跨 kind', audience: { kind: 'users', userIds: [user] } })
     await project()
-
+    const summary = await notifications.service.summary(user)
     const preview = await notifications.service.previewClear(user)
     const requestId = randomUUID()
-    await notifications.service.clearSnapshot(user, requestId, preview.clearSnapshotToken)
-
-    // 去重记录的主键是 (user_id, request_id)，不含 kind。按 kind 查会查不到、命令再执行一次，
-    // 而随后的 ON CONFLICT DO NOTHING 又会静默丢掉记录。这里必须给出明确冲突。
-    await expect(notifications.service.restoreBatch(user, preview.batchId, requestId))
-      .rejects.toThrowError(/NOTIFICATION_REQUEST_CONFLICT/)
+    const read = () => notifications.service.readThrough(user, requestId, summary.readThroughToken)
+    const clear = () => notifications.service.clearSnapshot(user, requestId, preview.clearSnapshotToken)
+    await (firstKind === 'clear' ? clear() : read())
+    await expect(firstKind === 'clear' ? read() : clear()).rejects.toThrowError(/NOTIFICATION_REQUEST_CONFLICT/)
+    const history = await notifications.service.list({ userId: user, view: 'history', scope: null, category: null, limit: null, cursor: null })
+    expect(history.items).toHaveLength(firstKind === 'clear' ? 0 : 1)
+    const records = await db.query<{ kind: string }>('SELECT kind FROM notification_mutations WHERE user_id = $1 AND request_id = $2', [user, requestId])
+    expect(records.rows).toEqual([{ kind: firstKind }])
   })
 
-  it('refuses a stored idempotency record that belongs to another kind', async () => {
+  it.each(['clear', 'read_through'] as const)('refuses a historical restore record when submitting %s with the same digest', async kind => {
     const user = await seedUser()
-    await publishAnnouncement({ title: 'kind 兜底', audience: { kind: 'users', userIds: [user] } })
+    await publishAnnouncement({ title: '历史命令', audience: { kind: 'users', userIds: [user] } })
     await project()
+    const summary = await notifications.service.summary(user)
     const preview = await notifications.service.previewClear(user)
-    await notifications.service.clearSnapshot(user, randomUUID(), preview.clearSnapshotToken)
-
-    // 摘要里已经含 kind，所以上面的「跨 kind 复用 key」靠摘要就能挡住。
-    // 这条单独盯 kind 判定本身：手工放一条同 key、同摘要、但 kind 不同的记录，
-    // 只靠摘要比对会放行并重复执行。
     const requestId = randomUUID()
+    // 同摘要、不同 kind 单独验证 kind 核验，历史行必须被查出并明确冲突。
+    const digest = kind === 'clear'
+      ? normalizeDigest({ kind: 'clear', batchId: preview.batchId })
+      : normalizeDigest({ kind: 'read_through', upperSequence: summary.upperSequence })
     await db.query(`INSERT INTO notification_mutations (user_id, request_id, kind, digest, result_json,
-      clear_batch_id, created_at) VALUES ($1, $2, 'clear', $3, '{}', NULL, $4)`,
-    [user, requestId, normalizeDigest({ kind: 'restore', batchId: preview.batchId }), now()])
-    await expect(notifications.service.restoreBatch(user, preview.batchId, requestId))
+      clear_batch_id, created_at) VALUES ($1, $2, 'restore', $3, '{}', NULL, $4)`,
+    [user, requestId, digest, now()])
+    await expect(kind === 'clear'
+      ? notifications.service.clearSnapshot(user, requestId, preview.clearSnapshotToken)
+      : notifications.service.readThrough(user, requestId, summary.readThroughToken))
       .rejects.toThrowError(/NOTIFICATION_REQUEST_CONFLICT/)
+    const history = await notifications.service.list({ userId: user, view: 'history', scope: null, category: null, limit: null, cursor: null })
+    expect(history.items).toHaveLength(1)
+    expect(history.unreadCount).toBe(1)
+    const records = await db.query<{ kind: string }>('SELECT kind FROM notification_mutations WHERE user_id = $1 AND request_id = $2', [user, requestId])
+    expect(records.rows).toEqual([{ kind: 'restore' }])
   })
 
-  it('serialises concurrent submissions of the same request id', async () => {
+  it.each(['clear', 'read_through'] as const)('serialises concurrent %s submissions of the same request id', async kind => {
     const user = await seedUser()
     await publishAnnouncement({ title: '并发', audience: { kind: 'users', userIds: [user] } })
     await project()
     const preview = await notifications.service.previewClear(user)
-    await notifications.service.clearSnapshot(user, randomUUID(), preview.clearSnapshotToken)
-
-    // 查重放必须在持有 user 行锁之后：否则两条都查不到记录而重复执行，
-    // 第二条会把 affected=0 的错误终态返回给调用方。
+    const summary = await notifications.service.summary(user)
     const requestId = randomUUID()
-    const [first, second] = await Promise.all([
-      notifications.service.restoreBatch(user, preview.batchId, requestId),
-      notifications.service.restoreBatch(user, preview.batchId, requestId),
-    ])
-    expect(first.affectedCount).toBe(1)
-    expect(first.replayed).toBe(false)
-    expect(second.replayed).toBe(true)
-    expect(second.affectedCount).toBe(first.affectedCount)
+    const submit = () => kind === 'clear'
+      ? notifications.service.clearSnapshot(user, requestId, preview.clearSnapshotToken)
+      : notifications.service.readThrough(user, requestId, summary.readThroughToken)
+    const results = await Promise.all([submit(), submit()])
+    expect(results.map(result => result.replayed).sort()).toEqual([false, true])
+    expect(results.map(result => result.affectedCount)).toEqual([1, 1])
+    const records = await db.query<{ count: string }>('SELECT count(*)::text AS count FROM notification_mutations WHERE user_id = $1 AND request_id = $2', [user, requestId])
+    expect(records.rows[0]!.count).toBe('1')
   })
 
-  it('restores only what this batch actually cleared', async () => {
-    const user = await seedUser()
-    await publishAnnouncement({ title: '一', audience: { kind: 'users', userIds: [user] } })
-    await project()
-    const first = await notifications.service.previewClear(user)
-    await notifications.service.clearSnapshot(user, randomUUID(), first.clearSnapshotToken)
-
-    await publishAnnouncement({ title: '二', audience: { kind: 'users', userIds: [user] } })
-    await project()
-    const second = await notifications.service.previewClear(user)
-    await notifications.service.clearSnapshot(user, randomUUID(), second.clearSnapshotToken)
-
-    const restored = await notifications.service.restoreBatch(user, first.batchId, randomUUID())
-    expect(restored.affectedCount).toBe(1)
-    const history = await notifications.service.list({ userId: user, view: 'history', scope: null, category: null, limit: null, cursor: null })
-    expect(history.items.map(item => item.title)).toEqual(['一'])
-  })
-
-  it('refuses an expired preview token and does not list preview-only batches', async () => {
+  it('refuses an expired preview token', async () => {
     const user = await seedUser()
     await publishAnnouncement({ audience: { kind: 'users', userIds: [user] } })
     await project()
     const preview = await notifications.service.previewClear(user)
-
-    const batchesWhilePreview = await notifications.service.listClearBatches(user, null, null)
-    expect(batchesWhilePreview.items).toHaveLength(0)
 
     currentTime += 11 * 60 * 1000
     await expect(notifications.service.clearSnapshot(user, randomUUID(), preview.clearSnapshotToken))
       .rejects.toThrowError(/NOTIFICATION_TOKEN_EXPIRED/)
   })
 
-  it('never lets a clear or restore touch another user receipts', async () => {
+  it('never lets a clear touch another user receipts', async () => {
     const [owner, other] = [await seedUser('owner'), await seedUser('other')]
     await publishAnnouncement({ title: 'owner-1', audience: { kind: 'users', userIds: [owner] } })
     await publishAnnouncement({ title: 'other-1', audience: { kind: 'users', userIds: [other] } })
@@ -642,8 +659,8 @@ describe('recoverable clear', () => {
     const otherHistory = await notifications.service.list({ userId: other, view: 'history', scope: null, category: null, limit: null, cursor: null })
     expect(otherHistory.items).toHaveLength(1)
 
-    await expect(notifications.service.restoreBatch(other, preview.batchId, randomUUID()))
-      .rejects.toThrowError(/NOTIFICATION_BATCH_NOT_FOUND/)
+    await expect(notifications.service.clearSnapshot(other, randomUUID(), preview.clearSnapshotToken))
+      .rejects.toThrowError(/NOTIFICATION_TOKEN_INVALID/)
   })
 })
 

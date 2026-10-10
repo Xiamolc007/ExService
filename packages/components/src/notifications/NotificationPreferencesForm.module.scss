@@ -28,40 +28,12 @@
   border-bottom: 1px solid var(--exui-border-default);
 }
 
-.necessary {
-  padding-top: 1.25rem;
-}
-
-.necessaryTitle {
-  margin: 0 0 0.25rem;
-  font-size: 0.9rem;
-}
-
-.necessaryBody {
-  margin: 0;
-  color: var(--exui-text-secondary);
-  font-size: 0.82rem;
-}
-
-.saveRow {
+.feedback {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  margin-top: 1.25rem;
-}
-
-.draftState {
-  flex-basis: 100%;
-  margin: 0;
-  color: var(--exui-text-secondary);
-  font-size: 0.8rem;
-}
-
-.saveActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  margin-top: 0.75rem;
 }
 
 .error,
@@ -75,6 +47,8 @@
   color: var(--exui-feedback-danger);
 }
 
+.error p { margin: 0 0 0.5rem; }
+
 .message {
   color: var(--exui-text-secondary);
 }
@@ -86,7 +60,7 @@
   margin: 0.75rem 0;
   padding: 0.8rem 1rem;
   border: 1px solid var(--exui-feedback-danger);
-  border-radius: var(--exui-radius-medium);
+  border-radius: var(--density-control-radius);
   background: var(--exui-surface-secondary);
   font-size: 0.85rem;
 }

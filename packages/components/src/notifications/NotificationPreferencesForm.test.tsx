@@ -1,240 +1,108 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import {
-  NotificationPreferencesForm, type NotificationPreferencesDraft,
-  type NotificationPreferencesFormProps,
-} from '@components/src/notifications/NotificationPreferencesForm'
+import { NotificationPreferencesForm, type NotificationPreferencesDraft, type NotificationPreferencesFormProps } from '@components/src/notifications/NotificationPreferencesForm'
 
-// ExUI 的 `Field` 用 `ResizeObserver` 做响应式排布，jsdom 不提供它。
-beforeEach(() => {
-  vi.stubGlobal('ResizeObserver', class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  })
-})
-
+beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }))
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
-
+const initial = { announcement: true, personal_update: true }
 function props(overrides: Partial<NotificationPreferencesFormProps> = {}): NotificationPreferencesFormProps {
-  return {
-    active: true,
-    identityEpoch: 1,
-    saved: { announcement: true, personal_update: true },
-    status: 'ready',
-    onRetry: vi.fn(),
-    saving: false,
-    message: null,
-    conflict: false,
-    necessaryCategories: ['service_notice'],
-    onSave: vi.fn(async () => undefined),
-    onRefresh: vi.fn(),
-    ...overrides,
-  }
+  return { active: true, identityEpoch: 1, saved: initial, status: 'ready', onRetry: vi.fn(), saving: false,
+    message: null, conflict: false,
+    onSave: vi.fn(async (values: NotificationPreferencesDraft) => values), ...overrides }
 }
+function deferred() {
+  let resolve!: (value: NotificationPreferencesDraft) => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<NotificationPreferencesDraft>((accept, fail) => { resolve = accept; reject = fail })
+  return { promise, resolve, reject }
+}
+const checked = (name: string) => screen.getByRole('switch', { name }).getAttribute('aria-checked')
 
-describe('NotificationPreferencesForm', () => {
-  it('renders the saved optional categories as switches', () => {
+describe('NotificationPreferencesForm immediate saving', () => {
+  it('shows only the two optional switches, without service, necessary group or save/cancel actions', () => {
     render(<NotificationPreferencesForm {...props()} />)
-    expect((screen.getByRole('switch', { name: '社区动态' }) as HTMLButtonElement).getAttribute('aria-checked')).toBe('true')
-    expect((screen.getByRole('switch', { name: '个人提醒' }) as HTMLButtonElement).getAttribute('aria-checked')).toBe('true')
-    expect(screen.getByText('当前设置已保存')).toBeTruthy()
+    expect(screen.getAllByRole('switch')).toHaveLength(2)
+    expect(screen.queryByText('服务通知')).toBeNull()
+    expect(screen.queryByLabelText('必要通知')).toBeNull()
+    expect(screen.queryByRole('button', { name: /保存|取消/ })).toBeNull()
+    expect(screen.queryByText(/已保存/)).toBeNull()
   })
-
-  it('keeps the necessary category visible but never writable', () => {
-    render(<NotificationPreferencesForm {...props()} />)
-    const necessary = screen.getByRole('switch', { name: '服务通知（必要，不可关闭）' }) as HTMLButtonElement
-    expect(necessary.disabled).toBe(true)
-    expect(screen.getByText(/由系统固定的必要通知，不能关闭/)).toBeTruthy()
-  })
-
-  it('reports an unsaved draft and submits only on an explicit save', async () => {
-    const onSave = vi.fn(async () => undefined)
+  it('saves only on a user toggle, validates both fields and adopts canonical server values', async () => {
+    const onSave = vi.fn(async () => ({ announcement: true, personal_update: false }))
     render(<NotificationPreferencesForm {...props({ onSave })} />)
-    expect(screen.getByRole('button', { name: '保存更改' })).toHaveProperty('disabled', true)
-    await userEvent.click(screen.getByRole('switch', { name: '社区动态' }))
-    expect(screen.getByText('有尚未保存的更改')).toBeTruthy()
     expect(onSave).not.toHaveBeenCalled()
-    await userEvent.click(screen.getByRole('button', { name: '保存更改' }))
-    await waitFor(() => expect(onSave).toHaveBeenCalledWith({ announcement: false, personal_update: true }))
+    await userEvent.click(screen.getByRole('switch', { name: '社区动态' }))
+    expect(onSave).toHaveBeenCalledWith({ announcement: false, personal_update: true })
+    expect(checked('社区动态')).toBe('true')
+    expect(checked('个人提醒')).toBe('false')
+    expect(screen.queryByText(/已保存/)).toBeNull()
   })
-
-  it('keeps the draft after a failed save so the user can retry', async () => {
-    const onSave = vi.fn().mockRejectedValueOnce(new Error('保存失败，草稿已保留。请重试。'))
+  it('locks both switches synchronously for rapid toggles while saving', async () => {
+    const pending = deferred(), onSave = vi.fn(() => pending.promise)
     render(<NotificationPreferencesForm {...props({ onSave })} />)
-    await userEvent.click(screen.getByRole('switch', { name: '社区动态' }))
-    await userEvent.click(screen.getByRole('button', { name: '保存更改' }))
-    expect(await screen.findByRole('alert')).toHaveProperty('textContent', '保存失败，草稿已保留。请重试。')
-    expect((screen.getByRole('switch', { name: '社区动态' }) as HTMLButtonElement)
-      .getAttribute('aria-checked')).toBe('false')
-    expect(screen.getByText('有尚未保存的更改')).toBeTruthy()
+    act(() => { fireEvent.click(screen.getByRole('switch', { name: '社区动态' })); fireEvent.click(screen.getByRole('switch', { name: '个人提醒' })) })
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+    expect(screen.getAllByRole('switch').every(element => (element as HTMLButtonElement).disabled)).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe('保存中…')
+    await act(async () => { pending.resolve({ announcement: false, personal_update: true }) })
+    expect(screen.queryByRole('status')).toBeNull()
   })
-
-  it('keeps the draft on a 409 and offers an explicit re-read for comparison', async () => {
-    const onRefresh = vi.fn()
-    render(<NotificationPreferencesForm {...props({
-      conflict: true,
-      message: '设置已被其他设备修改（409），草稿已保留。请核对最新版本。',
-      onRefresh,
-    })} />)
+  it('rolls back on failure and retries only the failed field against the latest confirmed other value', async () => {
+    const onSave = vi.fn().mockRejectedValueOnce(new Error('secret backend message'))
+      .mockImplementationOnce(async (value: NotificationPreferencesDraft) => value)
+    const input = props({ onSave }), view = render(<NotificationPreferencesForm {...input} />)
+    await userEvent.click(screen.getByRole('switch', { name: '社区动态' }))
+    expect(checked('社区动态')).toBe('true')
+    expect(screen.getByRole('alert').textContent).toContain('保存失败，已恢复上次设置。请重试。')
+    expect(screen.queryByText(/secret/)).toBeNull()
+    view.rerender(<NotificationPreferencesForm {...input} saved={{ announcement: true, personal_update: false }} />)
+    await userEvent.click(screen.getByRole('button', { name: '重试保存' }))
+    expect(onSave.mock.calls[1]?.[0]).toEqual({ announcement: false, personal_update: false })
+    expect(checked('个人提醒')).toBe('false')
+  })
+  it('follows latest confirmed props and category switches without automatic writes', async () => {
+    const input = props(), view = render(<NotificationPreferencesForm {...input} />)
+    view.rerender(<NotificationPreferencesForm {...input} active={false} saved={{ announcement: false, personal_update: false }} />)
+    view.rerender(<NotificationPreferencesForm {...input} saved={{ announcement: false, personal_update: false }} />)
+    expect(checked('社区动态')).toBe('false')
+    expect(input.onSave).not.toHaveBeenCalled()
+  })
+  it.each(['success', 'failure'] as const)('ignores old account %s and finally while a new account save is pending', async outcome => {
+    const old = deferred(), next = deferred(), onSave = vi.fn().mockReturnValueOnce(old.promise).mockReturnValueOnce(next.promise)
+    const input = props({ onSave }), view = render(<NotificationPreferencesForm {...input} />)
+    await userEvent.click(screen.getByRole('switch', { name: '社区动态' }))
+    view.rerender(<NotificationPreferencesForm {...input} identityEpoch={2} saved={{ announcement: true, personal_update: false }} />)
     await userEvent.click(screen.getByRole('switch', { name: '个人提醒' }))
-    expect(screen.getByText('设置已被其他设备修改（409），草稿已保留。请核对最新版本。')).toBeTruthy()
-    expect((screen.getByRole('switch', { name: '个人提醒' }) as HTMLButtonElement)
-      .getAttribute('aria-checked')).toBe('false')
-    await userEvent.click(screen.getByRole('button', { name: '核对最新版本（保留草稿）' }))
-    expect(onRefresh).toHaveBeenCalledOnce()
+    await act(async () => { if (outcome === 'success') old.resolve({ announcement: false, personal_update: true }); else old.reject(new Error('old account secret')) })
+    expect(screen.getByRole('status').textContent).toBe('保存中…')
+    expect(checked('社区动态')).toBe('true')
+    expect(screen.queryByRole('alert')).toBeNull()
+    await act(async () => { next.resolve({ announcement: true, personal_update: true }) })
+    expect(checked('个人提醒')).toBe('true')
   })
-
-  it('keeps the draft when the 409 re-read actually replaces the server snapshot', async () => {
-    // 覆盖点：「核对最新版本（保留草稿）」会换掉 `saved`，那时绝不能用服务器值覆盖草稿，
-    // 否则按钮文案（保留草稿）与实际行为（丢弃草稿）互相矛盾。
-    const view = render(<NotificationPreferencesForm {...props({
-      conflict: true,
-      message: '设置已被其他设备修改（409），草稿已保留。请核对最新版本。',
-    })} />)
-    await userEvent.click(screen.getByRole('switch', { name: '个人提醒' }))
-    expect((screen.getByRole('switch', { name: '个人提醒' }) as HTMLButtonElement)
-      .getAttribute('aria-checked')).toBe('false')
-
-    // 另一台设备把两个类别都关掉了：服务器快照变成 {false, false}，草稿是 {true, false}。
-    view.rerender(<NotificationPreferencesForm {...props({
-      conflict: false,
-      saved: { announcement: false, personal_update: false },
-      message: '已核对最新版本，草稿仍保留。请决定是否保存。',
-    })} />)
-
-    await waitFor(() => expect(screen.getByText('已核对最新版本，草稿仍保留。请决定是否保存。')).toBeTruthy())
-    expect((screen.getByRole('switch', { name: '社区动态' }) as HTMLButtonElement)
-      .getAttribute('aria-checked')).toBe('true')
-    expect((screen.getByRole('switch', { name: '个人提醒' }) as HTMLButtonElement)
-      .getAttribute('aria-checked')).toBe('false')
-    expect(screen.getByText('有尚未保存的更改')).toBeTruthy()
-  })
-
-  it('follows the server snapshot when there is no draft to protect', async () => {
-    const view = render(<NotificationPreferencesForm {...props()} />)
-    // 另一台设备改了设置，本机没有未保存更改：直接跟随服务器最新值。
-    view.rerender(<NotificationPreferencesForm {...props({
-      saved: { announcement: false, personal_update: false },
-    })} />)
-    await waitFor(() => expect((screen.getByRole('switch', { name: '社区动态' }) as HTMLButtonElement)
-      .getAttribute('aria-checked')).toBe('false'))
-    expect((screen.getByRole('switch', { name: '个人提醒' }) as HTMLButtonElement)
-      .getAttribute('aria-checked')).toBe('false')
-    expect(screen.getByText('当前设置已保存')).toBeTruthy()
-  })
-
-  it('clears the dirty state after a successful save and stays clean on the follow-up snapshot', async () => {
-    const view = render(<NotificationPreferencesForm {...props()} />)
+  it('drops old completion after unmount', async () => {
+    const pending = deferred(), input = props({ onSave: vi.fn(() => pending.promise) })
+    const view = render(<NotificationPreferencesForm {...input} />)
     await userEvent.click(screen.getByRole('switch', { name: '社区动态' }))
-    expect(screen.getByText('有尚未保存的更改')).toBeTruthy()
-    await userEvent.click(screen.getByRole('button', { name: '保存更改' }))
-    await waitFor(() => expect(screen.getByText('当前设置已保存')).toBeTruthy())
-
-    // 保存成功后父级把快照换成刚写入的值；此时不能把表单重新打回「有尚未保存的更改」。
-    view.rerender(<NotificationPreferencesForm {...props({
-      saved: { announcement: false, personal_update: true },
-      message: '通知设置已保存。',
-    })} />)
-    await waitFor(() => expect(screen.getByText('通知设置已保存。')).toBeTruthy())
-    expect(screen.getByText('当前设置已保存')).toBeTruthy()
-    expect(screen.getByRole('button', { name: '保存更改' })).toHaveProperty('disabled', true)
-  })
-
-  /**
-   * 换号/退出：`bindNotificationsToken` 的顺序是「先清快照为 null（表单走 loading），
-   * 新身份快照随后到达」。草稿必须在这个过程中被丢弃，不能带进新身份 ——
-   * 否则用户一点「保存更改」就会把上一个账号从未选择过的偏好 PUT 到新身份。
-   */
-  async function switchIdentity(from: { saved: NotificationPreferencesDraft; draft: NotificationPreferencesDraft },
-    to: NotificationPreferencesDraft) {
-    const view = render(<NotificationPreferencesForm {...props({ saved: from.saved })} />)
-    for (const [name, expected] of [['社区动态', from.draft.announcement],
-      ['个人提醒', from.draft.personal_update]] as const) {
-      const checked = (screen.getByRole('switch', { name }) as HTMLButtonElement)
-        .getAttribute('aria-checked') === 'true'
-      if (checked !== expected) await userEvent.click(screen.getByRole('switch', { name }))
-    }
-    expect(screen.getByText('有尚未保存的更改')).toBeTruthy()
-
-    // 第一步：身份代次递增 + 快照清空。
-    view.rerender(<NotificationPreferencesForm {...props({
-      identityEpoch: 2, saved: null, status: 'loading',
-    })} />)
-    // 第二步：新身份的快照到达（可能与旧对账快照同值，也可能不同）。
-    view.rerender(<NotificationPreferencesForm {...props({ identityEpoch: 2, saved: to })} />)
-  }
-
-  it('drops the previous identity draft on an account switch to different values', async () => {
-    await switchIdentity(
-      { saved: { announcement: true, personal_update: true }, draft: { announcement: false, personal_update: true } },
-      { announcement: false, personal_update: false },
-    )
-    await waitFor(() => expect(screen.getByText('当前设置已保存')).toBeTruthy())
-    expect((screen.getByRole('switch', { name: '社区动态' }) as HTMLButtonElement)
-      .getAttribute('aria-checked')).toBe('false')
-    // `personal_update=true` 是 A 的草稿值；B 的服务器值是 false，不能残留。
-    expect((screen.getByRole('switch', { name: '个人提醒' }) as HTMLButtonElement)
-      .getAttribute('aria-checked')).toBe('false')
-    expect(screen.getByRole('button', { name: '保存更改' })).toHaveProperty('disabled', true)
-  })
-
-  it('drops the previous identity draft even when the new identity has the old snapshot values', async () => {
-    // 新身份的服务器值恰好等于旧的对账快照：若只看 savedRevision 就会漏掉这条。
-    await switchIdentity(
-      { saved: { announcement: true, personal_update: true }, draft: { announcement: false, personal_update: true } },
-      { announcement: true, personal_update: true },
-    )
-    await waitFor(() => expect(screen.getByText('当前设置已保存')).toBeTruthy())
-    expect((screen.getByRole('switch', { name: '社区动态' }) as HTMLButtonElement)
-      .getAttribute('aria-checked')).toBe('true')
-    expect(screen.getByRole('button', { name: '保存更改' })).toHaveProperty('disabled', true)
-  })
-
-  it('keeps the draft when only the category changes, not the identity', async () => {
-    // 对照：同一个身份内切分类不能清草稿，否则 B2 的第 1 点就白修了。
-    const view = render(<NotificationPreferencesForm {...props({ identityEpoch: 1 })} />)
-    await userEvent.click(screen.getByRole('switch', { name: '社区动态' }))
-    expect(screen.getByText('有尚未保存的更改')).toBeTruthy()
-    view.rerender(<NotificationPreferencesForm {...props({ identityEpoch: 1, active: false })} />)
-    view.rerender(<NotificationPreferencesForm {...props({ identityEpoch: 1 })} />)
-    expect((screen.getByRole('switch', { name: '社区动态' }) as HTMLButtonElement)
-      .getAttribute('aria-checked')).toBe('false')
-    expect(screen.getByText('有尚未保存的更改')).toBeTruthy()
-  })
-
-  it('restores the saved value when the draft is cancelled', async () => {
+    view.unmount()
+    await act(async () => { pending.resolve({ announcement: false, personal_update: false }) })
     render(<NotificationPreferencesForm {...props()} />)
-    await userEvent.click(screen.getByRole('switch', { name: '社区动态' }))
-    expect(screen.getByText('有尚未保存的更改')).toBeTruthy()
-    await userEvent.click(screen.getByRole('button', { name: '取消更改' }))
-    expect((screen.getByRole('switch', { name: '社区动态' }) as HTMLButtonElement)
-      .getAttribute('aria-checked')).toBe('true')
-    expect(screen.getByText('更改已取消。')).toBeTruthy()
+    expect(checked('社区动态')).toBe('true')
   })
-
-  it('shows its own loading and failure states without touching the profile gate', async () => {
-    const onRetry = vi.fn()
-    render(<NotificationPreferencesForm {...props({ status: 'loading', saved: null, onRetry })} />)
+  it('renders refreshed conflict values and asks for a new adjustment without a blind save retry', () => {
+    render(<NotificationPreferencesForm {...props({ saved: { announcement: false, personal_update: false }, conflict: true,
+      message: '设置已由其他设备更新，请重新调整。' })} />)
+    expect(checked('社区动态')).toBe('false')
+    expect(screen.getByText('设置已由其他设备更新，请重新调整。')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '重试保存' })).toBeNull()
+  })
+  it('renders independent loading and read-error retry', async () => {
+    const input = props({ status: 'loading', saved: null }), view = render(<NotificationPreferencesForm {...input} />)
     expect(screen.getByLabelText('正在加载通知设置')).toBeTruthy()
-    cleanup()
-
-    render(<NotificationPreferencesForm {...props({ status: 'error', saved: null, onRetry })} />)
-    expect(screen.getByText('通知设置暂时无法读取。其他设置仍可使用。')).toBeTruthy()
+    view.rerender(<NotificationPreferencesForm {...input} status="error" />)
     await userEvent.click(screen.getByRole('button', { name: '重试通知设置' }))
-    expect(onRetry).toHaveBeenCalledOnce()
-  })
-
-  it('keeps the form mounted but renders nothing while another category is shown', () => {
-    const { container } = render(<NotificationPreferencesForm {...props({ active: false })} />)
-    expect(container.textContent).toBe('')
-  })
-
-  it('disables both save actions while a save is in flight', () => {
-    render(<NotificationPreferencesForm {...props({ saving: true })} />)
-    expect(screen.getByRole('button', { name: '保存中…' })).toHaveProperty('disabled', true)
-    expect(screen.getByRole('switch', { name: '社区动态' })).toHaveProperty('disabled', true)
+    expect(input.onRetry).toHaveBeenCalledOnce()
   })
 })

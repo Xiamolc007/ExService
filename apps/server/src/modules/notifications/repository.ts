@@ -114,8 +114,8 @@ const VISIBLE_CONTENT = `r.user_id = $1 AND c.available_at <= $2 AND c.withdrawn
  * 凡是「本人可见且未清理」的读与批量写都用它，不要在调用处再拼一次 `cleared_at IS NULL` ——
  * 拼漏一处就会出现「列表看不到、单条却能读写」的不一致。
  *
- * 两处**不**用它：`applyClearBatch` 里的 `cleared_at IS NULL` 是「只清理仍未清理的项」
- * 这个业务条件的一部分，`restoreClearBatch` 则必须能看到已清理的项；两者的语义都与可读基准不同。
+ * `applyClearBatch` 不用它：其中 `cleared_at IS NULL` 是「只清理仍未清理的项」
+ * 这个业务条件的一部分，与可读基准的语义不同。
  */
 const VISIBLE_UNCLEARED_RECEIPT = `${VISIBLE_CONTENT} AND r.cleared_at IS NULL`
 
@@ -377,7 +377,7 @@ export class NotificationRepository {
   async insertMutation(row: {
     userId: string
     requestId: string
-    kind: 'read_through' | 'clear' | 'restore'
+    kind: 'read_through' | 'clear'
     digest: string
     resultJson: string
     clearBatchId: string | null
@@ -414,7 +414,7 @@ export class NotificationRepository {
    *
    * 这里**只**删过期项，不删仍在有效期内的 preview：设计 9.2 要求并发/先后两份预览各自独立，
    * 旧预览要能提交并对已变化的项记 skipped，把在途预览合并或换掉会破坏这条语义。
-   * 已 applied / restored 的批次是恢复记录，更不在这条删除范围内。
+   * 已 applied / 历史 restored 的批次是执行事实，不在这条删除范围内。
    */
   async discardExpiredPreviewBatches(userId: string, now: number, executor: SqlExecutor): Promise<number> {
     // items 对 batches 是 ON DELETE RESTRICT，必须先删子表。
@@ -443,35 +443,15 @@ export class NotificationRepository {
     [row.batch_id, receiptIds.map(item => item.receiptId), receiptIds.map(item => item.clearRevision)])
   }
 
-  async findClearBatch(batchId: string, userId: string, executor: SqlExecutor = this.db): Promise<ClearBatchRow | undefined> {
-    const result = await executor.query<ClearBatchRow>(
-      'SELECT * FROM notification_clear_batches WHERE batch_id = $1 AND user_id = $2', [batchId, userId])
-    return result.rows[0]
-  }
-
   async findClearBatchForUpdate(batchId: string, userId: string, executor: SqlExecutor): Promise<ClearBatchRow | undefined> {
     const result = await executor.query<ClearBatchRow>(
       'SELECT * FROM notification_clear_batches WHERE batch_id = $1 AND user_id = $2 FOR UPDATE', [batchId, userId])
     return result.rows[0]
   }
 
-  async listClearBatches(userId: string, limit: number, afterCreatedAt: number | null,
-    afterBatchId: string | null, executor: SqlExecutor = this.db): Promise<ClearBatchRow[]> {
-    const values: unknown[] = [userId]
-    let sql = `SELECT * FROM notification_clear_batches WHERE user_id = $1 AND status <> 'preview'`
-    if (afterCreatedAt !== null && afterBatchId !== null) {
-      values.push(afterCreatedAt, afterBatchId)
-      sql += ` AND (created_at, batch_id) < ($2, $3)`
-    }
-    values.push(limit)
-    sql += ` ORDER BY created_at DESC, batch_id DESC LIMIT $${values.length}`
-    const result = await executor.query<ClearBatchRow>(sql, values)
-    return result.rows
-  }
-
   /**
    * 只清理该 batch 精确集合内、仍属于本人、仍可见、仍未清理且 clearRevision
-   * 仍与预览一致的 receipt。晚到的 fanout 与已被别的设备清理/恢复的项被跳过。
+   * 仍与预览一致的 receipt。晚到的 fanout 与已被别的设备清理或 clear revision 已变化的项被跳过。
    */
   async applyClearBatch(batchId: string, userId: string, now: number, executor: SqlExecutor): Promise<{ affected: number; skipped: number }> {
     const items = await executor.query<{ receipt_id: string; expected_clear_revision: number }>(
@@ -496,49 +476,6 @@ export class NotificationRepository {
       }
     }
     return { affected, skipped }
-  }
-
-  async countBatchItems(batchId: string, executor: SqlExecutor = this.db): Promise<number> {
-    const result = await executor.query<{ count: string }>(
-      'SELECT count(*)::text AS count FROM notification_clear_batch_items WHERE batch_id = $1', [batchId])
-    return Number(result.rows[0]?.count ?? 0)
-  }
-
-  /**
-   * 只恢复该 batch 真正清理过、且当前仍由该 batch 以同一 appliedClearRevision 持有的项。
-   * 逐项复核可读基准：失权/撤回跳过且不返回私密内容，过期可回到 history 但不计未读。
-   */
-  async restoreClearBatch(batchId: string, userId: string, executor: SqlExecutor): Promise<{ affected: number; skipped: number }> {
-    const items = await executor.query<{ receipt_id: string; applied_clear_revision: number | null }>(
-      `SELECT receipt_id, applied_clear_revision FROM notification_clear_batch_items
-        WHERE batch_id = $1 AND applied_clear_revision IS NOT NULL`, [batchId])
-    let affected = 0
-    let skipped = 0
-    for (const item of items.rows) {
-      const result = await executor.query(`
-        UPDATE notification_receipts r SET cleared_at = NULL, clear_batch_id = NULL,
-            clear_revision = clear_revision + 1, state_revision = state_revision + 1
-          FROM notification_contents c
-          WHERE c.content_id = r.content_id AND r.receipt_id = $1 AND r.user_id = $2
-            AND r.cleared_at IS NOT NULL AND r.clear_batch_id = $3 AND r.clear_revision = $4
-            AND c.withdrawn_at IS NULL`,
-      [item.receipt_id, userId, batchId, item.applied_clear_revision])
-      if ((result.rowCount ?? 0) === 1) affected += 1
-      else skipped += 1
-    }
-    return { affected, skipped }
-  }
-
-  /** 当前权限下该 batch 仍可恢复的项数，不返回正文。 */
-  async restorableCount(batchId: string, userId: string, executor: SqlExecutor = this.db): Promise<number> {
-    const result = await executor.query<{ count: string }>(`
-      SELECT count(*)::text AS count FROM notification_clear_batch_items i
-        JOIN notification_receipts r ON r.receipt_id = i.receipt_id
-        JOIN notification_contents c ON c.content_id = r.content_id
-        WHERE i.batch_id = $1 AND i.applied_clear_revision IS NOT NULL AND r.user_id = $2
-          AND r.cleared_at IS NOT NULL AND r.clear_batch_id = $1 AND r.clear_revision = i.applied_clear_revision
-          AND c.withdrawn_at IS NULL`, [batchId, userId])
-    return Number(result.rows[0]?.count ?? 0)
   }
 
   async unclearedSnapshot(userId: string, now: number,

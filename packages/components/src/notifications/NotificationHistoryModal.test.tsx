@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { NotificationHistoryModal, type NotificationHistoryModalProps } from '@components/src/notifications/NotificationHistoryModal'
 import type {
-  NotificationItemView, NotificationDetailView, NotificationClearBatchView,
+  NotificationItemView, NotificationDetailView,
 } from '@components/src/notifications/notificationsView'
 
-afterEach(() => { cleanup(); restoreScrollIntoView() })
+afterEach(() => { cleanup(); restoreScrollIntoView(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 const originalScrollIntoView = Element.prototype.scrollIntoView
 function restoreScrollIntoView() {
@@ -44,14 +44,10 @@ const detail: NotificationDetailView = {
   actionsAvailable: true,
 }
 
-const batch: NotificationClearBatchView = {
-  batchId: 'batch-1', itemCount: 5, affectedCount: 4, skippedCount: 1, restorableCount: 4,
-  status: 'applied', createdAt: Date.UTC(2026, 9, 8, 2, 12, 33), appliedAt: Date.UTC(2026, 9, 8),
-  restoredAt: null,
-}
 
 function props(overrides: Partial<NotificationHistoryModalProps> = {}): NotificationHistoryModalProps {
   return {
+    countState: { kind: 'ready', count: 2 },
     open: true,
     onClose: vi.fn(),
     selectedId: null,
@@ -59,6 +55,7 @@ function props(overrides: Partial<NotificationHistoryModalProps> = {}): Notifica
     list: {
       status: 'ready', items: [item, readItem, expiredItem], hasMore: false,
       nextPageStatus: 'idle', filter: 'all', onFilterChange: vi.fn(),
+      canAutoLoad: false, resetVersion: 0, onRetryPage: vi.fn(),
       onLoadMore: vi.fn(), onRetry: vi.fn(),
     },
     detail: {
@@ -66,20 +63,160 @@ function props(overrides: Partial<NotificationHistoryModalProps> = {}): Notifica
       onToggleRead: vi.fn(), onRetryRead: vi.fn(), onRetryDetail: vi.fn(), onNavigate: vi.fn(),
     },
     bulk: {
-      pending: null, message: null, lastClearedBatchId: null,
-      onReadAll: vi.fn(), onClearAll: vi.fn(), onUndoClear: vi.fn(),
+      pending: null, preparing: null, error: null,
+      onReadAll: vi.fn(), onClearAll: vi.fn(),
     },
-    records: { open: false, status: 'idle', items: [], onOpen: vi.fn(), onClose: vi.fn(), onRestore: vi.fn() },
-    confirm: { kind: null, count: 0, pending: false, expired: false, onCancel: vi.fn(), onSubmit: vi.fn() },
+    confirm: { kind: null, count: 0, pending: false, expired: false, error: null, onCancel: vi.fn(), onSubmit: vi.fn() },
     ...overrides,
   }
 }
 
 describe('NotificationHistoryModal', () => {
+
+  it('loads once per intersection and rechecks continuously visible short pages after layout', async () => {
+    const onLoadMore = vi.fn()
+    const observe = vi.fn(), disconnect = vi.fn()
+    let intersect: IntersectionObserverCallback | undefined
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(callback: IntersectionObserverCallback, options: IntersectionObserverInit) {
+        intersect = callback
+        expect(options.root).toBe(screen.getByRole('tabpanel'))
+        expect(options.rootMargin).toBe('0px')
+      }
+      observe = observe
+      disconnect = disconnect
+    })
+    const value = props({ list: { ...props().list, hasMore: true, canAutoLoad: true, onLoadMore } })
+    const { rerender, unmount } = render(<NotificationHistoryModal {...value} />)
+    act(() => {
+      intersect!([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver)
+      intersect!([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver)
+    })
+    expect(onLoadMore).toHaveBeenCalledOnce()
+    // jsdom has no layout; these coordinates simulate a sentinel still inside the root.
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, top: 0, left: 0, right: 200, bottom: 100, width: 200, height: 100,
+      toJSON: () => ({}),
+    })
+    rerender(<NotificationHistoryModal {...value} list={{ ...value.list, items: [...value.list.items] }} />)
+    await waitFor(() => expect(onLoadMore).toHaveBeenCalledTimes(2))
+    rerender(<NotificationHistoryModal {...value} list={{ ...value.list, hasMore: false, canAutoLoad: false }} />)
+    expect(disconnect).toHaveBeenCalled()
+    unmount()
+    expect(observe).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not observe while a page is paused in error, confirmation is open or phone body is visible', () => {
+    const constructor = vi.fn()
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor() { constructor() }
+      observe() {}
+      disconnect() {}
+    })
+    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+    const value = props({ list: { ...props().list, hasMore: true, canAutoLoad: true } })
+    const { rerender } = render(<NotificationHistoryModal {...value} selectedId="receipt-1" />)
+    expect(constructor).not.toHaveBeenCalled()
+    rerender(<NotificationHistoryModal {...value} list={{ ...value.list, nextPageStatus: 'error' }} />)
+    expect(constructor).not.toHaveBeenCalled()
+    rerender(<NotificationHistoryModal {...value} confirm={{ ...value.confirm, kind: 'read-all' }} />)
+    expect(constructor).not.toHaveBeenCalled()
+  })
+
+  it('ignores a queued observer callback after automatic paging is paused', () => {
+    let queued: IntersectionObserverCallback | undefined
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(callback: IntersectionObserverCallback) { queued = callback }
+      observe() {}
+      disconnect() {}
+    })
+    const onLoadMore = vi.fn()
+    const value = props({ list: { ...props().list, hasMore: true, canAutoLoad: true, onLoadMore } })
+    const { rerender } = render(<NotificationHistoryModal {...value} />)
+    rerender(<NotificationHistoryModal {...value} list={{ ...value.list, canAutoLoad: false }} />)
+    act(() => queued!([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver))
+    expect(onLoadMore).not.toHaveBeenCalled()
+  })
+
+  it('restores focus to the active Tab on phone back when the selected row vanished', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+    render(<NotificationHistoryModal {...props({ selectedId: 'vanished' })} />)
+    await userEvent.click(screen.getByRole('button', { name: '返回列表' }))
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: '全部' }))
+  })
+
+  it('preserves phone return position after a background read refresh replaces the first page', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+    const value = props()
+    const { rerender } = render(<NotificationHistoryModal {...value} />)
+    const list = screen.getByRole('tabpanel')
+    list.scrollTop = 240
+    await userEvent.click(screen.getByRole('button', { name: item.title }))
+    rerender(<NotificationHistoryModal {...value} selectedId={item.receiptId}
+      detail={{ ...value.detail, status: 'ready', value: detail }} />)
+    rerender(<NotificationHistoryModal {...value} selectedId={item.receiptId}
+      list={{ ...value.list, resetVersion: 1 }} detail={{ ...value.detail, status: 'ready', value: detail }} />)
+    await userEvent.click(screen.getByRole('button', { name: '返回列表' }))
+    expect(list.scrollTop).toBe(240)
+    expect(document.activeElement?.textContent).toContain(item.title)
+  })
+
+  it('shows durable preparation and submission errors with explicit retry controls', () => {
+    const value = props()
+    const { rerender } = render(<NotificationHistoryModal {...value} bulk={{ ...value.bulk, error: '准备失败' }} />)
+    expect(screen.getByRole('alert').textContent).toContain('准备失败')
+    expect(screen.getByRole('button', { name: '重新准备' })).toBeTruthy()
+    rerender(<NotificationHistoryModal {...value} confirm={{ ...value.confirm, kind: 'read-all', error: '提交失败，原状态已保留' }} />)
+    expect(screen.getByRole('alert').textContent).toContain('提交失败，原状态已保留')
+    expect(screen.getByRole('button', { name: '确认全部已读' })).toBeTruthy()
+  })
+
+  it('retries the failed preparation intent when the summary is no longer ready', async () => {
+    const value = props()
+    const { rerender } = render(<NotificationHistoryModal {...value} bulk={{ ...value.bulk, preparing: 'read-all' }} />)
+    rerender(<NotificationHistoryModal {...value} countState={{ kind: 'error' }} bulk={{ ...value.bulk, error: '准备失败' }} />)
+    await userEvent.click(screen.getByRole('button', { name: '重新准备' }))
+    expect(value.bulk.onReadAll).toHaveBeenCalledOnce()
+    expect(value.bulk.onClearAll).not.toHaveBeenCalled()
+  })
+
+  it('uses accessible Tabs and one global bulk action independent of loaded unread rows', async () => {
+    const onFilterChange = vi.fn()
+    render(<NotificationHistoryModal {...props({ list: { ...props().list, items: [readItem], onFilterChange } })} />)
+    const tablist = screen.getByRole('tablist')
+    expect(tablist.querySelectorAll('[role="tab"]').length).toBe(2)
+    expect(screen.queryByRole('button', { name: '清理全部' })).toBeNull()
+    expect((screen.getByRole('button', { name: '已读全部' }) as HTMLButtonElement).disabled).toBe(false)
+    expect(screen.queryByText(/已加载 \d+ 条/)).toBeNull()
+    expect(screen.queryByRole('button', { name: '恢复清理记录' })).toBeNull()
+    await userEvent.click(screen.getByRole('tab', { name: '未读' }))
+    expect(onFilterChange).toHaveBeenCalledWith('unread')
+  })
+
+  it('allows global clear in an empty unread tab and disables it only for known empty history', () => {
+    const value = props({ countState: { kind: 'ready', count: 0 }, list: { ...props().list, filter: 'unread', items: [] } })
+    const { rerender } = render(<NotificationHistoryModal {...value} />)
+    expect((screen.getByRole('button', { name: '清理全部' }) as HTMLButtonElement).disabled).toBe(false)
+    rerender(<NotificationHistoryModal {...value} list={{ ...value.list, filter: 'all' }} />)
+    expect((screen.getByRole('button', { name: '清理全部' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('disables bulk work while the count is unknown, failed, preparing or submitting', () => {
+    const value = props()
+    const { rerender } = render(<NotificationHistoryModal {...value} countState={{ kind: 'loading' }} />)
+    expect((screen.getByRole('button', { name: '加载中…' }) as HTMLButtonElement).disabled).toBe(true)
+    rerender(<NotificationHistoryModal {...value} countState={{ kind: 'error' }} />)
+    expect((screen.getByRole('button', { name: '加载中…' }) as HTMLButtonElement).disabled).toBe(true)
+    rerender(<NotificationHistoryModal {...value} bulk={{ ...value.bulk, preparing: 'read-all' }} />)
+    expect((screen.getByRole('button', { name: '已读全部' }) as HTMLButtonElement).disabled).toBe(true)
+    rerender(<NotificationHistoryModal {...value} bulk={{ ...value.bulk, pending: 'read-all' }} />)
+    expect((screen.getByRole('button', { name: '关闭通知历史' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
   it('opens with no selection and never auto-selects or reads the first row', () => {
     render(<NotificationHistoryModal {...props()} />)
-    expect(screen.getByRole('heading', { name: '选择通知' })).toBeTruthy()
-    expect(screen.getByText('左侧是全部未清理历史。选择通知后，在这里查看正文与行动。')).toBeTruthy()
+    expect(screen.getByText('点击通知查看内容')).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: '选择通知' })).toBeNull()
     const titles = screen.getAllByRole('button').map(button => button.textContent)
     expect(titles).toContain('社区公告标题')
     expect(screen.queryByRole('button', { name: '标为已读' })).toBeNull()
@@ -96,21 +233,7 @@ describe('NotificationHistoryModal', () => {
    * 计数措辞：Contract 不返回总数，所以只能说**已加载**多少条。
    * 说成「共 N 条」或「N 条历史」会被读成总数，而翻页还没到底时它并不是总数。
    */
-  it('counts the loaded rows and never implies a total', () => {
-    const { rerender } = render(<NotificationHistoryModal {...props({
-      list: { ...props().list, items: [item, { ...item, receiptId: 'r-2' }] },
-    })} />)
-    expect(screen.getByText('已加载 2 条')).toBeTruthy()
-    expect(screen.queryByText(/共 \d+ 条/)).toBeNull()
-    expect(screen.queryByText(/\d+ 条历史/)).toBeNull()
-    // 翻页后跟着变（仍是已加载量，不是总量）。
-    rerender(<NotificationHistoryModal {...props({
-      list: { ...props().list, hasMore: true, items: [item, { ...item, receiptId: 'r-2' },
-        { ...item, receiptId: 'r-3' }] },
-    })} />)
-    expect(screen.getByText('已加载 3 条')).toBeTruthy()
-    expect(screen.getByRole('button', { name: '加载更多' })).toBeTruthy()
-  })
+
 
   it('selects a row through the shared list without writing state itself', async () => {
     const onSelect = vi.fn()
@@ -159,9 +282,9 @@ describe('NotificationHistoryModal', () => {
   it('asks for confirmation before a global clear and reports the previewed scope', async () => {
     const onSubmit = vi.fn()
     render(<NotificationHistoryModal {...props({
-      confirm: { kind: 'clear', count: 12, pending: false, expired: false, onCancel: vi.fn(), onSubmit },
+      confirm: { kind: 'clear', count: 12, pending: false, expired: false, error: null, onCancel: vi.fn(), onSubmit },
     })} />)
-    expect(screen.getByRole('heading', { name: '清除全部通知？' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: '清理这 12 条通知？' })).toBeTruthy()
     expect(screen.getByText(/将清理预览时的 12 条通知/)).toBeTruthy()
     expect(screen.getByText('清理消息不会取消活动参与。')).toBeTruthy()
     await userEvent.click(screen.getByRole('button', { name: '确认清理' }))
@@ -170,46 +293,19 @@ describe('NotificationHistoryModal', () => {
 
   it('blocks submission once the preview token has expired', () => {
     render(<NotificationHistoryModal {...props({
-      confirm: { kind: 'clear', count: 12, pending: false, expired: true, onCancel: vi.fn(), onSubmit: vi.fn() },
+      confirm: { kind: 'clear', count: 12, pending: false, expired: true, error: null, onCancel: vi.fn(), onSubmit: vi.fn() },
     })} />)
     expect(screen.getByText('预览已过期，请重新预览。')).toBeTruthy()
     expect((screen.getByRole('button', { name: '确认清理' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('shows the affected and skipped counts plus a durable undo affordance', () => {
-    render(<NotificationHistoryModal {...props({
-      bulk: { pending: null, message: '已清理 4 条，跳过 1 条；新到通知仍保留。',
-        lastClearedBatchId: 'batch-1', onReadAll: vi.fn(), onClearAll: vi.fn(), onUndoClear: vi.fn() },
-    })} />)
-    expect(screen.getByText('已清理 4 条，跳过 1 条；新到通知仍保留。')).toBeTruthy()
-    expect(screen.getByRole('button', { name: '撤销此次清理' })).toBeTruthy()
-  })
 
-  it('lists clear batches with the currently restorable count', () => {
-    render(<NotificationHistoryModal {...props({
-      records: { open: true, status: 'ready', items: [batch],
-        onOpen: vi.fn(), onClose: vi.fn(), onRestore: vi.fn() },
-    })} />)
-    expect(screen.getByRole('heading', { name: '恢复清理记录' })).toBeTruthy()
-    expect(screen.getByText('当时清理 4 条')).toBeTruthy()
-    expect(screen.getByText('当前可恢复 4 条')).toBeTruthy()
-  })
 
-  it('never offers a restore entry for a batch with nothing left to restore', () => {
-    render(<NotificationHistoryModal {...props({
-      records: { open: true, status: 'ready',
-        items: [{ ...batch, restorableCount: 0 }],
-        onOpen: vi.fn(), onClose: vi.fn(), onRestore: vi.fn() },
-    })} />)
-    expect((screen.getByRole('button', { name: '恢复此次清理' }) as HTMLButtonElement).disabled).toBe(true)
-  })
 
-  it('shows the empty state for cleared-out batches', () => {
-    render(<NotificationHistoryModal {...props({
-      records: { open: true, status: 'ready', items: [], onOpen: vi.fn(), onClose: vi.fn(), onRestore: vi.fn() },
-    })} />)
-    expect(screen.getByRole('heading', { name: '还没有清理记录' })).toBeTruthy()
-  })
+
+
+
+
 
   it('keeps the unread-only filter empty state distinguishable from an empty history', () => {
     const view = render(<NotificationHistoryModal {...props({
@@ -227,19 +323,19 @@ describe('NotificationHistoryModal', () => {
    * 分页失败：保留已加载的行，只在这一页尾部给重试（设计 9.3）。
    *
    * 控制器此时已经把失效游标丢掉了（`hasMore` 为 false），所以重试做的是
-   * **从第一页重读**换取新游标。按钮文案必须照实写「重新加载列表」——
+   * **从第一页重读**换取新游标。按钮文案必须照实写「重新加载通知」——
    * 写「重试下一页」却重读整份列表，就是 B2 里「保留草稿」那样文案与行为互相矛盾。
    */
   it('retries a failed next page without discarding the loaded rows', async () => {
     const onLoadMore = vi.fn()
     render(<NotificationHistoryModal {...props({
-      list: { ...props().list, hasMore: false, nextPageStatus: 'error', onLoadMore },
+      list: { ...props().list, hasMore: false, nextPageStatus: 'error', onRetryPage: onLoadMore },
     })} />)
-    expect(screen.getByText('下一页加载失败，已显示的通知保留。')).toBeTruthy()
+    expect(screen.getByText('通知暂时无法继续加载')).toBeTruthy()
     // 已加载的行仍然在，不能被错误面板顶掉。
     expect(screen.getAllByText('社区公告标题').length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: '重试下一页' })).toBeNull()
-    await userEvent.click(screen.getByRole('button', { name: '重新加载列表' }))
+    await userEvent.click(screen.getByRole('button', { name: '重新加载通知' }))
     expect(onLoadMore).toHaveBeenCalledOnce()
   })
 

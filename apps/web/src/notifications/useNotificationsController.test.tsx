@@ -2,7 +2,7 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { writeToken } from '@web/src/auth/storage'
-import { bindNotificationsToken, notificationsConfig } from '@web/src/notifications/notificationsConfig'
+import { bindNotificationsToken, captureNotificationWrite, notificationsConfig } from '@web/src/notifications/notificationsConfig'
 import { SUMMARY_POLLING } from '@web/src/notifications/summaryPolling'
 import { ExAxiosError } from '@workspace/sdk/http/browser'
 
@@ -13,6 +13,8 @@ const put = vi.hoisted(() => vi.fn())
 const navigate = vi.hoisted(() => vi.fn())
 const invalidateSession = vi.hoisted(() => vi.fn())
 const authState = vi.hoisted(() => ({ status: 'authenticated' as 'authenticated' | 'anonymous' }))
+const info = vi.hoisted(() => vi.fn())
+vi.mock('@exre/exui', async () => ({ ...await vi.importActual('@exre/exui'), ExMessage: { info } }))
 vi.mock('@web/src/api/client', () => ({ api: { GET: get, POST: post, PATCH: patch, PUT: put } }))
 vi.mock('@web/src/auth/AuthContext', () => ({ useAuth: () => ({
   state: { status: authState.status }, invalidateSession, refreshProfile: vi.fn(),
@@ -84,7 +86,6 @@ function routeGet() {
   get.mockImplementation((path: string) => {
     if (path === '/notifications/summary') return Promise.resolve(summary)
     if (path === '/notifications') return Promise.resolve(page)
-    if (path === '/notifications/clear-batches') return Promise.resolve({ items: [], nextCursor: null, serverTime: 0 })
     if (deferred !== null) return deferred.promise
     return Promise.resolve(detail)
   })
@@ -100,6 +101,7 @@ afterEach(() => {
   cleanup()
   get.mockReset(); post.mockReset(); patch.mockReset(); put.mockReset()
   navigate.mockClear(); invalidateSession.mockClear()
+  info.mockClear()
   deferred = null
   authState.status = 'authenticated'
   bindNotificationsToken(null)
@@ -107,6 +109,488 @@ afterEach(() => {
 })
 
 describe('notifications controller', () => {
+  it('reloads a ready unread detail after read-all success without patching its stale revision', async () => {
+    const body = deferredResponse()
+    let detailReads = 0
+    get.mockImplementation((path: string) => path === '/notifications/summary' ? Promise.resolve(summary)
+      : path === '/notifications' ? Promise.resolve(page) : ++detailReads === 1 ? body.promise
+        : Promise.resolve({ ...detail, readAt: 123, stateRevision: 5 }))
+    post.mockResolvedValue(readAllResult)
+    patch.mockRejectedValue(new ExAxiosError('http', 'ACTION_STATE_CONFLICT', 'old revision', { status: 409 }))
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal(); hook.result.current.onSelect('receipt-1') })
+    await act(async () => { hook.result.current.bulk.onReadAll() })
+    await act(async () => { body.resolve(detail) })
+    expect(hook.result.current.detail).toMatchObject({ status: 'ready', value: { readAt: null, stateRevision: 4 } })
+    expect(patch).not.toHaveBeenCalled()
+    await act(async () => { hook.result.current.confirm.onSubmit() })
+    expect(patch).not.toHaveBeenCalled()
+    expect(hook.result.current.detail).toMatchObject({ status: 'ready', value: { readAt: 123, stateRevision: 5 }, readError: null })
+    expect(detailReads).toBe(2)
+  })
+  it('rechecks a selected renderable body when its blocking bulk confirmation is cancelled', async () => {
+    const body = deferredResponse()
+    get.mockImplementation((path: string) => path === '/notifications/summary' ? Promise.resolve(summary)
+      : path === '/notifications' ? Promise.resolve(page) : body.promise)
+    patch.mockResolvedValue({ receiptId: 'receipt-1', read: true, stateRevision: 5, unreadCount: 1, serverTime: 0 })
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal(); hook.result.current.onSelect('receipt-1') })
+    await act(async () => { hook.result.current.bulk.onReadAll() })
+    await act(async () => { body.resolve(detail) })
+    expect(hook.result.current.confirm.kind).toBe('read-all')
+    expect(patch).not.toHaveBeenCalled()
+    await act(async () => { hook.result.current.confirm.onCancel() })
+    expect(patch).toHaveBeenCalledTimes(1)
+  })
+  it.each(['success', 'failure'] as const)('recovers a selected in-flight detail after read-all %s', async outcome => {
+    const obsolete = deferredResponse()
+    let detailReads = 0
+    get.mockImplementation((path: string) => path === '/notifications/summary' ? Promise.resolve(summary)
+      : path === '/notifications' ? Promise.resolve(page) : ++detailReads === 1 ? obsolete.promise
+        : Promise.resolve({ ...detail, readAt: 123 }))
+    if (outcome === 'success') post.mockResolvedValue(readAllResult)
+    else post.mockRejectedValue(new Error('private bulk failure'))
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal(); hook.result.current.onSelect('receipt-1') })
+    await act(async () => { hook.result.current.bulk.onReadAll() })
+    await act(async () => { hook.result.current.confirm.onSubmit() })
+    expect(detailReads).toBe(2)
+    expect(hook.result.current.detail).toMatchObject({ status: 'ready', value: { receiptId: 'receipt-1', readAt: 123 } })
+    await act(async () => { obsolete.resolve(detail) })
+    expect(hook.result.current.detail.value?.readAt).toBe(123)
+    expect(patch).not.toHaveBeenCalled()
+  })
+
+  it('recovers selected in-flight detail on clear failure and clears selection on success', async () => {
+    const obsolete = deferredResponse()
+    let detailReads = 0, writes = 0
+    get.mockImplementation((path: string) => path === '/notifications/summary'
+      ? Promise.resolve({ ...summary, unreadCount: 0 }) : path === '/notifications' ? Promise.resolve(page)
+        : ++detailReads === 1 ? obsolete.promise : Promise.resolve({ ...detail, readAt: 123 }))
+    post.mockImplementation((path: string) => path === '/notifications/clear-preview' ? Promise.resolve(livePreview())
+      : ++writes === 1 ? Promise.reject(new Error('private clear failure')) : Promise.resolve(clearResult))
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal(); hook.result.current.onSelect('receipt-1') })
+    await act(async () => { hook.result.current.bulk.onClearAll() })
+    await act(async () => { hook.result.current.confirm.onSubmit() })
+    expect(hook.result.current.detail.status).toBe('ready')
+    expect(detailReads).toBe(2)
+    await act(async () => { hook.result.current.confirm.onSubmit(); obsolete.resolve(detail) })
+    expect(hook.result.current.selectedId).toBeNull()
+    expect(hook.result.current.detail).toMatchObject({ status: 'idle', value: null })
+    expect(detailReads).toBe(2)
+  })
+  it('keeps paged rows and the fresh recovery lock when a failed write invalidates old page and summary reads', async () => {
+    const oldSummary = deferredResponse(), oldPage = deferredResponse(), recovery = deferredResponse()
+    let summaries = 0, pages = 0
+    get.mockImplementation((path: string) => {
+      if (path === '/notifications/summary') return ++summaries === 1 ? oldSummary.promise : Promise.resolve(summary)
+      if (path !== '/notifications') return Promise.resolve(detail)
+      pages += 1
+      return pages === 1 ? Promise.resolve(pageOf(['A'], 'next')) : pages === 2 ? oldPage.promise : recovery.promise
+    })
+    patch.mockRejectedValue(new Error('private write failure'))
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal() })
+    await act(async () => { hook.result.current.list.onLoadMore() })
+    await act(async () => { hook.result.current.onSelect('receipt-1') })
+    expect(hook.result.current.list).toMatchObject({ status: 'ready', nextPageStatus: 'loading' })
+    expect(hook.result.current.list.items.map(item => item.title)).toEqual(['A'])
+    expect(hook.result.current.countState).toEqual({ kind: 'ready', count: 2 })
+    await act(async () => { oldPage.reject(new Error('obsolete page')); oldSummary.reject(new Error('obsolete summary')) })
+    expect(hook.result.current.list.nextPageStatus).toBe('loading')
+    expect(hook.result.current.countState).toEqual({ kind: 'ready', count: 2 })
+    await act(async () => { hook.result.current.list.onLoadMore() })
+    expect(pages).toBe(4) // history recovery and independent unread refresh
+    await act(async () => { recovery.resolve(pageOf(['fresh'], null)) })
+    expect(hook.result.current.list).toMatchObject({ status: 'ready', nextPageStatus: 'idle' })
+    expect(hook.result.current.list.items.map(item => item.title)).toEqual(['fresh'])
+  })
+
+  it('automatically reads an unavailable structured body when its text fallback is renderable', async () => {
+    get.mockImplementation((path: string) => path === '/notifications/summary' ? Promise.resolve(summary)
+      : path === '/notifications' ? Promise.resolve(page) : Promise.resolve({ ...detail, contentAvailable: false, content: null }))
+    patch.mockResolvedValue({ receiptId: 'receipt-1', read: true, stateRevision: 5, unreadCount: 1, serverTime: 0 })
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal(); hook.result.current.onSelect('receipt-1') })
+    expect(patch).toHaveBeenCalledTimes(1)
+  })
+  it('does not automatically read a detail without renderable content or text fallback', async () => {
+    get.mockImplementation((path: string) => path === '/notifications/summary' ? Promise.resolve(summary)
+      : path === '/notifications' ? Promise.resolve(page) : Promise.resolve({ ...detail, content: null, contentFallbackText: null }))
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal(); hook.result.current.onSelect('receipt-1') })
+    expect(hook.result.current.detail.status).toBe('ready')
+    expect(patch).not.toHaveBeenCalled()
+  })
+
+  it('keeps selected B detail when an older A write conflicts', async () => {
+    const firstWrite = deferredResponse()
+    get.mockImplementation((path: string, init?: { params?: { path?: { notificationId?: string } } }) => {
+      if (path === '/notifications/summary') return Promise.resolve(summary)
+      if (path === '/notifications') return Promise.resolve(page)
+      return Promise.resolve({ ...detail, receiptId: init?.params?.path?.notificationId,
+        readAt: init?.params?.path?.notificationId === 'receipt-B' ? 123 : null })
+    })
+    patch.mockReturnValueOnce(firstWrite.promise)
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal(); hook.result.current.onSelect('receipt-A') })
+    await act(async () => { hook.result.current.onSelect('receipt-B') })
+    await act(async () => { firstWrite.reject(new ExAxiosError('http', 'ACTION_STATE_CONFLICT', 'conflict', { status: 409 })) })
+    expect(hook.result.current.selectedId).toBe('receipt-B')
+    expect(hook.result.current.detail.value?.receiptId).toBe('receipt-B')
+    expect(hook.result.current.detail.readError).toBeNull()
+    expect(get.mock.calls.filter(call => call[1]?.params?.path?.notificationId === 'receipt-A')).toHaveLength(1)
+  })
+
+  it.each(['single', 'bulk'] as const)('recovers list reads invalidated by a failed %s write', async kind => {
+    const obsolete = deferredResponse()
+    let pages = 0
+    get.mockImplementation((path: string) => path === '/notifications/summary' ? Promise.resolve(summary)
+      : path === '/notifications' ? ++pages === 1 ? obsolete.promise : Promise.resolve(pageOf(['recovered'], null)) : Promise.resolve(detail))
+    patch.mockRejectedValue(new Error('private failed state write'))
+    post.mockRejectedValue(new Error('private failed bulk write'))
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal() })
+    if (kind === 'single') await act(async () => { hook.result.current.onSelect('receipt-1') })
+    else {
+      await act(async () => { hook.result.current.bulk.onReadAll() })
+      await act(async () => { hook.result.current.confirm.onSubmit() })
+    }
+    await act(async () => { obsolete.resolve(pageOf(['obsolete'], null)) })
+    expect(hook.result.current.list.status).toBe('ready')
+    expect(hook.result.current.list.items.map(item => item.title)).toEqual(['recovered'])
+    expect(hook.result.current.countState.kind).toBe('ready')
+  })
+
+  it('keeps an explicit mark-unread action unread until a new proactive selection', async () => {
+    get.mockImplementation((path: string) => path === '/notifications/summary' ? Promise.resolve(summary)
+      : path === '/notifications' ? Promise.resolve(page) : Promise.resolve({ ...detail, readAt: 123 }))
+    patch.mockResolvedValue({ receiptId: 'receipt-1', read: false, stateRevision: 5, unreadCount: 3, serverTime: 0 })
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal(); hook.result.current.onSelect('receipt-1') })
+    await act(async () => { hook.result.current.detail.onToggleRead() })
+    expect(hook.result.current.detail.value?.readAt).toBeNull()
+    expect(patch).toHaveBeenCalledTimes(1)
+    expect(patch.mock.calls[0]?.[1]).toMatchObject({ body: { read: false } })
+  })
+  it('releases only its own bulk phase when another notification module advances the write generation', async () => {
+    get.mockImplementation((path: string) => path === '/notifications/summary'
+      ? Promise.resolve({ ...summary, unreadCount: 0 }) : Promise.resolve(page))
+    const preparation = deferredResponse(), submission = deferredResponse()
+    post.mockReturnValueOnce(preparation.promise)
+    const hook = renderHook(() => useNotificationsController())
+    await waitFor(() => expect(hook.result.current.countState.kind).toBe('ready'))
+    await act(async () => { hook.result.current.bulk.onClearAll() })
+    act(() => { captureNotificationWrite() })
+    await act(async () => { preparation.resolve(livePreview()) })
+    expect(hook.result.current.bulk.preparing).toBeNull()
+    expect(hook.result.current.bulk.error).toBe('状态已变化，请重新准备。')
+    expect(hook.result.current.confirm.kind).toBeNull()
+    post.mockResolvedValueOnce(livePreview()).mockReturnValueOnce(submission.promise)
+    await act(async () => { hook.result.current.bulk.onClearAll() })
+    await act(async () => { hook.result.current.confirm.onSubmit() })
+    act(() => { captureNotificationWrite() })
+    await act(async () => { submission.resolve(clearResult) })
+    expect(hook.result.current.confirm).toMatchObject({ kind: 'clear', pending: false, error: '状态已变化，请核对后重试。' })
+    expect(hook.result.current.bulk.pending).toBeNull()
+  })
+  it('marks the currently selected body read after an earlier row write finishes', async () => {
+    const firstWrite = deferredResponse()
+    get.mockImplementation((path: string, init?: { params?: { path?: { notificationId?: string } } }) => {
+      if (path === '/notifications/summary') return Promise.resolve(summary)
+      if (path === '/notifications') return Promise.resolve(page)
+      return Promise.resolve({ ...detail, receiptId: init?.params?.path?.notificationId })
+    })
+    patch.mockReturnValueOnce(firstWrite.promise)
+      .mockResolvedValue({ receiptId: 'receipt-B', read: true, stateRevision: 5, unreadCount: 0, serverTime: 0 })
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal(); hook.result.current.onSelect('receipt-A') })
+    expect(patch).toHaveBeenCalledTimes(1)
+    await act(async () => { hook.result.current.onSelect('receipt-B') })
+    expect(hook.result.current.detail.value?.receiptId).toBe('receipt-B')
+    expect(patch).toHaveBeenCalledTimes(1)
+    await act(async () => { firstWrite.resolve({ receiptId: 'receipt-A', read: true, stateRevision: 5, unreadCount: 1, serverTime: 0 }) })
+    expect(patch).toHaveBeenCalledTimes(2)
+    expect(patch.mock.calls[1]?.[1]).toMatchObject({ params: { path: { notificationId: 'receipt-B' } } })
+  })
+
+  it('rejects retained pagination callbacks after close or switching the view', async () => {
+    get.mockImplementation((path: string) => path === '/notifications/summary' ? Promise.resolve(summary) : Promise.resolve(pageOf(['A'], 'next')))
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal() })
+    const previous = hook.result.current.list.onLoadMore
+    await act(async () => { hook.result.current.onCloseModal(); previous() })
+    expect(get.mock.calls.filter(call => call[0] === '/notifications')).toHaveLength(1)
+    await act(async () => { hook.result.current.onOpenModal() })
+    const beforeSwitch = hook.result.current.list.onLoadMore
+    await act(async () => { hook.result.current.list.onFilterChange('unread'); beforeSwitch() })
+    expect(get.mock.calls.filter(call => call[1]?.params?.query?.view === 'history')).toHaveLength(2)
+  })
+
+  it('retains the clear snapshot body and safe confirm error through a submission retry', async () => {
+    get.mockImplementation((path: string) => path === '/notifications/summary'
+      ? Promise.resolve({ ...summary, unreadCount: 0 }) : Promise.resolve(page))
+    post.mockImplementation((path: string) => path === '/notifications/clear-preview' ? Promise.resolve(livePreview())
+      : Promise.reject(new ExAxiosError('http', 'HTTP_ERROR', 'secret database credentials', { status: 500 })))
+    const hook = renderHook(() => useNotificationsController())
+    await waitFor(() => expect(hook.result.current.countState.kind).toBe('ready'))
+    await act(async () => { hook.result.current.bulk.onClearAll() })
+    await act(async () => { hook.result.current.confirm.onSubmit() })
+    expect(hook.result.current.confirm).toMatchObject({ kind: 'clear', count: 3, pending: false, error: '操作失败，原状态已保留。请重试。' })
+    await act(async () => { hook.result.current.refreshSummary(); hook.result.current.confirm.onSubmit() })
+    const submissions = post.mock.calls.filter(call => call[0] === '/notifications/clear-all')
+    expect(submissions).toHaveLength(2)
+    expect(submissions[1]?.[1]).toEqual(submissions[0]?.[1])
+    expect(post.mock.calls.filter(call => call[0] === '/notifications/clear-preview')).toHaveLength(1)
+  })
+
+  it('discards global and local reads after unmount', async () => {
+    const summaryRead = deferredResponse(), pageRead = deferredResponse(), detailRead = deferredResponse()
+    get.mockImplementation((path: string) => path === '/notifications/summary' ? summaryRead.promise
+      : path === '/notifications' ? pageRead.promise : detailRead.promise)
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal(); hook.result.current.onSelect('receipt-1') })
+    hook.unmount()
+    await act(async () => { summaryRead.resolve(summary); pageRead.resolve(page); detailRead.resolve(detail) })
+    expect(notificationsConfig.summary.status).not.toBe('ready')
+    expect(notificationsConfig.history.items).toHaveLength(0)
+    expect(patch).not.toHaveBeenCalled()
+  })
+  it('retries a failed read-all preparation with the same action despite a failed count', async () => {
+    const hook = renderHook(() => useNotificationsController())
+    await waitFor(() => expect(hook.result.current.countState.kind).toBe('ready'))
+    get.mockRejectedValueOnce(new ExAxiosError('http', 'HTTP_ERROR', 'secret connection', { status: 500 }))
+    await act(async () => { hook.result.current.bulk.onReadAll() })
+    expect(hook.result.current.bulk.error).toBe('未读计数暂时无法读取，请重试。')
+    expect(hook.result.current.countState.kind).toBe('error')
+    await act(async () => { hook.result.current.bulk.onReadAll() })
+    expect(hook.result.current.confirm).toMatchObject({ kind: 'read-all', count: 2 })
+    expect(hook.result.current.bulk.error).toBeNull()
+  })
+
+  it('rejects normal bulk actions while the global count is unknown or failed', async () => {
+    const pending = deferredResponse()
+    get.mockImplementation(() => pending.promise)
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.bulk.onReadAll(); hook.result.current.bulk.onClearAll() })
+    expect(post).not.toHaveBeenCalled()
+    expect(get).toHaveBeenCalledTimes(1)
+    await act(async () => { pending.reject(new Error('private connection')) })
+    expect(hook.result.current.countState.kind).toBe('error')
+    await act(async () => { hook.result.current.bulk.onReadAll(); hook.result.current.bulk.onClearAll() })
+    expect(post).not.toHaveBeenCalled()
+    expect(get).toHaveBeenCalledTimes(1)
+  })
+
+  it('guards read-all preparation, confirmation and submission synchronously', async () => {
+    const hook = renderHook(() => useNotificationsController())
+    await waitFor(() => expect(hook.result.current.countState.kind).toBe('ready'))
+    const prepared = deferredResponse(), submitted = deferredResponse()
+    get.mockImplementation(() => prepared.promise)
+    post.mockImplementation(() => submitted.promise)
+    await act(async () => { hook.result.current.bulk.onReadAll(); hook.result.current.bulk.onReadAll() })
+    expect(get).toHaveBeenCalledTimes(2)
+    expect(hook.result.current.bulk.preparing).toBe('read-all')
+    await act(async () => { prepared.resolve(summary) })
+    await act(async () => { hook.result.current.bulk.onReadAll(); hook.result.current.bulk.onClearAll() })
+    expect(get).toHaveBeenCalledTimes(2)
+    expect(post).not.toHaveBeenCalled()
+    await act(async () => { hook.result.current.confirm.onSubmit(); hook.result.current.confirm.onSubmit() })
+    expect(post).toHaveBeenCalledTimes(1)
+    await act(async () => { submitted.reject(new Error('private stack trace')) })
+    expect(hook.result.current.confirm).toMatchObject({ kind: 'read-all', pending: false, error: '操作失败，原状态已保留。请重试。' })
+  })
+
+  it('accepts only the latest first page and discards pagination superseded by refresh', async () => {
+    const first = deferredResponse(), second = deferredResponse(), next = deferredResponse()
+    let reads = 0
+    get.mockImplementation((path: string, init?: { params?: { query?: { cursor?: string } } }) => {
+      if (path !== '/notifications') return routeGetCalls(path)
+      if (init?.params?.query?.cursor) return next.promise
+      reads += 1
+      return reads === 1 ? first.promise : reads === 2 ? second.promise : Promise.resolve(pageOf(['fresh'], 'fresh-cursor'))
+    })
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal() })
+    await act(async () => { hook.result.current.list.onRetry() })
+    await act(async () => { second.resolve(pageOf(['new'], 'next')) })
+    const version = hook.result.current.list.resetVersion
+    await act(async () => { first.resolve(pageOf(['old'], null)) })
+    expect(hook.result.current.list.items.map(item => item.title)).toEqual(['new'])
+    expect(hook.result.current.list.resetVersion).toBe(version)
+    await act(async () => { hook.result.current.list.onLoadMore() })
+    await act(async () => { hook.result.current.list.onRetry() })
+    await act(async () => { next.resolve(pageOf(['old-page'], null)) })
+    expect(hook.result.current.list.items.map(item => item.title)).toEqual(['fresh'])
+    expect(hook.result.current.list.hasMore).toBe(true)
+  })
+
+  it('does not let an older summary response overwrite the latest accepted summary', async () => {
+    const old = deferredResponse(), latest = deferredResponse()
+    get.mockReturnValueOnce(old.promise).mockReturnValueOnce(latest.promise)
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.refreshSummary() })
+    await act(async () => { latest.resolve({ ...summary, unreadCount: 8 }) })
+    await act(async () => { old.resolve({ ...summary, unreadCount: 1 }) })
+    expect(hook.result.current.countState).toEqual({ kind: 'ready', count: 8 })
+  })
+
+  it('deduplicates Popup and modal unread loads and preserves their paged unread list', async () => {
+    const first = deferredResponse()
+    get.mockImplementation((path: string, init?: { params?: { query?: { view?: string; cursor?: string } } }) => {
+      if (path !== '/notifications') return routeGetCalls(path)
+      if (init?.params?.query?.view === 'history') return Promise.resolve(page)
+      return init?.params?.query?.cursor ? Promise.resolve(pageOf(['B'], null)) : first.promise
+    })
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.setPopupOpen(true) })
+    await act(async () => { hook.result.current.onOpenModal(); hook.result.current.list.onFilterChange('unread') })
+    const unreadCalls = () => get.mock.calls.filter(call => call[1]?.params?.query?.view === 'unread').length
+    expect(unreadCalls()).toBe(1)
+    await act(async () => { first.resolve(pageOf(['A'], 'next')) })
+    await act(async () => { hook.result.current.list.onLoadMore() })
+    await act(async () => { hook.result.current.setPopupOpen(true); hook.result.current.onRetryUnread() })
+    expect(unreadCalls()).toBe(2)
+    expect(hook.result.current.list.items.map(item => item.title)).toEqual(['A', 'B'])
+  })
+
+  it('refreshes an active unread view exactly once after a write without trusting replay counts', async () => {
+    post.mockResolvedValue({ ...readAllResult, replayed: true, unreadCount: 99 })
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal(); hook.result.current.list.onFilterChange('unread') })
+    const before = get.mock.calls.filter(call => call[0] === '/notifications').length
+    await act(async () => { hook.result.current.bulk.onReadAll() })
+    const fresh = deferredResponse()
+    get.mockImplementation((path: string) => path === '/notifications/summary' ? fresh.promise : Promise.resolve(page))
+    await act(async () => { hook.result.current.confirm.onSubmit() })
+    expect(get.mock.calls.filter(call => call[0] === '/notifications')).toHaveLength(before + 1)
+    expect(hook.result.current.countState.kind).toBe('loading')
+    expect(notificationsConfig.summary.unreadCount).toBe(2)
+    await act(async () => { fresh.resolve(summary) })
+  })
+
+  it.each(['close', 'tab'] as const)('discards list and detail reads after %s', async action => {
+    const list = deferredResponse(), body = deferredResponse()
+    get.mockImplementation((path: string, init?: { params?: { query?: { view?: string } } }) => {
+      if (path === '/notifications/summary') return Promise.resolve(summary)
+      if (path === '/notifications/{notificationId}') return body.promise
+      return init?.params?.query?.view === 'unread' ? Promise.resolve(page) : list.promise
+    })
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal(); hook.result.current.onSelect('receipt-1') })
+    await act(async () => {
+      if (action === 'close') hook.result.current.onCloseModal()
+      else hook.result.current.list.onFilterChange('unread')
+    })
+    await act(async () => { list.resolve(pageOf(['private'], null)); body.resolve(detail) })
+    expect(notificationsConfig.history.items).toHaveLength(0)
+    expect(hook.result.current.selectedId).toBeNull()
+    expect(hook.result.current.detail.value).toBeNull()
+    expect(patch).not.toHaveBeenCalled()
+  })
+
+  it('clears local private selections and intents when the token changes while still authenticated', async () => {
+    get.mockImplementation((path: string) => path === '/notifications/summary' ? Promise.resolve(summary)
+      : path === '/notifications/{notificationId}' ? Promise.resolve({ ...detail, readAt: 123 }) : Promise.resolve(page))
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal(); hook.result.current.onSelect('receipt-1') })
+    await act(async () => { hook.result.current.bulk.onReadAll() })
+    expect(hook.result.current.detail.value).not.toBeNull()
+    expect(hook.result.current.confirm.kind).toBe('read-all')
+    await act(async () => { writeToken(window.localStorage, 'second-account'); bindNotificationsToken('second-account') })
+    expect(hook.result.current.authenticated).toBe(true)
+    expect(hook.result.current.modalOpen).toBe(false)
+    expect(hook.result.current.selectedId).toBeNull()
+    expect(hook.result.current.detail.value).toBeNull()
+    expect(hook.result.current.confirm.kind).toBeNull()
+    expect(hook.result.current.bulk).toMatchObject({ pending: null, preparing: null, error: null })
+    await act(async () => { hook.result.current.confirm.onSubmit() })
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('keeps old rows through a failed explicit page recovery', async () => {
+    let requests = 0
+    get.mockImplementation((path: string) => path !== '/notifications' ? routeGetCalls(path)
+      : ++requests === 1 ? Promise.resolve(pageOf(['A'], 'next')) : Promise.reject(new Error('secret database error')))
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal() })
+    await act(async () => { hook.result.current.list.onLoadMore() })
+    const version = hook.result.current.list.resetVersion
+    await act(async () => { hook.result.current.list.onRetryPage() })
+    expect(hook.result.current.list).toMatchObject({ status: 'ready', nextPageStatus: 'error', hasMore: false, resetVersion: version })
+    expect(hook.result.current.list.items.map(item => item.title)).toEqual(['A'])
+  })
+
+  it('stops automatic pagination when the server repeats a completed cursor', async () => {
+    get.mockImplementation((path: string, init?: { params?: { query?: { cursor?: string } } }) => path !== '/notifications'
+      ? routeGetCalls(path) : Promise.resolve(pageOf(init?.params?.query?.cursor ? ['B'] : ['A'], 'same')))
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal() })
+    await act(async () => { hook.result.current.list.onLoadMore() })
+    expect(hook.result.current.list).toMatchObject({ nextPageStatus: 'error', canAutoLoad: false, hasMore: false })
+    await act(async () => { hook.result.current.list.onLoadMore() })
+    expect(get.mock.calls.filter(call => call[0] === '/notifications')).toHaveLength(2)
+  })
+
+  it('restores closing and drops intent on SESSION_INVALID during submission', async () => {
+    post.mockRejectedValue(new ExAxiosError('http', 'SESSION_INVALID', 'private expired details', { status: 401 }))
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal() })
+    await act(async () => { hook.result.current.bulk.onReadAll() })
+    await act(async () => { hook.result.current.confirm.onSubmit() })
+    expect(invalidateSession).toHaveBeenCalledWith('session-token')
+    expect(hook.result.current.modalOpen).toBe(false)
+    expect(hook.result.current.confirm).toMatchObject({ kind: null, pending: false, error: null })
+    expect(hook.result.current.bulk).toMatchObject({ pending: null, preparing: null, error: null })
+  })
+  it('deduplicates simultaneous page callbacks and refuses to reread without a cursor', async () => {
+    let release!: (value: unknown) => void
+    get.mockImplementation((path: string, init?: { params?: { query?: { cursor?: string } } }) => {
+      if (path !== '/notifications') return routeGetCalls(path)
+      if (init?.params?.query?.cursor) return new Promise(resolve => { release = resolve })
+      return Promise.resolve(pageOf(['A'], 'next'))
+    })
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal() })
+    await act(async () => { hook.result.current.list.onLoadMore(); hook.result.current.list.onLoadMore() })
+    expect(get.mock.calls.filter(call => call[0] === '/notifications')).toHaveLength(2)
+    await act(async () => { release(pageOf(['A', 'B'], null)) })
+    expect(hook.result.current.list.items.map(item => item.title)).toEqual(['A', 'B'])
+    await act(async () => { hook.result.current.list.onLoadMore() })
+    expect(get.mock.calls.filter(call => call[0] === '/notifications')).toHaveLength(2)
+  })
+
+  it('keeps a fixed read-all body through polling and an uncertain retry', async () => {
+    post.mockRejectedValueOnce(new Error('internal secret')).mockResolvedValueOnce(readAllResult)
+    const hook = renderHook(() => useNotificationsController())
+    await waitFor(() => expect(hook.result.current.countState.kind).toBe('ready'))
+    await act(async () => { hook.result.current.bulk.onReadAll() })
+    await act(async () => { hook.result.current.confirm.onSubmit() })
+    expect(hook.result.current.confirm.kind).toBe('read-all')
+    get.mockImplementation((path: string) => path === '/notifications/summary'
+      ? Promise.resolve({ ...summary, unreadCount: 7, readThroughToken: 'new.token' }) : Promise.resolve(page))
+    await act(async () => { hook.result.current.refreshSummary() })
+    expect(hook.result.current.confirm.count).toBe(2)
+    await act(async () => { hook.result.current.confirm.onSubmit() })
+    expect(post.mock.calls[1]?.[1]).toEqual(post.mock.calls[0]?.[1])
+  })
+
+  it('does not confirm or submit a zero-item clear preview', async () => {
+    get.mockImplementation((path: string) => path === '/notifications/summary'
+      ? Promise.resolve({ ...summary, unreadCount: 0 }) : Promise.resolve(page))
+    post.mockResolvedValue(livePreview({ itemCount: 0 }))
+    const hook = renderHook(() => useNotificationsController())
+    await waitFor(() => expect(hook.result.current.countState.kind).toBe('ready'))
+    const summaryRequests = get.mock.calls.filter(call => call[0] === '/notifications/summary').length
+    await act(async () => { hook.result.current.bulk.onClearAll(); hook.result.current.bulk.onClearAll() })
+    expect(get.mock.calls.filter(call => call[0] === '/notifications/summary')).toHaveLength(summaryRequests + 1)
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(hook.result.current.confirm.kind).toBeNull()
+    await act(async () => { hook.result.current.confirm.onSubmit() })
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(info).toHaveBeenCalledWith('暂无可清理通知。')
+  })
   it('reads the global count on its own endpoint and never derives it from a page', async () => {
     const hook = renderHook(() => useNotificationsController())
     await waitFor(() => expect(get).toHaveBeenCalledWith('/notifications/summary', { alert: false }))
@@ -364,7 +848,7 @@ describe('notifications controller', () => {
     await act(async () => { hook.result.current.onOpenModal() })
     await waitFor(() => expect(hook.result.current.list.status).toBe('ready'))
     await act(async () => { hook.result.current.onSelect('receipt-1') })
-    await waitFor(() => expect(hook.result.current.detail.readError).toBe('写入失败'))
+    await waitFor(() => expect(hook.result.current.detail.readError).toBe('状态保存失败，正文和未读状态已保留。'))
     expect(patch).toHaveBeenCalledTimes(1)
     hook.unmount()
   })
@@ -401,27 +885,9 @@ describe('notifications controller', () => {
     hook.unmount()
   })
 
-  it('discards a late detail response once a later write has superseded it', async () => {
-    const hook = renderHook(() => useNotificationsController())
-    await act(async () => { hook.result.current.onOpenModal() })
-    await waitFor(() => expect(hook.result.current.list.status).toBe('ready'))
-
-    let releaseDetail!: (value: unknown) => void
-    deferred = { promise: new Promise(resolve => { releaseDetail = resolve }), release: releaseDetail }
-    let pendingDetail!: Promise<void>
-    await act(async () => { pendingDetail = Promise.resolve(hook.result.current.onSelect('receipt-1')) })
-
-    post.mockResolvedValue(readAllResult)
-    await act(async () => { await hook.result.current.bulk.onReadAll() })
-    await act(async () => { await hook.result.current.confirm.onSubmit() })
-
-    await act(async () => { releaseDetail(detail); await pendingDetail })
-    // 写已经开始，读到的是写之前的快照，因此被丢弃。
-    expect(hook.result.current.detail.value).toBeNull()
-    hook.unmount()
-  })
-
   it('sends the previewed scope and reuses one request id for the clear intent', async () => {
+    get.mockImplementation((path: string) => path === '/notifications/summary'
+      ? Promise.resolve({ ...summary, unreadCount: 0 }) : Promise.resolve(page))
     post.mockImplementation((path: string) => path === '/notifications/clear-preview'
       ? Promise.resolve(livePreview())
       : Promise.resolve(clearResult))
@@ -437,9 +903,7 @@ describe('notifications controller', () => {
     expect(submit).toBeTruthy()
     expect(submit![1]).toMatchObject({ body: { clearSnapshotToken: 'clear.snapshot.token' } })
     expect(typeof (submit![1] as { body: { requestId: string } }).body.requestId).toBe('string')
-    await waitFor(() => expect(hook.result.current.bulk.message)
-      .toBe('已清理 2 条，跳过 1 条；新到通知仍保留。'))
-    expect(hook.result.current.bulk.lastClearedBatchId).toBe('batch-1')
+    expect(info).toHaveBeenCalledWith('已清理 2 条，跳过 1 条；新到通知仍保留。')
     hook.unmount()
   })
 
@@ -479,7 +943,7 @@ describe('notifications controller', () => {
     expect(hook.result.current.list.hasMore).toBe(false)
 
     // 重试：必须重读第一页换新游标，而不是把失效游标再发一次。
-    await act(async () => { hook.result.current.list.onLoadMore() })
+    await act(async () => { hook.result.current.list.onRetryPage() })
     await waitFor(() => expect(hook.result.current.list.nextPageStatus).toBe('idle'))
     expect(requestedCursors).toEqual([undefined, 'cursor-fresh', undefined])
     expect(hook.result.current.list.hasMore).toBe(true)
@@ -515,7 +979,7 @@ describe('notifications controller', () => {
     await waitFor(() => expect(hook.result.current.list.nextPageStatus).toBe('error'))
 
     // 重读在途：状态仍是 ready（行还在），进度只体现在 nextPageStatus 上。
-    await act(async () => { void hook.result.current.list.onLoadMore() })
+    await act(async () => { hook.result.current.list.onRetryPage() })
     await waitFor(() => expect(hook.result.current.list.nextPageStatus).toBe('loading'))
     expect(hook.result.current.list.status).toBe('ready')
     expect(hook.result.current.list.items).toHaveLength(1)
@@ -535,6 +999,8 @@ describe('notifications controller', () => {
    * 方向的偏移走向相反的错误结论。
    */
   it('treats the preview as expired when the server clock is ahead of this machine', async () => {
+    get.mockImplementation((path: string) => path === '/notifications/summary'
+      ? Promise.resolve({ ...summary, unreadCount: 0 }) : Promise.resolve(page))
     // 服务端快 1 小时。`expiresAt` 在本机看还有 30 分钟，但在服务端时钟上已经过期 30 分钟。
     const localNow = Date.now()
     post.mockImplementation((path: string) => path === '/notifications/clear-preview'
@@ -553,6 +1019,8 @@ describe('notifications controller', () => {
   })
 
   it('keeps the preview valid when this machine clock is ahead of the server', async () => {
+    get.mockImplementation((path: string) => path === '/notifications/summary'
+      ? Promise.resolve({ ...summary, unreadCount: 0 }) : Promise.resolve(page))
     // 反过来：本机快 1 小时。`expiresAt` 在本机看已过期 30 分钟，但服务端还剩 30 分钟。
     const localNow = Date.now()
     post.mockImplementation((path: string) => path === '/notifications/clear-preview'
@@ -570,40 +1038,6 @@ describe('notifications controller', () => {
     hook.unmount()
   })
 
-  it('never offers an undo entry for a zero-item clear', async () => {
-    post.mockImplementation((path: string) => path === '/notifications/clear-preview'
-      ? Promise.resolve(livePreview())
-      : Promise.resolve({ ...clearResult, affectedCount: 0, skippedCount: 3 }))
-    const hook = renderHook(() => useNotificationsController())
-    await act(async () => { hook.result.current.onOpenModal() })
-    await waitFor(() => expect(hook.result.current.list.status).toBe('ready'))
-    await act(async () => { await hook.result.current.bulk.onClearAll() })
-    await act(async () => { await hook.result.current.confirm.onSubmit() })
-    await waitFor(() => expect(hook.result.current.bulk.message)
-      .toBe('已清理 0 条，跳过 3 条；新到通知仍保留。'))
-    expect(hook.result.current.bulk.lastClearedBatchId).toBeNull()
-    hook.unmount()
-  })
-
-  it('replays the same request id when a restore has to be retried', async () => {
-    post.mockRejectedValueOnce(new ExAxiosError('network', 'NETWORK_ERROR', '网络连接失败，请稍后重试'))
-      .mockResolvedValueOnce({
-        requestId: 'ignored', batchId: 'batch-1', affectedCount: 3, skippedCount: 1,
-        unreadCount: 1, replayed: false, serverTime: 0,
-      })
-    const hook = renderHook(() => useNotificationsController())
-    await act(async () => { hook.result.current.onOpenModal() })
-    await waitFor(() => expect(hook.result.current.list.status).toBe('ready'))
-    await act(async () => { await hook.result.current.records.onRestore('batch-1') })
-    await act(async () => { await hook.result.current.records.onRestore('batch-1') })
-    const calls = post.mock.calls.filter(call => call[0] === '/notifications/clear-batches/{batchId}/restore')
-    expect(calls).toHaveLength(2)
-    // 结果未知的重试是重放同一个意图，不是新意图：换 key 会绕过服务端的幂等裁决。
-    expect(getRequestId(calls[0]!)).toBe(getRequestId(calls[1]!))
-    await waitFor(() => expect(hook.result.current.bulk.message)
-      .toBe('已恢复 3 条仍符合条件的通知；过期项只回到历史。'))
-    hook.unmount()
-  })
 
   it('submits read-all with the signed read-through token and keeps new arrivals unread', async () => {
     post.mockResolvedValue(readAllResult)
@@ -616,8 +1050,7 @@ describe('notifications controller', () => {
       alert: false,
       body: { requestId: expect.any(String), readThroughToken: 'read.through.token' },
     })
-    await waitFor(() => expect(hook.result.current.bulk.message)
-      .toBe('已标记本次选定通知，新到通知仍未读。'))
+    expect(info).toHaveBeenCalledWith('已标记本次选定通知，新到通知仍未读。')
     hook.unmount()
   })
 
@@ -645,6 +1078,9 @@ function routeGetCalls(path: string) {
   return Promise.resolve(page)
 }
 
-function getRequestId(call: unknown[]): unknown {
-  return (call[1] as { body: { requestId: string } }).body.requestId
+function deferredResponse() {
+  let resolve!: (value: unknown) => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<unknown>((accept, fail) => { resolve = accept; reject = fail })
+  return { promise, resolve, reject }
 }

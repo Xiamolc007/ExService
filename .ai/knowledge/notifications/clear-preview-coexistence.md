@@ -11,10 +11,10 @@ _最后更新：2026-10-09_
 | 直觉写法 | 破坏点 |
 | --- | --- |
 | 新建预览前删掉旧预览（或原地改写旧批次） | 旧 token 指向的批次不存在了，或更糟 —— 原地复用时旧 token 会**静默作用到一份它从未预览过的集合上**（`clearSnapshot` 只按 `batchId` 取批，不复核 token 里的 `n` / `s`） |
-| 快照未变就复用同一批次 | 两份预览变成同一个 `batchId`，另一台设备先清理再恢复后，「旧预览跳过变化项」的场景不再存在，退化成 `NOTIFICATION_TOKEN_INVALID` |
+| 快照未变就复用同一批次 | 两份预览变成同一个 `batchId`，提交其中一份后，另一份不再独立有效，退化成 `NOTIFICATION_TOKEN_INVALID` |
 
-设计 9.2 明确要求：「预览后另一设备已清理/恢复的同一项 clearRevision 改变，旧 preview 跳过」。
-`tests/notifications/service.test.ts` 的 `skips an item another device cleared and restored after the preview`
+旧预览必须跳过 `clearRevision` 已变化的项。恢复能力已从 Contract 0.6.0 删除，历史字段与版本核验继续保留；测试通过隔离数据库 fixture 改变版本，不保留生产恢复入口。
+`tests/notifications/service.test.ts` 的 `skips a receipt whose clear revision changed after the preview`
 直接断言了这一点（旧预览提交后 `affectedCount=0` / `skippedCount=1`）。
 
 ## 如何应用
@@ -22,8 +22,7 @@ _最后更新：2026-10-09_
 - 回收只清 **已过期** 的 preview 批次：`preview_expires_at < now`。
   这些行的 token 在 `verifyToken` 里就已经抛 `NOTIFICATION_TOKEN_EXPIRED`，再也不会被任何请求读到，
   清掉它们不改变任何用户可见错误码。实现见 `repository.ts::discardExpiredPreviewBatches`。
-- 已 `applied` / `restored` 的批次是**恢复记录**，不在回收范围内。设计 9.2 的「物理删除及自动 retention
-  不在 N1」说的正是这些记录，不是临时预览。
+- 已 `applied` 的批次和历史 `restored` 批次保存执行事实，不在预览回收范围内。批次与 item 表继续支撑精确快照和幂等，并不提供恢复能力；历史兼容规则见 `.ai/databases/data-model.md`。
 - 快照写入用一次 `unnest` 完成，不要逐条 INSERT：快照没有 LIMIT，逐条会把它变成 N 次往返，
   而整段都跑在已持有 user/stream 行锁的事务里。
 - 残留量**不是 0**：回收是 user-scoped 且只在新建预览时触发，所以**每个用户最后一个有效期窗口内的
@@ -40,3 +39,5 @@ _最后更新：2026-10-09_
   （同一时刻的两份预览都保留、越过有效期后旧的那份随下次预览清掉、过期 token 仍报 410 而不是 404）
 - `tests/notifications/service.test.ts` 的 `does not let abandoned previews accumulate across repeated windows`
   （20 次点开跨 10 个窗口，残留等于一个窗口的 2 份，不是 20 份）
+- `tests/notifications/service.test.ts` 的 `keeps live previews independent and preserves executed batches during expiry cleanup`
+  （两份有效预览各自可提交，旧预览跳过已经变化的项，过期回收保留执行历史）
