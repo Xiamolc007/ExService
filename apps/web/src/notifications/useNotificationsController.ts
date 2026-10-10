@@ -44,6 +44,8 @@ export function useNotificationsController() {
   const currentView = useRef({ open: false, filter: 'all' as NotificationHistoryFilter })
   currentView.current = { open: modalOpen, filter }
   const [detailStatus, setDetailStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const detailStatusRef = useRef(detailStatus)
+  detailStatusRef.current = detailStatus
   const [detail, setDetail] = useState<NotificationDetail | null>(null)
   const [readPending, setReadPending] = useState(false)
   const [readError, setReadError] = useState<string | null>(null)
@@ -80,20 +82,21 @@ export function useNotificationsController() {
       if (slice.nextPageStatus === 'loading') slice.nextPageStatus = 'idle'
     }
   }, [])
-  const resetLocal = useCallback(() => {
+  const resetLocal = useCallback((resetWrites = false) => {
     uiGeneration.current += 1; detailRequestId.current += 1
-    readRequestId.current += 1; readInFlight.current = false
+    // Closing a view cannot cancel a PATCH already submitted to the server.
+    if (resetWrites) { readRequestId.current += 1; readInFlight.current = false }
     autoReadSuppressed.current = null
     selectedReceipt.current = null
     clearPreview.current = null; readAllIntent.current = null; bulkPhase.current = 'idle'; failedPreparationKind.current = null
-    setSelectedId(null); setDetail(null); setDetailStatus('idle'); setReadPending(false); setReadError(null)
+    setSelectedId(null); setDetail(null); setDetailStatus('idle'); setReadPending(readInFlight.current); setReadError(null)
     setBulkPending(null); setBulkPreparing(null); setBulkError(null); setConfirm(null); setConfirmError(null)
   }, [])
   const sessionInvalid = useCallback((error: unknown) => {
     if (!(error instanceof ExAxiosError) || error.code !== 'SESSION_INVALID') return false
     const token = currentToken()
     if (token !== null) auth.invalidateSession(token)
-    bindNotificationsToken(null); invalidatePages(); resetLocal()
+    bindNotificationsToken(null); invalidatePages(); resetLocal(true)
     summaryRequestId.current += 1; summaryInFlight.current = null
     setPopupOpen(false); setModalOpen(false)
     currentView.current.open = false
@@ -108,7 +111,7 @@ export function useNotificationsController() {
     if (auth.state.status === 'anonymous') bindNotificationsToken(null)
     if (ownedEpoch.current !== snapshot.epoch || !authenticated) {
       ownedEpoch.current = snapshot.epoch
-      invalidatePages(); resetLocal(); summaryRequestId.current += 1; summaryInFlight.current = null
+      invalidatePages(); resetLocal(true); summaryRequestId.current += 1; summaryInFlight.current = null
       scheduler.reset(); setPopupOpen(false); setModalOpen(false); setFilter('all')
       currentView.current = { open: false, filter: 'all' }
     }
@@ -265,11 +268,11 @@ export function useNotificationsController() {
   useEffect(() => { if (modalOpen) void loadPage(filter, null) }, [modalOpen, filter, loadPage])
   const refreshAfterWrite = useCallback((keepItems = false) => {
     invalidatePages(); void loadSummary()
-    for (const view of new Set<NotificationHistoryFilter>(['unread', filter])) {
+    for (const view of new Set<NotificationHistoryFilter>(['unread', currentView.current.filter])) {
       const slice = view === 'unread' ? notificationsConfig.unread : notificationsConfig.history
       void loadPage(view, null, { force: true, keepItems: keepItems && slice.items.length > 0 })
     }
-  }, [invalidatePages, loadSummary, loadPage, filter])
+  }, [invalidatePages, loadSummary, loadPage])
 
   const loadDetail = useCallback(async (receiptId: string) => {
     if (!authenticated || currentToken() === null) return
@@ -294,7 +297,7 @@ export function useNotificationsController() {
     if (!authenticated || readInFlight.current || bulkPhase.current !== 'idle') return
     readInFlight.current = true
     const requestId = ++readRequestId.current, local = uiGeneration.current, generation = captureNotificationWrite()
-    const accepted = () => mounted.current && uiGeneration.current === local && requestId === readRequestId.current && isCurrentNotificationGeneration(generation)
+    const accepted = () => mounted.current && requestId === readRequestId.current && isCurrentNotificationGeneration(generation)
     setReadPending(true); setReadError(null)
     try {
       const result = await api.PATCH('/notifications/{notificationId}/state', { alert: false,
@@ -305,20 +308,23 @@ export function useNotificationsController() {
         ...current, readAt: result.read ? current.deliveredAt : null, stateRevision: result.stateRevision,
       })
       refreshAfterWrite()
+      if (detailStatusRef.current === 'loading' && selectedReceipt.current !== null) void loadDetail(selectedReceipt.current)
     } catch (error) {
       if (!accepted() || sessionInvalid(error)) return
       autoReadSuppressed.current = receiptId
       refreshAfterWrite(true)
-      if (error instanceof ExAxiosError && error.status === 409) {
-        if (selectedId === receiptId) void loadDetail(receiptId)
-        setReadError('状态已变化（409），已刷新。请核对后再操作。')
-      } else setReadError('状态保存失败，正文和未读状态已保留。')
+      if (uiGeneration.current === local && selectedReceipt.current === receiptId) {
+        if (error instanceof ExAxiosError && error.status === 409) {
+          void loadDetail(receiptId)
+          setReadError('状态已变化（409），已刷新。请核对后再操作。')
+        } else setReadError('状态保存失败，正文和未读状态已保留。')
+      }
     } finally {
-      if (uiGeneration.current === local && requestId === readRequestId.current && mounted.current) {
+      if (requestId === readRequestId.current && mounted.current) {
         readInFlight.current = false; setReadPending(false)
       }
     }
-  }, [authenticated, sessionInvalid, refreshAfterWrite, selectedId, loadDetail])
+  }, [authenticated, sessionInvalid, refreshAfterWrite, loadDetail])
   const toggleRead = useCallback(() => {
     if (selectedId === null) return
     const revision = detail?.receiptId === selectedId ? detail.stateRevision

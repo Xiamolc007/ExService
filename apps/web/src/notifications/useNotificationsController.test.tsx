@@ -842,6 +842,94 @@ describe('notifications controller', () => {
     hook.unmount()
   })
 
+  it.each(['close', 'filter'] as const)('settles a submitted read and refreshes the current view after %s', async action => {
+    const write = deferredResponse()
+    let saved = false
+    patch.mockReturnValue(write.promise)
+    get.mockImplementation((path: string, init?: { params?: { query?: { view?: string } } }) => Promise.resolve(
+      path === '/notifications/summary' ? { ...summary, unreadCount: saved ? 1 : 2 }
+        : path === '/notifications/{notificationId}' ? detail
+          : { ...page, items: saved && init?.params?.query?.view === 'unread' ? []
+            : [{ ...page.items[0]!, readAt: saved ? 123 : null, stateRevision: saved ? 5 : 4 }] }))
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal() })
+    await act(async () => { hook.result.current.onSelect('receipt-1') })
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
+    if (action === 'close') {
+      await act(async () => { hook.result.current.onCloseModal() })
+      await act(async () => { hook.result.current.onOpenModal() })
+    } else await act(async () => { hook.result.current.list.onFilterChange('unread') })
+    await act(async () => { saved = true; write.resolve({ receiptId: 'receipt-1', read: true, stateRevision: 5, unreadCount: 1, serverTime: 0 }) })
+    await waitFor(() => expect(hook.result.current.countState).toEqual({ kind: 'ready', count: 1 }))
+    expect(notificationsConfig.unread.items).toEqual([])
+    if (action === 'close') expect(hook.result.current.list.items[0]).toMatchObject({ readAt: 123, stateRevision: 5 })
+    else expect(hook.result.current.list).toMatchObject({ filter: 'unread', status: 'ready', items: [] })
+    hook.unmount()
+  })
+
+  it('keeps a submitted read locked across close and reopen until it settles', async () => {
+    const write = deferredResponse()
+    patch.mockReturnValue(write.promise)
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal(); hook.result.current.onSelect('receipt-1') })
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
+    await act(async () => { hook.result.current.onCloseModal() })
+    await act(async () => { hook.result.current.onOpenModal(); hook.result.current.onSelect('receipt-1') })
+    expect(hook.result.current.detail.readPending).toBe(true)
+    await act(async () => { hook.result.current.detail.onToggleRead(); hook.result.current.bulk.onReadAll() })
+    expect(patch).toHaveBeenCalledTimes(1)
+    expect(hook.result.current.confirm.kind).toBeNull()
+    await act(async () => { write.resolve({ receiptId: 'receipt-1', read: true, stateRevision: 5, unreadCount: 1, serverTime: 0 }) })
+    expect(hook.result.current.detail).toMatchObject({ readPending: false, value: { stateRevision: 5 } })
+    hook.unmount()
+  })
+
+  it('replaces a pre-commit detail read after reopening while the submitted write settles', async () => {
+    const write = deferredResponse(), obsoleteDetail = deferredResponse()
+    let detailReads = 0
+    patch.mockReturnValue(write.promise)
+    get.mockImplementation((path: string) => path === '/notifications/summary' ? Promise.resolve(summary)
+      : path === '/notifications' ? Promise.resolve(page)
+        : ++detailReads === 1 ? Promise.resolve(detail) : detailReads === 2 ? obsoleteDetail.promise
+          : Promise.resolve({ ...detail, readAt: 123, stateRevision: 5 }))
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal(); hook.result.current.onSelect('receipt-1') })
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
+    await act(async () => { hook.result.current.onCloseModal() })
+    await act(async () => { hook.result.current.onOpenModal(); hook.result.current.onSelect('receipt-1') })
+    expect(hook.result.current.detail.status).toBe('loading')
+    await act(async () => { write.resolve({ receiptId: 'receipt-1', read: true, stateRevision: 5, unreadCount: 1, serverTime: 0 }) })
+    await waitFor(() => expect(hook.result.current.detail).toMatchObject({ status: 'ready', value: { stateRevision: 5 } }))
+    await act(async () => { obsoleteDetail.resolve(detail) })
+    expect(hook.result.current.detail.value).toMatchObject({ readAt: 123, stateRevision: 5 })
+    expect(patch).toHaveBeenCalledTimes(1)
+    hook.unmount()
+  })
+
+  it.each(['success', 'failure'] as const)('does not settle or unlock a new account read on an old account %s', async outcome => {
+    const oldWrite = deferredResponse(), newWrite = deferredResponse()
+    patch.mockReturnValueOnce(oldWrite.promise).mockReturnValueOnce(newWrite.promise)
+    const hook = renderHook(() => useNotificationsController())
+    await act(async () => { hook.result.current.onOpenModal(); hook.result.current.onSelect('receipt-1') })
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
+    await act(async () => { writeToken(window.localStorage, 'second-account'); bindNotificationsToken('second-account') })
+    await act(async () => { hook.result.current.onOpenModal(); hook.result.current.onSelect('receipt-1') })
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(2))
+    const reads = get.mock.calls.length
+    await act(async () => {
+      if (outcome === 'success') oldWrite.resolve({ receiptId: 'receipt-1', read: true, stateRevision: 99, unreadCount: 0, serverTime: 0 })
+      else oldWrite.reject(new ExAxiosError('http', 'SESSION_INVALID', 'old account expired', { status: 401 }))
+    })
+    expect(get.mock.calls).toHaveLength(reads)
+    expect(invalidateSession).not.toHaveBeenCalled()
+    expect(hook.result.current.detail).toMatchObject({ readPending: true, value: { stateRevision: 4 } })
+    await act(async () => { hook.result.current.detail.onToggleRead() })
+    expect(patch).toHaveBeenCalledTimes(2)
+    await act(async () => { newWrite.resolve({ receiptId: 'receipt-1', read: true, stateRevision: 5, unreadCount: 1, serverTime: 0 }) })
+    expect(hook.result.current.detail.readPending).toBe(false)
+    hook.unmount()
+  })
+
   it('keeps a failed read-write unread and offers a retry', async () => {
     patch.mockRejectedValue(new ExAxiosError('http', 'HTTP_ERROR', '写入失败', { status: 500 }))
     const hook = renderHook(() => useNotificationsController())
