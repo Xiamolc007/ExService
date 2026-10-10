@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { digest, readJson, LocalError } from '../docs-integration/local-config.mjs'
 import { verifyHydraClient, ensureHydraClient } from '../docs-integration/hydra-client.mjs'
-import { readRuntimeConfiguration } from './configuration.mjs'
+import { readRuntimeConfiguration } from './settings.mjs'
 
 export function deploymentBinding(state) {
   return { version: 1, websiteTarget: state.config.websiteTarget, issuer: state.config.issuer, publicOrigin: state.config.publicOrigin,
@@ -15,7 +15,7 @@ export async function validateDeployment(state, { prepare = false, connect, veri
   const existing = existsSync(path) ? readJson(path) : undefined
   if (existing && digest(existing) !== digest(binding)) throw new LocalError('DEPLOYMENT_IDENTITY_MIGRATION_REQUIRED', 'drain the original issuer before an explicitly reviewed identity migration')
   const factory = connect ?? (async url => { const { default: pg } = await import('pg'); const client = new pg.Client({ connectionString: url, connectionTimeoutMillis: 3000 }); await client.connect(); return client })
-  for (const [name, url] of [['exre', state.website.DATABASE_URL], ['outline', state.values.OUTLINE_DATABASE_URL]]) {
+  for (const [name, url] of [['exre', state.databases.DATABASE], ['outline', state.databases.OUTLINE_DATABASE]]) {
     let client
     try {
       client = await factory(url); await client.query('BEGIN READ ONLY')

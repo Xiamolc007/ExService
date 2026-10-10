@@ -5,7 +5,8 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { atomicJson, digest, LocalError, readJson } from './local-config.mjs'
-import { localRoot } from './configure.mjs'
+import { localRoot } from '../runtime/shared.mjs'
+import { redact as redactRuntime } from '../runtime/output.mjs'
 
 /** PID is only an address. Creation time, executable and command are the authority. */
 export function processIdentity(pid) {
@@ -58,19 +59,19 @@ export function acquireLock({ mode, fingerprint, directory = localRoot, name = '
       const prior = readJson(path, 'MODE_LOCK_INVALID')
       const protectedCleanup = prior.cleanupRequired || prior.state === 'cleanup-failed' ||
         (prior.mode === 'local' && prior.state !== 'stopped' && (prior.resources?.started?.length > 0 || prior.resources?.createdStopped?.length > 0))
-      if (protectedCleanup && !recoverCleanup) throw new LocalError('MODE_CLEANUP_REQUIRED', `node scripts/docs-integration/command.mjs down --mode ${prior.mode}`)
+      if (protectedCleanup && !recoverCleanup) throw new LocalError('MODE_CLEANUP_REQUIRED', 'stop the original owner in its terminal; inspect the preserved ownership record')
       if (recoverCleanup && (prior.version !== 1 || prior.mode !== mode || prior.fingerprint !== fingerprint || !prior.runId))
         throw new LocalError('MODE_RECOVERY_PROVENANCE_CONFLICT')
       if (prior.persistent && !recoverCleanup) {
         externalCheck(prior)
-        throw new LocalError('MODE_ACTIVE', `node scripts/docs-integration/command.mjs down --mode ${prior.mode}`)
+        throw new LocalError('MODE_ACTIVE', 'stop the original owner in its terminal; inspect the preserved ownership record')
       }
-      if (identityAlive(prior.identity, inspect)) throw new LocalError('MODE_ACTIVE', `node scripts/docs-integration/command.mjs down --mode ${prior.mode}`)
+      if (identityAlive(prior.identity, inspect)) throw new LocalError('MODE_ACTIVE', 'stop the original owner in its terminal; inspect the preserved ownership record')
       if (Array.isArray(prior.children) && prior.children.some(child => identityAlive(child.identity, inspect)))
         throw new LocalError('MODE_CHILDREN_STILL_ACTIVE', 'inspect the original run; no stale PIDs were killed')
       if (!recoverCleanup && prior.mode === 'local' && prior.state === 'preflight' && !prior.resources &&
           (mode !== prior.mode || fingerprint !== prior.fingerprint))
-        throw new LocalError('MODE_CLEANUP_REQUIRED', 'node scripts/docs-integration/command.mjs down --mode local')
+        throw new LocalError('MODE_CLEANUP_REQUIRED', 'inspect the preserved application ownership record before retrying')
       if (recoverCleanup) {
         recovery = recoverCleanup(prior)
         // Intent precedes external proof/archive writes: if they fail, ordinary
@@ -108,7 +109,7 @@ export function acquireLock({ mode, fingerprint, directory = localRoot, name = '
   } finally { if (gateOwned) rmSync(gate, { force: true }) }
 }
 export function redact(text, environment = {}) {
-  let value = String(text)
+  let value = redactRuntime(text, environment)
   for (const [key, secret] of Object.entries(environment)) {
     if (/PASSWORD|SECRET|KEY|TOKEN|DATABASE_URL|REDIS_URL/i.test(key) && secret && secret.length >= 8) value = value.split(secret).join('[REDACTED]')
   }
@@ -142,10 +143,10 @@ export async function spawnOwned(specification, { onLog = () => {}, inspect = pr
     stream.on('data', chunk => {
       pending += chunk
       const lines = pending.split(/\r?\n/); pending = lines.pop()
-      for (const line of lines) onLog(specification.name, redact(line, specification.environment))
+      for (const line of lines) onLog(specification.name, redact(line, specification.environment), stream === child.stderr ? 'stderr' : 'stdout')
       if (pending.length > 16384) { onLog(specification.name, '[LOG_TRUNCATED]'); pending = '' }
     })
-    stream.on('end', () => { if (pending) onLog(specification.name, redact(pending, specification.environment)) })
+    stream.on('end', () => { if (pending) onLog(specification.name, redact(pending, specification.environment), stream === child.stderr ? 'stderr' : 'stdout') })
   }
   await new Promise((resolve, reject) => { child.once('spawn', resolve); child.once('error', () => reject(new LocalError('APP_SPAWN_FAILED'))) })
   let identity

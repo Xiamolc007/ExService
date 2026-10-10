@@ -25,6 +25,31 @@ it('resolves local HMR at its public entry while preserving legacy and standalon
   } finally { for (const key of keys) { if (original[key] === undefined) delete process.env[key]; else process.env[key] = original[key] } }
 })
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close() })
+it('keeps Website login and Docs OIDC on the configured origin before serving either entry', async () => {
+  const publicOrigin = 'http://127.0.0.1:8080'
+  const vite = await createServer({ configFile: false, logLevel: 'silent', server: {
+    host: '127.0.0.1', port: 0, allowedHosts: true,
+  }, plugins: [proxyBoundaryPlugin(publicOrigin), { name: 'website-fixture', configureServer(server) {
+    return () => { server.middlewares.use((_req, res) => { res.end('Website home') }) }
+  } }] })
+  await vite.listen(); cleanup.push(() => vite.close())
+  const entry = await createDevEntryServer(vite, 0)
+  cleanup.push(() => new Promise(resolve => { entry.closeAllConnections(); entry.close(() => resolve()) }))
+  for (const port of [(entry.address() as AddressInfo).port, (vite.httpServer!.address() as AddressInfo).port]) {
+    for (const host of ['localhost:8080', '127.0.0.1:8081']) {
+      for (const path of ['/', '/login', '/docs/?q=hello%20world', '/identity/status', '/docs?x=1', '//outside.test/path']) {
+        const response = await raw(port, path, false, { Host: host })
+        expect(response, `${host}${path}`).toMatchObject({ status: 307, headers: { location: `${publicOrigin}${path}` } })
+        expect(response.body).not.toContain('Website home')
+      }
+      expect((await raw(port, '/api/auth/login', false, { Host: host }, 'POST')).status).toBe(421)
+      expect((await raw(port, '/docs/internal/revoke', false, { Host: host })).status).toBe(404)
+    }
+    const canonical = await raw(port, '/', false, { Host: '127.0.0.1:8080' })
+    expect(canonical).toMatchObject({ status: 200, body: 'Website home' })
+    expect((await raw(port, '/docs?x=1', false, { Host: '127.0.0.1:8080' })).headers.location).toBe('/docs/?x=1')
+  }
+})
 function raw(port: number, path: string, upgrade = false, headers: Record<string, string> = {}, method = 'GET') {
   return new Promise<{ status: number; headers: Record<string, unknown>; body: string }>((resolve, reject) => {
     const req = request({ hostname: '127.0.0.1', port, path, method,

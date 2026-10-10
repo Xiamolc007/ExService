@@ -22,7 +22,7 @@ const local = integrated && process.env.WEBSITE_INTEGRATION_MODE === 'local'
 const publicOrigin = local ? new URL(process.env.SERVER_PUBLIC_WEB_BASE_URL!) : new URL('http://exwebsite.test:8090')
 
 export default defineConfig({
-  plugins: [proxyBoundaryPlugin(), react(), ...(process.env.WEBSITE_DEV_ENTRY_PORT
+  plugins: [proxyBoundaryPlugin(local ? publicOrigin.origin : undefined), react(), ...(process.env.WEBSITE_DEV_ENTRY_PORT
     ? [devEntryPlugin(Number(process.env.WEBSITE_DEV_ENTRY_PORT))] : [])],
   define: {
     'import.meta.env.VITE_COMMUNITY_QQ_URL': JSON.stringify(communityConfig.community?.['rifling911-qqUrl'] ?? ''),

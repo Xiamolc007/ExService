@@ -2,13 +2,15 @@ import { randomUUID } from 'node:crypto'
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
 import { Client } from 'pg'
 import { afterAll } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { openDatabase, type AppDatabase } from '@server/src/db/client'
 import { runMigrations } from '@server/src/db/migration-runner'
 
 let containerPromise: Promise<StartedPostgreSqlContainer> | undefined
 
 async function testContainer(): Promise<StartedPostgreSqlContainer> {
-  containerPromise ??= new PostgreSqlContainer('postgres:16-alpine')
+  const images = JSON.parse(readFileSync(new URL('../../infra/runtime/images.lock.json', import.meta.url), 'utf8')) as { postgres: string }
+  containerPromise ??= new PostgreSqlContainer(images.postgres)
     .withDatabase('exre')
     .start()
   return containerPromise

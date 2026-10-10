@@ -1,88 +1,61 @@
 # ExWebsite
 
-ExWebsite 使用单份 OpenAPI Contract 连接 Web、生成式 API Client 与唯一 Website Fastify Server，业务数据保存在独立 PostgreSQL `exre`。Outline 是独立文档服务。项目仍处开发阶段，本地运行成功不代表已具备公网部署条件。
+ExWebsite 以 `api/openapi.yaml` 为唯一 HTTP Contract，Website 使用独立 PostgreSQL `exre`。Outline 是独立 Git submodule，使用自己的 Yarn、数据库和附件存储。项目仍处开发阶段，不执行公网部署。
 
-## 环境要求
+## 环境与配置
 
-- Node.js 22.12+，同时满足 `apps/outline/package.json` 的 engines；pnpm 11.9.0、可用的 Corepack/Yarn 和 Docker Compose。
-- 已有独立 Website PostgreSQL `exre`。文档基础设施不创建 Website 数据库或账号。
-- 安装根 pnpm 依赖及 `apps/outline/` 的独立 Yarn 依赖；Outline 是 Git submodule，不属于 pnpm workspace。
-- ExUI 使用 registry 发布包，由各自 lockfile 锁定版本，不需要本地 ExUI checkout 或构建。Node/Corepack 可通过 `INTEGRATION_NODE_BIN`、`INTEGRATION_COREPACK_JS` 显式指定。
+需要 Node 22.12+ 且满足 `apps/outline/package.json` 的 engines、pnpm 11.9.0、Corepack/Yarn。本地依赖使用 Docker Compose；服务器由操作者安装原生 PostgreSQL、Redis、Hydra v2.3.0、PM2 和 Nginx。
 
-普通运行配置只读取根 `.env.local`，受支持的进程变量优先，示例见 `.env.example`。不要提交凭据，也不要用示例默认值覆盖既有数据库、HMAC、存储或头像配置。
+根依赖与 Outline 依赖分别按 lockfile 安装。ExUI 使用 registry 发布包，不需要本地源码或链接。普通运行只读取根 `.env.local`，支持的进程变量优先；字段见 `.env.example`，详细说明见 `docs/runtime.md`。不要用示例覆盖已有配置。
 
-## 本地启动
+## 已有环境的切换
 
-### 已有环境
-
-先在原终端停止应用，并处理旧环境未完成的准备或清理。保留原 Website `exre`、账号、秘密和持久数据，显式导入旧配置：
+先阅读 `docs/runtime.md` 的维护切换章节。配置转换、PG16→18 恢复、issuer 变更及卷归属迁移是不同步骤；不能以一次配置转换替代数据和身份迁移。
 
 ```bash
-pnpm infra configure --import-existing
+pnpm infra convert
+```
+
+转换保留原连接目标、端口、issuer、密码和密钥，备份原文件，冲突时只报告键名并停止。新运行入口不自动导入旧 URL 配置，不读取旧配置 receipt。现有服务仍需按维护清单完成归属和数据切换后才能被新入口管理。
+
+## 新环境的首次准备
+
+1. 安装根 pnpm 与 Outline Yarn 依赖，填写根 `.env.local` 的数据库连接字段和原始秘密。
+2. 显式 `pnpm infra init`：启动受管 PostgreSQL/Redis，只准备 Outline/Hydra 数据库并迁移；不创建 Website `exre`。
+3. 显式创建独立 `exre` 及其 owner，执行 `pnpm db:migrate`。使用已有账号或通过 Website 注册账号；首次注册前可用 Server 的单独 dev 入口运行已迁移 Website。
+4. 执行 `pnpm service:start`。由用户选择一个已有 active Website 用户 UUID，再执行 `pnpm infra bootstrap --admin-user-id <UUID>`。
+5. 执行 `pnpm dev`。
+
+普通启动不会迁移、reset、创建身份 client、账号或管理员；重复 bootstrap 不恢复已明确撤销的管理员权限。
+
+## 日常命令
+
+```bash
 pnpm service:start
 pnpm dev
 ```
 
-导入校验、失败恢复和旧模式处理见 `docs/runtime.md`。
+全部就绪后显示网站和文档入口，默认分别为 `http://127.0.0.1:8080/` 和 `http://127.0.0.1:8080/docs/`。使用配置中的 public origin；`localhost` 与 `127.0.0.1` 的会话不互换。Ctrl+C 结束本次应用，后台依赖继续运行。
 
-### 全新环境
-
-1. 安装根依赖，并在 `apps/outline/` 中使用 Corepack Yarn 安装独立依赖；ExUI 随依赖安装。
-2. 显式创建独立 Website `exre`，复制 `.env.example` 到根 `.env.local`，填写数据库、`AUTH_CODE_HMAC_KEY` 等配置。
-3. 在仓库根目录校验 Contract、生成 Client，并显式准备数据库及文档基础设施：
-
-   ```bash
-   pnpm install
-   pnpm api:lint
-   pnpm api:generate
-   pnpm infra configure
-   pnpm db:migrate
-   pnpm infra init
-   ```
-
-4. 注册 Website 账号，并由用户选择一个已有启用账号的 UUID，初始化文档管理员。将占位符替换为实际 UUID：
-
-   ```bash
-   pnpm infra bootstrap --admin-user-id <Website-UUID>
-   pnpm service:start
-   pnpm dev
-   ```
-
-### 日常使用
-
-依赖已准备后，运行 `pnpm service:start` 启动 PostgreSQL、Redis、Hydra，等待就绪后该命令退出；再运行 `pnpm dev` 监督 Website 和 Outline 应用。`dev` 只读检查准备状态，不隐式迁移、reset、登记客户端或初始化管理员。
-
-默认访问 `http://127.0.0.1:8080/` 与 `http://127.0.0.1:8080/docs/`，使用与配置一致的 public origin，不以 `localhost` 或直接 Vite origin 替代。开发终端 Ctrl+C 只清理本次应用进程；随后运行 `pnpm service:stop` 停止受管依赖，不删除卷或附件。
-
-## 常用命令
-
-| 命令 | 用途 |
+| 命令 | 职责 |
 | --- | --- |
-| `pnpm service:start` | 启动已准备且归属已验证的 PostgreSQL/Redis/Hydra，等待就绪后退出。 |
-| `pnpm dev` | 只读核对依赖和准备状态，监督 Website/Outline 应用。 |
-| `pnpm service:stop` | 无活跃应用时停止受管依赖，不删除持久数据。 |
-| `pnpm infra configure` | 校验根配置、工具、依赖及原 Website 数据源；新安装填补缺少的文档秘密。 |
-| `pnpm infra configure --import-existing` | 显式导入既有 v1 local 配置，保留秘密、资源指纹与准备阶段。 |
-| `pnpm infra init` / `pnpm infra migrate` | 显式准备或迁移独立 Outline/Hydra，不创建 Website `exre`。 |
-| `pnpm infra bootstrap --admin-user-id <Website-UUID>` | 核验明确指定的已有启用账号，初始化文档管理员。 |
-| `pnpm infra test <test-file> <case-name>` | 在隔离资源中运行指定 Outline 测试，文件须位于其 `server/` 或 `plugins/`。 |
-| `pnpm api:lint` | 用 Redocly 校验 `api/openapi.yaml`。 |
-| `pnpm api:generate` | 从 Contract 更新 `packages/api-client/src/generated/schema.d.ts`，禁止手改生成文件。 |
-| `pnpm typecheck` | 检查工作区 TypeScript。 |
-| `pnpm test` | 运行 Website Vitest；数据库用例使用 PostgreSQL Testcontainers 与逐用例 schema。 |
-| `pnpm build` | 构建 SDK、Website Web/Server 和完整定制 Outline，不连接数据库或启动 Docker。 |
-| `pnpm db:migrate` | 对已存在的独立 `exre` 显式应用 migration，不创建数据库。 |
-| `pnpm db:reset -- --confirm exre` | 开发专用，核验回环地址、数据库身份及对象归属后重建应用结构，不删除头像。 |
+| `pnpm service:start` / `pnpm service:stop` | 启停本项目 PG/Redis/Hydra，真实就绪后 start 退出；保留卷与数据。 |
+| `pnpm service:status` / `pnpm service:logs [postgres\|redis\|hydra]` | 查询实际容器状态或跟随日志；退出日志不停止服务。 |
+| `pnpm dev` | 校验真实结构、marker、client，watch Website 和 Outline。 |
+| `pnpm test` / `pnpm test:watch` | 顺序运行 Website、runtime/Docs 脚本与定制 Outline；不执行 Build。 |
+| `pnpm build` | 构建 SDK、Website 和完整 Outline；不连接数据库、启动 Docker 或自动测试。 |
+| `pnpm start` / `pnpm stop` / `pnpm logs [server\|outline\|hydra]` | PM2 原生运行、停止与查看本项目应用。 |
+| `pnpm infra init` / `pnpm infra migrate` | 显式准备或迁移 Outline/Hydra。 |
+| `pnpm infra bootstrap --admin-user-id <UUID>` | 核验用户明确指定的启用账号，准备文档身份。 |
+| `pnpm infra nginx` | 渲染配置；操作者须独立执行 `nginx -t`，安装及重载。 |
+| `pnpm db:migrate` | 仅迁移已有独立 Website `exre`。 |
+| `pnpm db:reset -- --confirm exre` | 显式开发操作，清除应用数据；核对回环地址、库及对象归属。 |
+| `pnpm api:lint` / `pnpm api:generate` / `pnpm typecheck` | Contract lint、生成 Client 与类型检查。 |
 
-数据库测试在 Docker 不可用时明确失败，不会回退到本机 `exre` 或 `outline`。`db:reset` 会清除本应用数据，运行前核对目标。
+`--verbose` 保留详细日志并继续脱敏。数据库测试使用临时 PG18/Testcontainers，Docker 不可用明确失败，不回退开发库。
 
-## 工程与文档入口
+## 工程入口
 
-- `api/openapi.yaml` 是唯一 HTTP Contract；Server 通过 `operationId` 显式映射 handler。
-- `apps/server/` 实现 Website 业务；PostgreSQL 结构位于 `apps/server/src/db/schema.ts` 与 `apps/server/drizzle/`。
-- `packages/api-client/` 提供生成类型与共享 Client；`apps/web/` 通过它访问 API。
-- `tests/contract/` 验证真实 Fastify 路由、错误 envelope、原始 handler 输出与双向 operation 覆盖。
+`apps/server/` 是唯一 Website Fastify Server；`apps/web/` 只经 `packages/api-client/` 调用 API；`tests/contract/` 验证真实路由、原始 handler 输出及双向 operation 覆盖。Outline 不属于 pnpm workspace，Website 不接管其 API。
 
-开发规则与 workflow 见 `AGENTS.md`；架构、数据规则及已接受决策从 `.ai/README.md` 查阅。配置导入、运行恢复、镜像和部署材料见 `docs/runtime.md`；文档身份、代理与资源归属边界见 `.ai/architectures/docs-integration/integration-boundaries.md`。历史设计保存在 `.notes/archive/`，不作为当前启动指南。
-
-自动检查、隔离资源测试、真实浏览器验收和公网部署验收分别报告；本阶段不部署上线。
+开发规则见 `AGENTS.md`，持久知识从 `.ai/README.md` 查阅；配置、维护和原生运行见 `docs/runtime.md`。自动测试、本机生命周期、浏览器及服务器验收分别报告。

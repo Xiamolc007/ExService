@@ -2,7 +2,7 @@
 
 本文件说明 ExWebsite 当前开发拓扑。HTTP 形状以 `api/openapi.yaml` 为准；Server 请求与数据库生命周期见 `.ai/architectures/server/request-lifecycle.md`，数据规则见 `.ai/databases/data-model.md`。
 
-_最后更新：2026-10-05_
+_最后更新：2026-10-10_
 
 ## 系统结构
 
@@ -39,7 +39,7 @@ api/openapi.yaml ──api:generate──▶ packages/api-client ──▶ apps/
 
 ## 开发进程
 
-根目录 `pnpm dev` 由 `scripts/docs-integration/local-dev.mjs` 监督应用及已准备的基础服务，普通运行只读校验准备状态。工具与依赖、显式准备、资源归属、失败清理和旧模式兼容均以 `.ai/architectures/docs-integration/integration-boundaries.md` 为唯一详细说明；首次使用步骤见 `README.md`。正常运行与镜像构建证明不替代真实浏览器或公网部署验收。
+根目录 `pnpm dev` 经 `scripts/runtime/entry.mjs` 和 `applications.mjs` 监督应用；依赖由独立服务入口管理，普通运行只读核对准备状态。运行配置、资源归属与维护边界见 `.ai/architectures/runtime/runtime-boundaries.md`；文档身份与请求边界见 `.ai/architectures/docs-integration/integration-boundaries.md`。首次使用步骤见 `README.md`。正常运行与构建证明不替代真实浏览器或公网部署验收。
 
 ## 前端请求流
 

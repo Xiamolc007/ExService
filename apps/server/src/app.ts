@@ -77,6 +77,8 @@ export interface CreateAppOptions {
    * 测试中保持静默；`server.ts` 开启日志，以便用 requestId 关联日志与响应。
    */
   logger?: FastifyServerOptions['logger']
+  /** 由监听入口显式限定可信代理；默认不信任客户端转发头。 */
+  trustProxy?: FastifyServerOptions['trustProxy']
   corsAllowedOrigins?: ReadonlySet<string>
 }
 
@@ -132,10 +134,11 @@ export const serviceHandlers = {
  * 这里不手写任何 `app.get(...)`，也不从 Fastify schema 反向生成 OpenAPI。
  */
 export function createApp({ authServices, profileServices, joinServices, invitationServices, storageServices,
-  notifications, identityKeys, oidcServices, logger = false,
+  notifications, identityKeys, oidcServices, logger = false, trustProxy = false,
   corsAllowedOrigins = new Set() }: CreateAppOptions): FastifyInstance {
   const app = Fastify({
     logger,
+    trustProxy,
     requestIdHeader: false,
     bodyLimit: 4 * 1024 * 1024,
     ajv: {

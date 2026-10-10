@@ -58,7 +58,7 @@ try {
     const app = createApp({ authServices, profileServices, joinServices, invitationServices, storageServices,
       notifications,
       identityKeys: identity.enabled ? { clients: { [identity.clientId]: identity.keys.outline }, bootstrapKey: identity.keys.bootstrap } : undefined,
-      oidcServices, logger: true, corsAllowedOrigins })
+      oidcServices, logger: true, trustProxy: ['loopback'], corsAllowedOrigins })
     const outbox = identity.enabled ? configuredIdentityOutboxWorker(db, identity) : undefined
     let stopOutbox: (() => void) | undefined
     // 单实例投影 worker：关闭时停止认领，未完成 lease 由后续运行恢复。

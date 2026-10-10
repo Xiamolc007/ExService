@@ -23,10 +23,23 @@ export function isInternalPath(raw = ''): boolean {
   return /^(?:api|docs)\/internal(?:\/|$)/i.test(segments.join('/'))
 }
 
-export function proxyBoundaryPlugin(): Plugin {
+/** Keep browser storage, session probing and OIDC on one configured development origin. */
+export function proxyBoundaryPlugin(publicOrigin?: string): Plugin {
+  const canonical = publicOrigin ? new URL(publicOrigin) : undefined
   return { name: 'website-proxy-boundary', apply: 'serve', configureServer(vite) {
     vite.middlewares.use((request, response, next) => {
       if (isInternalPath(request.url)) { response.statusCode = 404; response.end(); return }
+      if (canonical && request.headers.host?.toLowerCase() !== canonical.host.toLowerCase()) {
+        // Redirect before a page can create a Bearer session under a different origin.
+        // Never replay writes or credentials across origins.
+        if (request.method !== 'GET' && request.method !== 'HEAD') {
+          response.statusCode = 421; response.end(); return
+        }
+        const path = request.url ?? '/'
+        if (!path.startsWith('/')) { response.statusCode = 400; response.end(); return }
+        response.writeHead(307, { Location: `${canonical.origin}${path}`, 'Cache-Control': 'no-store' })
+        response.end(); return
+      }
       const match = /^\/docs(\?.*)?$/.exec(request.url ?? '')
       if (match) { response.writeHead(308, { Location: `/docs/${match[1] ?? ''}` }); response.end(); return }
       next()

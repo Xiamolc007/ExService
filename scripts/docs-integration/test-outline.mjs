@@ -40,12 +40,13 @@ export function isolatedEnvironment(inherited, { databaseUrl, redisUrl, storage,
     allowed.has(key.toUpperCase()) && key.toUpperCase() !== 'PATH'))
   const inheritedPath = Object.entries(inherited).find(([key]) => key.toUpperCase() === 'PATH')?.[1] ?? ''
   return {
-    ...environment, NODE_ENV: 'test', TZ: 'UTC', DATABASE_URL: databaseUrl,
+    ...environment, NODE_ENV: 'test', RUNTIME_ENV_INJECTED: 'true', TZ: 'UTC', DATABASE_URL: databaseUrl,
     DATABASE_SCHEMA: 'public', DATABASE_CONNECTION_POOL_URL: '', PGSSLMODE: 'disable',
     REDIS_URL: redisUrl, REDIS_COLLABORATION_URL: redisUrl,
     FILE_STORAGE: 'local', FILE_STORAGE_LOCAL_ROOT_DIR: storage,
     WEBSITE_INTEGRATION_ENABLED: 'true', RATE_LIMITER_ENABLED: 'false', SSL_CERT_FILE: '',
     SECRET_KEY: '0123456789abcdef'.repeat(4), UTILS_SECRET: 'isolated-utils-test-secret',
+    URL: 'http://127.0.0.1:8080/docs', WEBSITE_URL: 'http://127.0.0.1:8080/', COLLABORATION_URL: 'http://127.0.0.1:8080/docs',
     WEBSITE_INTERNAL_URL: 'http://127.0.0.1:1', HYDRA_PUBLIC_URL: 'http://127.0.0.1:1/',
     OUTLINE_INTEGRATION_KEY: 'isolated-outline-test-key',
     OUTLINE_OIDC_CLIENT_ID: 'isolated-outline-test-client',
@@ -77,16 +78,16 @@ async function main(args) {
   const outline = realpathSync(resolve(root, 'apps/outline'))
   const target = realpathSync(resolve(outline, file))
   if (!target.startsWith(`${outline}${sep}`)) throw new Error('Test file is outside the Outline checkout.')
-  const node = process.env.INTEGRATION_NODE_BIN || resolve(root, '.local/docs-integration/tools/node26/node-v26.3.0-win-x64/node.exe')
+  const node = process.env.INTEGRATION_NODE_BIN || process.execPath
   const corepack = process.env.INTEGRATION_COREPACK_JS || resolve(dirname(process.execPath), 'node_modules/corepack/dist/corepack.js')
   if (!existsSync(node) || !existsSync(corepack)) {
-    throw new Error('Set INTEGRATION_NODE_BIN and INTEGRATION_COREPACK_JS to the local Node 26 and Corepack executables.')
+    throw new Error('Set INTEGRATION_NODE_BIN and INTEGRATION_COREPACK_JS to supported Node and Corepack executables.')
   }
   const require = createRequire(resolve(root, 'package.json'))
   const { PostgreSqlContainer } = require('@testcontainers/postgresql')
   const { GenericContainer, Wait } = createRequire(require.resolve('@testcontainers/postgresql'))('testcontainers')
   const { Client } = require('pg')
-  const images = JSON.parse(readFileSync(resolve(root, 'infra/docs-integration/images.lock.json'), 'utf8'))
+  const images = JSON.parse(readFileSync(resolve(root, 'infra/runtime/images.lock.json'), 'utf8'))
   const output = resolve(root, 'output/docs-integration-team/outline-tests', randomUUID())
   mkdirSync(output, { recursive: true })
   console.log(`Isolated Outline test logs: ${relative(root, output)}`)
