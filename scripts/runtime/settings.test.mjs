@@ -160,6 +160,84 @@ test('owned stop validates the whole inventory before mutation and refuses unkno
   await service.stop({ lock: false }); assert.deepEqual(changes, [['stop', '--time', '10', 'owned']])
 })
 
+test('start cannot replace a saved proof after DNS drift to make a later stop succeed', async t => {
+  const state = fixture(t).read(); state.workspace = root
+  let duringStart = () => {}, present = true
+  const mutations = [], item = { Id: 'a'.repeat(64), Image: 'redis-image-id',
+    Config: { Image: 'redis-fixture', Env: [], Labels: {
+      'com.docker.compose.service': 'redis', 'com.docker.compose.project': 'exwebsite-runtime',
+      'com.docker.compose.oneoff': 'false', 'com.docker.compose.config-hash': 'redis-hash',
+      'dev.exwebsite.runtime': 'dependencies',
+    } }, HostConfig: { Dns: [], PortBindings: {} }, Mounts: [], State: { Running: false } }
+  const services = new Services(state, { run: (_command, args) => {
+    let stdout = ''
+    if (args[0] === 'ps') stdout = present ? item.Id : ''
+    else if (args[0] === 'inspect') stdout = JSON.stringify([item])
+    else if (args.includes('config')) stdout = args.includes('--hash') ? 'redis redis-hash'
+      : JSON.stringify({ services: { redis: { image: 'redis-fixture' } } })
+    else if (args.includes('up') || args[0] === 'stop') {
+      mutations.push(args); item.State.Running = args[0] !== 'stop'
+      if (args.includes('up')) { present = true; duringStart() }
+    }
+    return { status: 0, stdout }
+  } })
+  mkdirSync(state.directory, { recursive: true })
+  const saved = JSON.stringify({ version: 1, project: 'exwebsite-runtime', proofs: [services.proof(item)], newlyStarted: [] })
+  writeFileSync(services.file, saved)
+  item.HostConfig.Dns = ['1.1.1.1']
+  await assert.rejects(services.stop({ lock: false }), /STOP_OWNERSHIP_CONFLICT/)
+  await assert.rejects(services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {},
+    log: { title() {}, log() {} } }), /START_OWNERSHIP_CONFLICT/)
+  assert.equal(readFileSync(services.file, 'utf8'), saved)
+  await assert.rejects(services.stop({ lock: false }), /STOP_OWNERSHIP_CONFLICT/)
+  assert.deepEqual(mutations, [])
+
+  item.HostConfig.Dns = []
+  const originalItem = structuredClone(item)
+  for (const change of [value => { value.HostConfig.Privileged = true }, value => { value.Mounts = [{ Name: 'foreign', Destination: '/extra' }] },
+    value => { value.Image = 'replacement-image-id' }, value => { value.Id = 'b'.repeat(64) }]) {
+    Object.assign(item, structuredClone(originalItem)); change(item)
+    await assert.rejects(services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {},
+      log: { title() {}, log() {} } }), /START_OWNERSHIP_CONFLICT/)
+    assert.equal(readFileSync(services.file, 'utf8'), saved)
+  }
+  Object.assign(item, structuredClone(originalItem))
+  rmSync(services.file)
+  await assert.rejects(services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {},
+    log: { title() {}, log() {} } }), /OWNERSHIP_RECORD_MISSING/)
+  for (const record of [null, { ...JSON.parse(saved), version: 2 }, { ...JSON.parse(saved), proofs: [null] }]) {
+    const invalid = JSON.stringify(record); writeFileSync(services.file, invalid)
+    await assert.rejects(services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {},
+      log: { title() {}, log() {} } }), /OWNERSHIP_RECORD_INVALID/)
+    assert.equal(readFileSync(services.file, 'utf8'), invalid)
+  }
+  assert.deepEqual(mutations, [])
+  writeFileSync(services.file, saved)
+
+  // Legitimate Docker null/[] normalization retains the original proof and permits restart.
+  item.HostConfig.Dns = null
+  await services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {}, log: { title() {}, log() {} } })
+  assert.deepEqual(JSON.parse(readFileSync(services.file, 'utf8')).proofs, JSON.parse(saved).proofs)
+  await services.stop({ lock: false })
+  assert.equal(item.State.Running, false)
+
+  // A change during Compose must not overwrite proof or trigger an unsafe rollback stop.
+  const beforeStart = readFileSync(services.file, 'utf8')
+  mutations.length = 0
+  duringStart = () => { item.HostConfig.Dns = ['9.9.9.9'] }
+  await assert.rejects(services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {},
+    log: { title() {}, log() {} } }), /START_OWNERSHIP_CONFLICT/)
+  assert.equal(readFileSync(services.file, 'utf8'), beforeStart)
+  assert.equal(mutations.length, 1)
+  assert.ok(mutations[0].includes('up'))
+
+  // A genuinely empty inventory still supports first-time creation and a proven stop.
+  Object.assign(item, structuredClone(originalItem)); present = false; duringStart = () => {}; rmSync(services.file)
+  await services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {}, log: { title() {}, log() {} } })
+  await services.stop({ lock: false })
+  assert.equal(item.State.Running, false)
+})
+
 test('owned stop tolerates Docker mount ordering and unset DNS normalization but refuses real resource changes', async t => {
   const state = fixture(t).read(); state.workspace = root
   const services = new Services(state), calls = []

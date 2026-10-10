@@ -128,10 +128,14 @@ export class Services {
   async start({ ready = verifyDependencyHealth, assertFree = assertPortFree, log = reporter({ environment: this.state.values }), selectedServices = serviceNames } = {}) {
     if (!selectedServices.length || selectedServices.some(name => !serviceNames.includes(name))) throw new RuntimeError('SERVICE_SELECTION_INVALID')
     const lock = acquireLock({ mode: 'local', fingerprint: this.state.fingerprint, directory: this.state.directory, name: 'service-lock.json' })
-    let previous = []
+    let previous = [], saved = false
     try {
       previous = this.verify(this.inventory())
+      const record = existsSync(this.file) ? this.ownershipRecord() : null
+      if (!record && previous.length) throw new RuntimeError('OWNERSHIP_RECORD_MISSING', context('Docker', '启动前归属核验'))
+      if (record) this.verifyProofs(previous, record.proofs, 'START_OWNERSHIP_CONFLICT', '启动前归属核验')
       this.verifyVolumes()
+      const priorProofs = previous.map(item => this.proof(item))
       const p = this.state.config.ports
       for (const [service, ports] of [['postgres', [p.postgres]], ['redis', [p.redis]], ['hydra', [p.hydraPublic, p.hydraAdmin]]].filter(([service]) => selectedServices.includes(service))) {
         if (!previous.some(item => item.Config.Labels['com.docker.compose.service'] === service && item.State.Running))
@@ -141,8 +145,13 @@ export class Services {
       const save = () => {
         const items = this.verify(this.inventory())
         this.verifyVolumes()
-        atomicJson(this.file, { version: 1, project, proofs: items.map(item => this.proof(item)),
+        // Compose may start existing containers, but cannot replace their ownership evidence.
+        const existing = items.filter(item => previous.some(prior => prior.Config.Labels['com.docker.compose.service'] === item.Config.Labels['com.docker.compose.service']))
+        this.verifyProofs(existing, priorProofs, 'START_OWNERSHIP_CONFLICT', '启动后归属核验')
+        atomicJson(this.file, { version: 1, project, proofs: items.map(item =>
+          record?.proofs.find(proof => proof.id === item.Id) ?? priorProofs.find(proof => proof.id === item.Id) ?? this.proof(item)),
           newlyStarted: items.filter(item => !original.has(item.Id)).map(item => item.Id) })
+        saved = true
       }
       try { this.compose(['up', '-d', '--no-recreate', '--wait', '--wait-timeout', '60', ...selectedServices]) }
       finally { save() }
@@ -151,7 +160,7 @@ export class Services {
       for (const [name, address] of [['PostgreSQL', `127.0.0.1:${p.postgres}`], ['Redis', `127.0.0.1:${p.redis}`], ['Hydra', this.state.config.issuer]]) log.log(name, address)
       log.title('下一步：pnpm dev；状态：pnpm service:status；日志：pnpm service:logs；停止：pnpm service:stop')
     } catch (error) {
-      if (existsSync(this.file)) await this.stop({ onlyNew: true, lock: false })
+      if (saved) await this.stop({ onlyNew: true, lock: false })
       throw error
     } finally { lock.release() }
   }

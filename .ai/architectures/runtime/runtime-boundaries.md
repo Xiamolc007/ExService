@@ -20,6 +20,8 @@ Windows 外层运行器可能在异步清理完成前结束监督进程。应用
 
 Docker inspect 的 Mounts 数组顺序及未设置 DNS 列表的表示可能在启停后变化。`services.mjs` 的 proof 保留全部挂载字段并按 Destination 排序；仅将 `HostConfig.Dns`、`DnsOptions`、`DnsSearch` 的 null 归一为 []。非空 DNS 值、其他配置或挂载字段变化仍拒绝，不能通过刷新 proof 或删除归属记录接管资源。
 
+启动在 Compose 操作前核验已有归属记录的完整 proof；操作后保存记录前再次比较原容器的 ID 与完整配置。已核验容器沿用原 proof，只有本次创建的服务容器建立新 proof。已有容器但归属记录缺失时拒绝启动，空 inventory 仍允许首次创建。启动后核验失败时保留原记录，不用失败现场刷新证明或调用依赖停止；仅在本次记录成功保存后，才能按记录回收本次启动的资源。
+
 PG 管理角色由 `POSTGRES_USER` 配置，缺省为新安装的 `postgres`；它与三个业务连接的 owner 分开。显式准备禁止将管理角色作为文档 owner。外部 PG 卷由 `POSTGRES_VOLUME_EXTERNAL` 指定，普通运行只接受精确配置卷名且已有完整核验的本项目 PG 容器引用，并拒绝其他运行中的卷消费者；维护记录不参与日常配置读取。受管新卷依据 Compose 项目与逻辑卷标签核验。
 
 普通应用运行先只读核对数据库结构、Outline marker、账号关联及 Hydra client。部署运行在启动应用前核对原身份绑定；Hydra 就绪并通过 client 核验后才启动 Website、Outline。PM2 online 之外仍要求真实健康通过。失败回收本轮创建的进程，保留先前存在的进程与后台服务。

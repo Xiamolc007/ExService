@@ -28,7 +28,7 @@
 
 迁移后 `pnpm service:start` 启动三个依赖；`pnpm infra bootstrap --admin-user-id <UUID>` 要求一个已有 active Website 账号，临时 Website 进程核验账号后准备精确 client 与 Outline 身份，结束时清理临时进程。用户注册/选择及管理员降权规则保持原语义。
 
-服务归属记录位于 `.local/runtime/dependencies.json`，保存 exact ID 和完整配置摘要，仅用于停止授权；不是普通设置的 config receipt。未知容器、同名卷或配置变化拒绝接管。失败只回收本次启动的服务；停止不删除卷、数据库或附件。应用监督使用自己的锁和 Windows JobObject/Unix 进程组，Ctrl+C 只清理本次应用。
+服务归属记录位于 `.local/runtime/dependencies.json`，保存 exact ID 和完整配置摘要，用于启动前核验与停止授权；不是普通设置的 config receipt。未知容器、同名卷或配置变化拒绝接管。失败只回收本次启动的服务；停止不删除卷、数据库或附件。应用监督使用自己的锁和 Windows JobObject/Unix 进程组，Ctrl+C 只清理本次应用。
 
 Windows 外层运行器可能在监督清理持久化结束前退出。下次应用启动或依赖停止会在应用锁 gate 内核验原 owner、全部已记录 helper 及未登记直接子进程都已退出，且原记录没有依赖资源，再归档原记录并恢复；证明不完整则拒绝，不删除锁绕过校验。依赖停止还须确认五个应用端口均已释放；Linux 不使用这项 Windows 自动恢复。
 
