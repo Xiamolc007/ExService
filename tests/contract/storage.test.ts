@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { createApp, serviceHandlers } from '@workspace/server'
 import { createTestAuth, type TestAuth } from '@tests/helpers/auth'
 import { multipartBody, type TestPart } from '@tests/helpers/multipart'
+import { nginxProxy } from '@tests/helpers/nginx'
 import {
   TEST_BUCKET, TEST_REGION, cosStorageFixture, createAppWithStorage, createFakeCos, fileStorageFixture,
   type StorageTestFixture,
@@ -124,6 +125,35 @@ function builderCredentialKeys(credentials: object): string[] {
 }
 
 describe('POST /api/storage/uploads', () => {
+  it('uploads the default 20 MiB file through Nginx and retains server and proxy size rejection', async () => {
+    const storage = useStorage(fileStorageFixture())
+    const { app, token } = await setup(storage.storage)
+    const address = await app.listen({ port: 0, host: '0.0.0.0' })
+    const proxy = await nginxProxy(address)
+    try {
+      const bytes = Buffer.alloc(20 * 1024 * 1024, 7)
+      const { payload, headers } = multipartBody([textPart('key', 'proxy/large.bin'), dataPart(bytes)])
+      const upload = await proxy.request('/api/storage/uploads', { method: 'POST', payload,
+        headers: { ...headers, authorization: `Bearer ${token}` } })
+      expect(upload.status).toBe(200)
+      const downloaded = await proxy.request('/api/storage/files?key=proxy%2Flarge.bin')
+      expect(downloaded.status).toBe(200)
+      expect(downloaded.body.equals(bytes)).toBe(true)
+
+      // This is below the proxy wire ceiling, so the actual Server must reject it.
+      const oversized = multipartBody([textPart('key', 'proxy/oversized.bin'), dataPart(Buffer.alloc(20 * 1024 * 1024 + 1))])
+      const rejected = await proxy.request('/api/storage/uploads', { method: 'POST', payload: oversized.payload,
+        headers: { ...oversized.headers, authorization: `Bearer ${token}` } })
+      expect(rejected.status).toBe(413)
+      expect(JSON.parse(rejected.body.toString()).error.code).toBe('STORAGE_TOO_LARGE')
+
+      const proxyRejected = await proxy.request('/api/storage/uploads', { method: 'POST',
+        payload: Buffer.alloc(64 * 1024 * 1024 + 1), headers: { 'content-type': 'application/octet-stream' } })
+      expect(proxyRejected.status).toBe(413)
+      expect(proxyRejected.body.toString()).toContain('413 Request Entity Too Large')
+    } finally { await proxy.close() }
+  })
+
   it('accepts the fields in any order and returns only the URL', async () => {
     const storage = useStorage(fileStorageFixture())
     const { app, token } = await setup(storage.storage)

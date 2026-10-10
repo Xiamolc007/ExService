@@ -34,6 +34,8 @@ Build 只读取工具和固定公开编译设置，执行 SDK、Website Web/Serv
 
 日志在写入前脱敏，原生应用 JSONL 按大小和数量轮转。Nginx 使用由根设置渲染的同源模板，覆盖 HTTPS、WebSocket、内部拒绝与 Hydra public 白名单；系统安装和重载仍由操作者显式执行。Nginx 用实际连接地址覆盖客户端传入的转发 IP；Website 监听入口只信任回环代理，保留客户端 IP 限流隔离。`createApp()` 默认不信任转发头，直接非回环请求不能用该头改变限流键。
 
+Nginx 的 `/api/` 请求体限额按 Contract 中申请的整份 multipart wire 预算与存储文件上限加 multipart 开销的较大值渲染，默认 64 MiB。`STORAGE_MAX_BYTES` 超过默认预算时同步提高代理限额；非法值或求和超出安全整数时拒绝渲染。代理放行不替代 Server 的单文件、累计字节、wire 和认证校验。`tests/contract/storage.test.ts` 经隔离 HTTPS Nginx、真实 Fastify 与临时 PostgreSQL 验证默认上限文件上传下载及两层超限拒绝；TLS 凭据仅来自公开测试夹具。
+
 统一配置适配器在 local 和 deployment 中均要求 Website、Outline、Hydra 的应用监听地址为 `127.0.0.1`；部署的公网访问由 Nginx 终止并转发。
 
 旧运行入口、额外根 Compose、服务器 Docker 打包和 ExUI 本地链路已退役；身份兼容与 cleanup-only 投递规则继续由业务实现维护。数据库恢复、issuer 切换与资源归属迁移必须独立验收，持久历史库、卷及维护备份保留，不能按新项目名称自动接管原卷。源码、隔离测试和模板校验不等于已有环境切换成功，也不证明 Linux 服务器或公网部署已验收。

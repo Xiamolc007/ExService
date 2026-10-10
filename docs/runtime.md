@@ -58,7 +58,7 @@ Windows 外层运行器可能在监督清理持久化结束前退出。下次应
 
 更改运行设置后显式 `pnpm stop`、`pnpm start`。应用日志写为脱敏 JSONL，默认每个文件 10 MiB、保留 5 个轮转文件；大小与保留数有界可配。`pnpm logs` 跟随本项目日志，退出不停止应用。
 
-`pnpm infra nginx` 生成 `.local/runtime/nginx/nginx.conf`。模板保留 Website static/SPA、API、Outline `/docs`、WebSocket、HTTPS forwarding、internal 路径拒绝和 Hydra public 白名单。操作者先配置正确证书和静态目录，显式 `nginx -t -c <generated-file>`，通过后安装/重载；start 不修改系统 Nginx。当前阶段不执行服务器部署。
+`pnpm infra nginx` 生成 `.local/runtime/nginx/nginx.conf`。模板保留 Website static/SPA、API、Outline `/docs`、WebSocket、HTTPS forwarding、internal 路径拒绝和 Hydra public 白名单。API 上传预算及 Server 校验边界见 `.ai/architectures/runtime/runtime-boundaries.md`。操作者先配置正确证书和静态目录，显式 `nginx -t -c <generated-file>`，通过后安装/重载；start 不修改系统 Nginx。当前阶段不执行服务器部署。
 
 ## 数据、issuer 与归属切换
 
