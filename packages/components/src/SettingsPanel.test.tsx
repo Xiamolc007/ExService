@@ -4,6 +4,7 @@ import { StrictMode } from 'react'
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SettingsPanel, type SettingsPanelProps } from '@components/src/SettingsPanel'
+import type { NotificationPreferencesDraft } from '@components/src/notifications/NotificationPreferencesForm'
 
 const cropperCallbacks = vi.hoisted(() => ({ current: null as import('react-easy-crop').CropperProps | null }))
 vi.mock('react-easy-crop', () => ({
@@ -23,9 +24,8 @@ function props(overrides: Partial<SettingsPanelProps> = {}): SettingsPanelProps 
     notifications: {
       identityEpoch: 1,
       preferences: { announcement: true, personal_update: true },
-      status: 'ready', onRetry: vi.fn(), saving: false, message: null, conflict: false,
-      necessaryCategories: ['service_notice'],
-      onSave: vi.fn(async (draft) => draft), onRefresh: vi.fn(),
+      status: 'ready', saving: false, conflict: false, failure: null,
+      onRetryRead: vi.fn(), onSaveField: vi.fn(async (_field, draft) => draft),
     },
     onSave: vi.fn(async () => undefined), onUpload: vi.fn(async () => undefined),
     onRemoveAvatar: vi.fn(async () => undefined), onLogout: vi.fn(),
@@ -204,7 +204,10 @@ describe('SettingsPanel', () => {
       const input = props({ category: 'notifications' })
       const view = render(<SettingsPanel {...input} />)
       await userEvent.click(screen.getByRole('switch', { name: '社区动态' }))
-      expect(input.notifications.onSave).toHaveBeenCalledTimes(1)
+      expect(input.notifications.onSaveField).toHaveBeenCalledTimes(1)
+      // 字段意图与整份已校验值一起交给 module，revision 与另一字段不在 Form 里。
+      expect(input.notifications.onSaveField).toHaveBeenCalledWith('announcement',
+        { announcement: false, personal_update: true })
       expect(screen.queryByText(/已保存/)).toBeNull()
 
       view.rerender(<SettingsPanel {...input} category="profile" />)
@@ -215,8 +218,70 @@ describe('SettingsPanel', () => {
       view.rerender(<SettingsPanel {...input} category="notifications" />)
       expect((screen.getByRole('switch', { name: '社区动态' }) as HTMLButtonElement)
         .getAttribute('aria-checked')).toBe('false')
-      expect(input.notifications.onSave).toHaveBeenCalledTimes(1)
+      expect(input.notifications.onSaveField).toHaveBeenCalledTimes(1)
       expect(screen.queryByText(/已保存/)).toBeNull()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it.each(['general', 'profile', 'account'] as const)(
+    'shows no notification form content and writes nothing while %s is selected', async category => {
+      vi.stubGlobal('ResizeObserver', class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      })
+      try {
+        const input = props({ category,
+          notifications: {
+            identityEpoch: 1, preferences: { announcement: true, personal_update: true },
+            status: 'ready', saving: false, conflict: false,
+            failure: { id: 3, retryValues: { announcement: false, personal_update: true },
+              onRetrySave: vi.fn(async (values) => values) },
+            onRetryRead: vi.fn(), onSaveField: vi.fn(async (_field, draft) => draft),
+          } })
+        render(<SettingsPanel {...input} />)
+        // 非通知分类不展示开关、错误或加载态，也不自动写入。
+        expect(screen.queryByRole('switch', { name: '社区动态' })).toBeNull()
+        expect(screen.queryByRole('switch', { name: '个人提醒' })).toBeNull()
+        expect(screen.queryByRole('button', { name: '重试保存' })).toBeNull()
+        expect(screen.queryByLabelText('正在加载通知设置')).toBeNull()
+        expect(screen.queryByText('管理站内通知。关闭可选分类只影响未来接收，已有通知保留。')).toBeNull()
+        expect(input.notifications.onSaveField).not.toHaveBeenCalled()
+        expect(input.notifications.onRetryRead).not.toHaveBeenCalled()
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+
+  it('keeps the same form owner across a category round trip for the notifications slice', async () => {
+    vi.stubGlobal('ResizeObserver', class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    })
+    try {
+      let release!: (value: NotificationPreferencesDraft) => void
+      const onSaveField = vi.fn(() => new Promise<NotificationPreferencesDraft>(resolve => { release = resolve }))
+      const input = props({ category: 'notifications',
+        notifications: {
+          identityEpoch: 4, preferences: { announcement: false, personal_update: true },
+          status: 'ready', saving: false, conflict: false, failure: null,
+          onRetryRead: vi.fn(), onSaveField,
+        } })
+      const view = render(<SettingsPanel {...input} />)
+      expect(screen.getByRole('switch', { name: '社区动态' }).getAttribute('aria-checked')).toBe('false')
+      await userEvent.click(screen.getByRole('switch', { name: '社区动态' }))
+      expect(onSaveField).toHaveBeenCalledTimes(1)
+      expect(screen.getByRole('status').textContent).toBe('保存中…')
+      view.rerender(<SettingsPanel {...input} category="general" />)
+      expect(screen.queryByRole('status')).toBeNull()
+      // 切走再回来沿用同一个 RHF 所有者：在途提交状态没有被重建或取消。
+      view.rerender(<SettingsPanel {...input} category="notifications" />)
+      expect(screen.getByRole('status').textContent).toBe('保存中…')
+      await act(async () => { release({ announcement: true, personal_update: true }) })
+      expect(screen.queryByRole('status')).toBeNull()
     } finally {
       vi.unstubAllGlobals()
     }

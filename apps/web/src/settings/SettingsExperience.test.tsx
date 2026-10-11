@@ -7,9 +7,10 @@ import { bindNotificationsToken } from '@web/src/notifications/notificationsConf
 import { bindSettingsToken } from '@web/src/settings/settingsConfig'
 
 const get = vi.hoisted(() => vi.fn())
+const put = vi.hoisted(() => vi.fn())
 const invalidateSession = vi.hoisted(() => vi.fn())
 const authState = vi.hoisted(() => ({ status: 'authenticated' as 'authenticated' | 'unavailable' }))
-vi.mock('@web/src/api/client', () => ({ api: { GET: get } }))
+vi.mock('@web/src/api/client', () => ({ api: { GET: get, PUT: put } }))
 vi.mock('@web/src/auth/AuthContext', () => ({ useAuth: () => ({
   state: { status: authState.status }, invalidateSession, refreshProfile: vi.fn(),
   retrySession: vi.fn(), logout: vi.fn(),
@@ -23,12 +24,19 @@ vi.mock('@workspace/components', () => ({
     category: string
     onCategoryChange: (category: 'profile' | 'notifications' | 'general') => void
     profileStatus: string
-    notifications: { status: string }
+    notifications: {
+      status: string
+      failure: unknown
+      onSaveField: (field: string, values: { announcement: boolean; personal_update: boolean }) => Promise<unknown>
+    }
   }) => <div>
     <span>{category}:{profileStatus}</span>
     <span data-testid="notifications-status">{notifications.status}</span>
+    <span data-testid="notifications-failure">{notifications.failure === null ? 'none' : 'failed'}</span>
     <button onClick={() => onCategoryChange('profile')}>个人资料分类</button>
     <button onClick={() => onCategoryChange('notifications')}>通知分类</button>
+    <button onClick={() => void notifications.onSaveField('announcement',
+      { announcement: false, personal_update: true })}>保存偏好</button>
   </div>,
 }))
 
@@ -59,6 +67,7 @@ function respond(overrides: { failPreferences?: boolean; failProfile?: boolean }
 afterEach(() => {
   cleanup()
   get.mockReset()
+  put.mockReset()
   invalidateSession.mockReset()
   bindSettingsToken(null)
   bindNotificationsToken(null)
@@ -137,6 +146,30 @@ describe('SettingsExperience', () => {
     respond()
     await userEvent.click(screen.getByRole('button', { name: '通知分类' }))
     await waitFor(() => expect(screen.getByTestId('notifications-status').textContent).toBe('ready'))
+  })
+
+  it('sends a preference write only while the notifications category is selected', async () => {
+    writeToken(window.localStorage, 'current-token')
+    respond()
+    put.mockResolvedValue({ ...preferences, revision: 2 })
+    render(<SettingsExperience initialCategory="general" />)
+    await userEvent.click(screen.getByRole('button', { name: '通知分类' }))
+    await waitFor(() => expect(screen.getByTestId('notifications-status').textContent).toBe('ready'))
+
+    await userEvent.click(screen.getByRole('button', { name: '个人资料分类' }))
+    await waitFor(() => expect(screen.getByText('profile:ready')).toBeTruthy())
+    // 分类投影只作为 module 的发送前资格：非通知分类不自动 PUT。
+    await userEvent.click(screen.getByRole('button', { name: '保存偏好' }))
+    expect(put).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: '通知分类' }))
+    await userEvent.click(screen.getByRole('button', { name: '保存偏好' }))
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1))
+    expect(put).toHaveBeenCalledWith('/notification-preferences', {
+      alert: false,
+      body: { expectedRevision: 1, optionalCategories: { announcement: false, personal_update: true } },
+    })
+    expect(screen.getByTestId('notifications-failure').textContent).toBe('none')
   })
 
   it('loads the selected profile category when authentication recovers', async () => {
