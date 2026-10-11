@@ -31,6 +31,9 @@ export function SettingsExperience({ initialCategory }: { initialCategory: Setti
 
   useEffect(() => subscribeSessionChanges(() => setSessionToken(currentToken())), [])
 
+  // StrictMode 清理会使控制层的在途读取失效；重新挂载时必须允许再次读取。
+  useEffect(() => () => { entered.current.clear() }, [])
+
   useEffect(() => {
     if (auth.state.status !== 'authenticated') return
     const source: SettingsSource | null =
