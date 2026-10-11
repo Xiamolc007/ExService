@@ -45,4 +45,6 @@ vendor/exui/
 # Local docs-integration previews and one-off verification artifacts
 .notes/docs-integration/previews/
 .notes/docs-integration/reports/
+.notes/archive/docs-integration/previews/
+.notes/archive/docs-integration/reports/
 .codegraphy/*
