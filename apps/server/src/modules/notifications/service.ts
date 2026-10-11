@@ -70,7 +70,7 @@ export interface NotificationDetailResult {
   stateRevision: number
   clearRevision: number
   contentAvailable: boolean
-  content: { format: 'html'; schemaVersion: 1; policyVersion: string; html: string; text: string } | null
+  content: { format: 'html'; schemaVersion: 1; policyVersion: 'notification-html-v1'; html: string; text: string } | null
   contentFallbackText: string | null
   actions: Array<{
     actionId: string

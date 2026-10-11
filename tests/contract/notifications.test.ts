@@ -80,6 +80,7 @@ beforeEach(async () => {
   app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices,
     authServices: fixture.authServices, profileServices: fixture.profileServices,
     storageServices: fixture.storageServices, notifications: fixture.notifications })
+  await app.ready()
   apps.push(app)
 
   userId = await fixture.seedUser({ email: 'reader@example.com', nickname: 'Reader', password: 'valid password' })
@@ -114,7 +115,31 @@ async function publish(title: string, audienceUserIds: readonly string[] = 'all'
   }
 }
 
+async function legacyUnrenderableNotification(): Promise<string> {
+  await publish('旧策略正文', [userId])
+  const list = await fixture.notifications.service.list({ userId, view: 'history', scope: null, category: null, limit: null, cursor: null })
+  const receiptId = list.items[0]!.receiptId
+  // 当前策略逐次重新校验 HTML；隔离 schema 的旧字节携带不允许的属性，纯文本保留安全回退。
+  await fixture.db.query(`UPDATE notification_contents SET html = $2, text = $3
+    WHERE content_id = (SELECT content_id FROM notification_receipts WHERE receipt_id = $1)`,
+  [receiptId, '<p onclick="legacyUnsafe()">旧正文</p>', '旧正文：安全的纯文本回退'])
+  return receiptId
+}
+
 describe('notification contract over HTTP', () => {
+  it('falls back to safe text over HTTP when legacy content cannot satisfy the current policy', async () => {
+    const receiptId = await legacyUnrenderableNotification()
+    const response = await app.inject({ method: 'GET', url: `/api/notifications/${receiptId}`, headers: { authorization } })
+    expect(response.statusCode, response.body).toBe(200)
+    expect(response.headers['cache-control']).toBe('no-store')
+    const detail = response.json()
+    expect(validators.detail(detail), JSON.stringify(validators.detail.errors)).toBe(true)
+    expect(detail.content).toBeNull()
+    expect(detail.contentAvailable).toBe(false)
+    expect(detail.contentFallbackText).toBe('旧正文：安全的纯文本回退')
+    expect(detail.contentFallbackText).not.toMatch(/<|onclick|legacyUnsafe/)
+  })
+
   it('lists, summarizes and reads the authenticated user own notifications', async () => {
     await publish('第一条', [userId])
 
@@ -417,6 +442,17 @@ describe('notification contract over HTTP', () => {
 describe('registered notification handler output', () => {
   // handler 只调用 reply.header 设置 no-store，因此用最小桩直接校验原始返回值。
   const reply = { header: () => reply } as never
+
+  it('falls back to safe text in raw handler output before serialization', async () => {
+    const receiptId = await legacyUnrenderableNotification()
+    const detail = await serviceHandlers.getNotification(
+      { params: { notificationId: receiptId }, server: app, authSession: { userId } } as never, reply)
+    expect(validators.detail(detail), JSON.stringify(validators.detail.errors)).toBe(true)
+    expect(detail.content).toBeNull()
+    expect(detail.contentAvailable).toBe(false)
+    expect(detail.contentFallbackText).toBe('旧正文：安全的纯文本回退')
+    expect(detail.contentFallbackText).not.toMatch(/<|onclick|legacyUnsafe/)
+  })
 
   it('returns raw values that already satisfy the contract schemas', async () => {
     await publish('原始返回值', [userId])

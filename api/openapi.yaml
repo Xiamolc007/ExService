@@ -2901,10 +2901,10 @@ components:
         clearRevision: {type: integer, minimum: 0, maximum: 9007199254740991}
         contentAvailable: {type: boolean}
         content:
-          type: [object, 'null']
           description: '当前策略下可安全渲染的正文；不可用时为 null，调用方必须改用 contentFallbackText，不得展示原始 HTML。'
-          allOf:
+          oneOf:
             - $ref: '#/components/schemas/NotificationContent'
+            - type: 'null'
         contentFallbackText:
           type: [string, 'null']
           minLength: 1

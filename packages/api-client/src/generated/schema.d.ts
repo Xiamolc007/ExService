@@ -1287,7 +1287,7 @@ export interface components {
             clearRevision: number;
             contentAvailable: boolean;
             /** @description 当前策略下可安全渲染的正文；不可用时为 null，调用方必须改用 contentFallbackText，不得展示原始 HTML。 */
-            content: (components["schemas"]["NotificationContent"] | null) & components["schemas"]["NotificationContent"];
+            content: components["schemas"]["NotificationContent"] | null;
             contentFallbackText: string | null;
             actions: components["schemas"]["NotificationAction"][];
             actionsAvailable: boolean;
