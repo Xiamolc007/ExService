@@ -71,7 +71,8 @@ export async function httpReady(url, { children = [], expected, timeout = 120000
     await delay(Math.min(250, Math.max(0, deadline - Date.now())))
   }
   if (childExited()) throw new LocalError('APP_EXITED_DURING_START')
-  throw new LocalError('APPLICATION_NOT_READY', 'inspect this run\'s redacted logs and explicit prepared stages')
+  const target = new URL(url)
+  throw new RuntimeError('APPLICATION_NOT_READY', { service: '应用', phase: 'HTTP 健康检查', target: `${target.origin}${target.pathname}` })
 }
 export function specifications(state, tools = toolchain()) {
   const env = applicationEnvironments(state, tools)
@@ -103,20 +104,25 @@ export async function verifyFoundationSchemas(state, { bootstrap = false } = {})
       if (identity.rows[0]?.name !== name || identity.rows[0]?.owner !== expectedOwner) throw new RuntimeError('DATABASE_IDENTITY_CONFLICT', { service: name })
       const unsafe = await client.query('SELECT d.datname FROM pg_database d JOIN pg_roles r ON r.oid=d.datdba WHERE d.datname=$1 AND r.rolname<>$2', [name, expectedOwner])
       const roles = await client.query('SELECT rolname FROM pg_roles WHERE rolname=$1 AND (NOT rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls)', [expectedOwner])
-      if (unsafe.rows.length || roles.rows.length) throw new Error()
+      if (unsafe.rows.length || roles.rows.length) throw new RuntimeError('DATABASE_OWNER_CONFLICT', { service: name, keys: [`${prefix}_USER`] })
       if (name === 'outline') {
         const migrations = new Set((await client.query('SELECT name FROM "SequelizeMeta"')).rows.map(row => row.name))
-        if (readdirSync(join(state.workspace, 'apps/outline/server/migrations')).filter(file => file.endsWith('.js')).some(file => !migrations.has(file))) throw new Error()
+      const missingMigrations = readdirSync(join(state.workspace, 'apps/outline/server/migrations')).filter(file => file.endsWith('.js') && !migrations.has(file))
+      if (missingMigrations.length) throw new RuntimeError('DATABASE_MIGRATIONS_MISSING', { service: name, target: missingMigrations.join(', ') })
         const columns = new Set((await client.query('SELECT table_name,column_name FROM information_schema.columns WHERE table_schema=current_schema()')).rows.map(row => `${row.table_name}.${row.column_name}`))
         for (const column of ['teams.id', 'users.id', 'website_integrations.issuer', 'website_integrations.initialAdminSubject',
-          'external_identities.issuer', 'external_sessions.clientId', 'external_revocation_events.eventId']) if (!columns.has(column)) throw new Error()
+          'external_identities.issuer', 'external_sessions.clientId', 'external_revocation_events.eventId']) if (!columns.has(column))
+          throw new RuntimeError('DATABASE_STRUCTURE_INCOMPLETE', { service: name, target: column })
         const extensions = new Set((await client.query('SELECT extname FROM pg_extension')).rows.map(row => row.extname))
-        if (!extensions.has('pg_trgm')) throw new Error()
+      if (!extensions.has('pg_trgm')) throw new RuntimeError('OUTLINE_EXTENSION_MISSING', { service: name })
         const markers = (await client.query('SELECT issuer,"initialAdminSubject" FROM website_integrations')).rows
-        if (markers.length > 1 || (markers.length && markers[0].issuer !== state.config.issuer) || (bootstrap && !markers.length)) throw new Error()
+      if (markers.length > 1 || (markers.length && markers[0].issuer !== state.config.issuer))
+        throw new RuntimeError('OUTLINE_IDENTITY_CONFLICT', { service: name, keys: ['HYDRA_PUBLIC_URL'] })
+      if (bootstrap && !markers.length) throw new RuntimeError('OUTLINE_MARKER_MISSING', { service: name })
       } else {
         const tables = (await client.query("SELECT tablename FROM pg_tables WHERE schemaname=current_schema() AND (tablename LIKE 'hydra_%' OR tablename='schema_migration')")).rows
-        if (!tables.some(row => row.tablename === 'hydra_client') || !tables.some(row => /migration/.test(row.tablename))) throw new Error()
+      if (!tables.some(row => row.tablename === 'hydra_client') || !tables.some(row => /migration/.test(row.tablename)))
+        throw new RuntimeError('DATABASE_MIGRATIONS_MISSING', { service: name })
       }
       await client.query('ROLLBACK')
     } catch (error) {
@@ -127,7 +133,7 @@ export async function verifyFoundationSchemas(state, { bootstrap = false } = {})
 }
 /** Owns application children and retains ownership until cleanup completes. */
 export async function supervise({ mode, fingerprint, directory, specifications: specs, lock, readiness,
-  onLog = (name, line) => console.log(`[${name}] ${line}`), banner,
+  onLog = (name, line) => console.log(`[${name}] ${line}`), banner, onReady = () => console.log(banner),
   spawnChild = spawnOwned, stopChildren = stopOwned, pollInterval = 250, controlDirectory = directory }) {
   let children = [], stopping = false, generation = 0, state = 'starting', failure
   const runPath = join(directory, 'run.json'), requestPath = join(controlDirectory, 'control-request.json')
@@ -153,7 +159,7 @@ export async function supervise({ mode, fingerprint, directory, specifications: 
     await readiness(children)
     if (failure) throw failure
     state = 'ready'; persist()
-    console.log(banner)
+    onReady()
   }
   try {
     await launch()

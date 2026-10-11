@@ -76,14 +76,13 @@ export async function main(input = process.argv.slice(2)) {
   const state = readRuntimeConfiguration(), output = reporter({ environment: state.values, verbose: options.verbose })
   if (options.command.startsWith('service:')) {
     const services = new Services(state)
-    if (options.command === 'service:start') await services.start({ log: output })
-    else if (options.command === 'service:stop') { await services.stop(); output.title('本项目依赖已停止；持久卷已保留') }
-    else if (options.command === 'service:status') {
-      const items = services.verify(services.inventory())
-      serviceNames.forEach(name => { const item = items.find(item => item.Config.Labels['com.docker.compose.service'] === name)
-        output.log(name, item ? `${item.State.Running ? '运行中' : '已停止'}；${item.State.Health?.Status ?? '无容器健康检查'}` : '未创建') })
-    } else {
+    if (options.command === 'service:start') { output.heading('ExWebsite · 后台服务'); output.note('正在检查并启动后台依赖…'); await services.start({ log: output }) }
+    else if (options.command === 'service:stop') { await services.stop(); output.success('本项目依赖已停止'); output.note('持久卷已保留'); output.next('pnpm service:start') }
+    else if (options.command === 'service:status') services.status({ log: output })
+    else {
       services.verify(services.inventory())
+      output.heading('ExWebsite · 后台服务日志')
+      output.note('Ctrl+C 结束日志查看')
       const scope = signalScope()
       try { await runOwned({ name: '后台日志', command: 'docker', args: [...services.args, 'logs', '--follow', '--tail', '100', ...(options.service ? [options.service] : [])],
         cwd: state.workspace, environment: services.environment }, { onLog: output.log, signal: scope.signal }) }
@@ -99,6 +98,5 @@ export async function main(input = process.argv.slice(2)) {
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try { await main() }
-  catch (error) { console.error(error instanceof RuntimeError ? error.message : /^[A-Z][A-Z0-9_]+$/.test(error?.code ?? '')
-    ? `${error.code}；检查 docs/runtime.md 中的配置、真实依赖与显式准备步骤。` : '运行失败；检查配置、真实依赖与准备状态。'); process.exitCode = 1 }
+  catch (error) { reporter({ environment: process.env, stream: process.stderr, write: line => console.error(line) }).failure(error); process.exitCode = 1 }
 }

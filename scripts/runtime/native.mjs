@@ -4,8 +4,7 @@ import { join, resolve } from 'node:path'
 import { acquireLock, runOwned } from '../docs-integration/ownership.mjs'
 import { httpReady, verifyFoundationSchemas } from '../docs-integration/local-dev.mjs'
 import { toolchain } from '../docs-integration/local-config.mjs'
-import { verifyHydraClient } from '../docs-integration/hydra-client.mjs'
-import { hydraOptions, cliSpecification } from './applications.mjs'
+import { verifyRuntimeHydraClient, cliSpecification } from './applications.mjs'
 import { validateDeployment } from './deployment.mjs'
 import { RuntimeError, reporter } from './output.mjs'
 import { digest } from '../docs-integration/local-config.mjs'
@@ -105,7 +104,7 @@ export async function verifyNativePreflight(state) {
 }
 export async function verifyNativeClient(state) {
   await httpReady(new URL('/health/ready', state.internal.hydra), { timeout: 30000 })
-  await verifyHydraClient(hydraOptions(state))
+  await verifyRuntimeHydraClient(state)
 }
 
 /** PM2 online is a process signal. Every real health and identity check must also pass. */
@@ -114,8 +113,8 @@ export async function verifyNativeHealth(state) {
   await httpReady(new URL('/api/health', state.internal.website), { timeout: 30000 })
   await httpReady(new URL('/_health', state.internal.outline), { timeout: 30000 })
   await httpReady(new URL('/health/ready', state.internal.hydra), { timeout: 30000 })
-  await validateDeployment(state, { verifyClient: options => verifyHydraClient(options) })
+  await validateDeployment(state, { verifyClient: () => verifyRuntimeHydraClient(state) })
   await runOwned(cliSpecification(state, tools, 'server', 'integration:check'))
   await runOwned(cliSpecification(state, tools, 'outline', 'integration-check'))
-  await verifyHydraClient(hydraOptions(state))
+  await verifyRuntimeHydraClient(state)
 }

@@ -10,7 +10,12 @@ import { acquireApplicationLock } from './application-lock.mjs'
 export const serviceNames = Object.freeze(['postgres', 'redis', 'hydra'])
 const project = 'exwebsite-runtime'
 const label = 'dev.exwebsite.runtime'
-const context = (service, phase) => ({ service, phase, next: 'pnpm service:status；检查配置和端口占用，首次准备见 docs/runtime.md' })
+const context = (service, phase) => ({ service, phase, next: '检查 Docker 状态（docker info）、配置和端口占用；容器日志使用 pnpm service:logs，状态使用 pnpm service:status' })
+const serviceDetails = state => [
+  ['postgres', 'PostgreSQL', `127.0.0.1:${state.config.ports.postgres}`],
+  ['redis', 'Redis', `127.0.0.1:${state.config.ports.redis}`],
+  ['hydra', 'Hydra', state.config.issuer],
+]
 
 /** No defaults or secrets live in Compose: it receives an explicit adapter environment. */
 export function composeEnvironment(state) {
@@ -50,7 +55,17 @@ export class Services {
   }
   call(args) {
     const result = this.run('docker', args, { cwd: this.state.workspace, env: this.environment, encoding: 'utf8', shell: false, windowsHide: true, timeout: 120000 })
-    if (result.error || result.status !== 0) throw new RuntimeError('DOCKER_COMMAND_FAILED', context('Docker', '调用'))
+    if (result.error || result.status !== 0) {
+      if (result.error?.code === 'ENOENT') throw new RuntimeError('DOCKER_NOT_FOUND', {
+        service: 'Docker', phase: '命令检查', next: '检查 Docker 是否已安装且 docker 命令位于 PATH；安装后重试 pnpm service:status' })
+      if (result.error?.code === 'ETIMEDOUT') throw new RuntimeError('DOCKER_COMMAND_TIMEOUT', {
+        service: 'Docker', phase: '调用超时', next: '检查 Docker 状态（docker info）及 Docker Desktop/daemon 是否响应；恢复后重试 pnpm service:status' })
+      // Classify known engine connection failures without returning raw stderr or secrets.
+      if (/failed to connect to the docker API|cannot connect to the docker daemon|error during connect:/i.test(result.stderr ?? ''))
+        throw new RuntimeError('DOCKER_UNAVAILABLE', { service: 'Docker', phase: '引擎连接失败',
+          next: '检查 Docker 状态（docker info），确认 Docker Desktop/daemon 已启动，并检查当前 context（docker context show）；恢复后重试 pnpm service:status' })
+      throw new RuntimeError('DOCKER_COMMAND_FAILED', context('Docker', '调用'))
+    }
     return result.stdout
   }
   compose(args) { return this.call([...this.args, ...args]) }
@@ -58,6 +73,23 @@ export class Services {
     const ids = this.call(['ps', '-a', '--no-trunc', '--filter', `label=com.docker.compose.project=${project}`, '--format', '{{.ID}}']).trim().split(/\r?\n/).filter(Boolean)
     if (ids.some(id => !/^[a-f0-9]{64}$/.test(id)) || new Set(ids).size !== ids.length) throw new RuntimeError('INVENTORY_INVALID')
     return ids.length ? JSON.parse(this.call(['inspect', ...ids])) : []
+  }
+  status({ log = reporter({ environment: this.state.values }) } = {}) {
+    const items = this.verify(this.inventory())
+    log.heading('ExWebsite · 后台服务状态')
+    for (const [name, display, address] of serviceDetails(this.state)) {
+      const item = items.find(item => item.Config.Labels['com.docker.compose.service'] === name), health = item?.State.Health?.Status
+      const running = item?.State.Running
+      const description = { healthy: '健康检查通过', unhealthy: '健康检查失败', starting: '健康检查中' }[health] ?? '无容器健康检查'
+      log.status(display, !item ? '未创建' : !running ? '已停止' : `运行中（${description}）`, item ? address : '',
+        { level: running && health === 'healthy' ? 'success' : running && health === 'unhealthy' ? 'error' : 'warning' })
+    }
+    if (!items.length) {
+      log.note('未发现本项目服务容器。')
+      log.next('检查 Docker 状态（docker info）；环境已准备后执行 pnpm service:start')
+      log.note('首次准备：填写根 .env.local，显式 pnpm infra init，并单独准备 exre 和 pnpm db:migrate')
+    } else log.next(items.every(item => item.State.Running && (!item.State.Health || item.State.Health.Status === 'healthy'))
+      && items.length === serviceNames.length ? 'pnpm dev' : '检查 pnpm service:logs；依赖尚未运行时执行 pnpm service:start')
   }
   proof(item) {
     const host = { ...item.HostConfig }
@@ -156,9 +188,11 @@ export class Services {
       try { this.compose(['up', '-d', '--no-recreate', '--wait', '--wait-timeout', '60', ...selectedServices]) }
       finally { save() }
       await ready(this.state, this, selectedServices)
-      log.title('后台依赖已就绪')
-      for (const [name, address] of [['PostgreSQL', `127.0.0.1:${p.postgres}`], ['Redis', `127.0.0.1:${p.redis}`], ['Hydra', this.state.config.issuer]]) log.log(name, address)
-      log.title('下一步：pnpm dev；状态：pnpm service:status；日志：pnpm service:logs；停止：pnpm service:stop')
+      const allServices = serviceNames.every(name => selectedServices.includes(name))
+      log.success(allServices ? '后台依赖已就绪' : '所选后台依赖已就绪')
+      for (const [name, display, address] of serviceDetails(this.state).filter(([name]) => selectedServices.includes(name)))
+        log.status(display, '已就绪', address, { level: 'success' })
+      log.next(allServices ? 'pnpm dev' : 'pnpm service:start', [['状态', 'pnpm service:status'], ['日志', 'pnpm service:logs'], ['停止', 'pnpm service:stop']])
     } catch (error) {
       if (saved) await this.stop({ onlyNew: true, lock: false })
       throw error

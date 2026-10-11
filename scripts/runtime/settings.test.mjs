@@ -7,7 +7,8 @@ import { join } from 'node:path'
 import { createServer } from 'node:net'
 import { readRuntimeConfiguration, databaseUrl, defaults } from './settings.mjs'
 import { convertValues, convertConfiguration, serializeEnvironment, verifyOriginalTargets } from './convert.mjs'
-import { redact, diagnostic, reporter } from './output.mjs'
+import { redact, diagnostic, reporter, runtimeFailure } from './output.mjs'
+import { verifyApplications, verifyRuntimeHydraClient } from './applications.mjs'
 import { composeEnvironment, Services } from './services.mjs'
 import { root } from './shared.mjs'
 import { NativeApplications } from './native.mjs'
@@ -41,6 +42,107 @@ function fixture(t, profile = 'local') {
   save()
   return { workspace, values, save, read: inherited => readRuntimeConfiguration({ workspace, inherited: inherited ?? {} }) }
 }
+
+test('Docker status failures explain engine availability without exposing command output', t => {
+  const state = fixture(t).read(); state.workspace = root
+  const cases = [
+    [{ status: 1, stderr: 'failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine; The system cannot find the file specified.' }, 'DOCKER_UNAVAILABLE', /Docker Desktop|daemon/],
+    [{ status: 1, stderr: 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?' }, 'DOCKER_UNAVAILABLE', /Docker Desktop|daemon/],
+    [{ status: 1, stderr: 'error during connect: open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.' }, 'DOCKER_UNAVAILABLE', /Docker Desktop|daemon/],
+    [{ status: null, error: { code: 'ENOENT' } }, 'DOCKER_NOT_FOUND', /安装.*Docker|PATH/],
+    [{ status: null, error: { code: 'ETIMEDOUT' } }, 'DOCKER_COMMAND_TIMEOUT', /超时/],
+    [{ status: 1, stderr: 'invalid compose configuration' }, 'DOCKER_COMMAND_FAILED', /配置和端口/],
+  ]
+  for (const [result, code, message] of cases) {
+    const calls = []
+    const services = new Services(state, { run: (command, args) => {
+      calls.push({ command, args })
+      return { ...result, stderr: `${result.stderr ?? ''}\nBearer private-token postgresql://private:credential@host/exre` }
+    } })
+    const lines = []
+    assert.throws(() => services.status({ log: { log: (...args) => lines.push(args), title: line => lines.push(line) } }), error => {
+      assert.equal(error.code, code)
+      assert.match(error.message, message)
+      if (code === 'DOCKER_UNAVAILABLE') {
+        assert.match(error.message, /检查 Docker 状态/)
+        assert.match(error.message, /docker info/)
+        assert.match(error.message, /docker context show/)
+      }
+      assert.doesNotMatch(error.message, /private-token|credential|invalid compose configuration/)
+      return true
+    })
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].command, 'docker')
+    assert.equal(calls[0].args[0], 'ps')
+    assert.deepEqual(lines, [])
+  }
+})
+
+test('startup diagnostics name the failed check and corrective step without referring to a manual', () => {
+  for (const [code, expected] of [
+    ['CONFIG_REQUIRED', /配置缺失/], ['CRYPTO_KEY_INVALID', /64 位 hex/],
+    ['OUTLINE_MARKER_MISSING', /已有 active Website 用户 UUID/], ['DATABASE_MIGRATIONS_MISSING', /pnpm infra migrate/],
+    ['HYDRA_CLIENT_MISSING', /client 尚未登记/], ['APPLICATION_PORT_OCCUPIED', /端口已被占用/],
+    ['WEBSITE_NOT_READY', /Website 启动检查未通过/],
+  ]) {
+    const message = runtimeFailure({ code, message: 'Bearer private-token postgres://private:credential@host/exre' })
+    assert.match(message, expected)
+    assert.match(message, /下一步：/)
+    assert.doesNotMatch(message, /docs\/runtime\.md|private-token|credential/)
+  }
+  assert.doesNotMatch(runtimeFailure(new Error('private-token')), /private-token/)
+})
+
+test('Hydra startup separates missing clients, configuration conflicts and network failures', async t => {
+  const state = fixture(t).read()
+  for (const [error, code] of [
+    [new Error('Hydra client initialization failed (HTTP 404)'), 'HYDRA_CLIENT_MISSING'],
+    [new Error('Existing Hydra client configuration conflict; explicit operator repair is required'), 'HYDRA_CLIENT_CONFLICT'],
+    [new Error('Existing Hydra client secret conflict or protocol service unavailable'), 'HYDRA_CLIENT_CONFLICT'],
+    [new Error('Invalid Hydra bootstrap configuration'), 'HYDRA_CONFIG_INVALID'],
+    [Object.assign(new Error('private-token'), { cause: { code: 'ECONNREFUSED' } }), 'ECONNREFUSED (连接被拒绝)'],
+  ]) await assert.rejects(verifyRuntimeHydraClient(state, async () => { throw error }), failure => {
+    assert.equal(failure.code, code)
+    assert.match(failure.message, /Hydra/)
+    assert.doesNotMatch(failure.message, /private-token|docs\/runtime\.md/)
+    return true
+  })
+  const calls = []
+  await verifyApplications(state, { tools: { node: process.execPath }, verifySchemas: async () => {},
+    execute: async (spec, options) => { calls.push(spec.name); options.onLog(spec.name, '检查完成') }, verifyClient: async () => {}, onLog: () => {} })
+  assert.deepEqual(calls, ['server', 'outline'])
+})
+
+test('Docker status distinguishes an empty project inventory and guides the user', t => {
+  const state = fixture(t).read(); state.workspace = root
+  const calls = [], lines = []
+  const services = new Services(state, { run: (command, args) => {
+    calls.push(args)
+    return { status: 0, stdout: args[0] === 'ps' ? '' : JSON.stringify({ services: {} }) }
+  } })
+  services.status({ log: reporter({ stream: { isTTY: false }, write: line => lines.push(line) }) })
+  const text = lines.join('\n')
+  for (const name of ['PostgreSQL', 'Redis', 'Hydra']) assert.match(text, new RegExp(`${name}\\s+未创建`))
+  assert.match(text, /检查 Docker 状态.*docker info/)
+  assert.match(text, /pnpm service:start/)
+  assert.equal(calls.some(args => args.includes('up') || args.includes('stop')), false)
+})
+
+test('status does not claim Hydra is healthy when only the container running state is available', t => {
+  const state = fixture(t).read(); state.workspace = root
+  const services = new Services(state), lines = []
+  services.inventory = () => [
+    { Config: { Labels: { 'com.docker.compose.service': 'postgres' } }, State: { Running: true, Health: { Status: 'healthy' } } },
+    { Config: { Labels: { 'com.docker.compose.service': 'redis' } }, State: { Running: true, Health: { Status: 'unhealthy' } } },
+    { Config: { Labels: { 'com.docker.compose.service': 'hydra' } }, State: { Running: true } },
+  ]
+  services.verify = items => items
+  services.status({ log: reporter({ stream: { isTTY: false }, write: line => lines.push(line) }) })
+  assert.match(lines.join('\n'), /✓ PostgreSQL\s+运行中（健康检查通过）/)
+  assert.match(lines.join('\n'), /✗ Redis\s+运行中（健康检查失败）/)
+  assert.match(lines.join('\n'), /! Hydra\s+运行中（无容器健康检查）/)
+  assert.doesNotMatch(lines.find(line => line.includes('Hydra')), /✓|已就绪|健康检查通过/)
+})
 
 test('root-only component settings preserve short passwords, encoding, process overrides and service boundaries', t => {
   const f = fixture(t)
@@ -190,7 +292,7 @@ test('start cannot replace a saved proof after DNS drift to make a later stop su
   item.HostConfig.Dns = ['1.1.1.1']
   await assert.rejects(services.stop({ lock: false }), /STOP_OWNERSHIP_CONFLICT/)
   await assert.rejects(services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {},
-    log: { title() {}, log() {} } }), /START_OWNERSHIP_CONFLICT/)
+    log: reporter({ write() {} }) }), /START_OWNERSHIP_CONFLICT/)
   assert.equal(readFileSync(services.file, 'utf8'), saved)
   await assert.rejects(services.stop({ lock: false }), /STOP_OWNERSHIP_CONFLICT/)
   assert.deepEqual(mutations, [])
@@ -201,17 +303,17 @@ test('start cannot replace a saved proof after DNS drift to make a later stop su
     value => { value.Image = 'replacement-image-id' }, value => { value.Id = 'b'.repeat(64) }]) {
     Object.assign(item, structuredClone(originalItem)); change(item)
     await assert.rejects(services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {},
-      log: { title() {}, log() {} } }), /START_OWNERSHIP_CONFLICT/)
+      log: reporter({ write() {} }) }), /START_OWNERSHIP_CONFLICT/)
     assert.equal(readFileSync(services.file, 'utf8'), saved)
   }
   Object.assign(item, structuredClone(originalItem))
   rmSync(services.file)
   await assert.rejects(services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {},
-    log: { title() {}, log() {} } }), /OWNERSHIP_RECORD_MISSING/)
+    log: reporter({ write() {} }) }), /OWNERSHIP_RECORD_MISSING/)
   for (const record of [null, { ...JSON.parse(saved), version: 2 }, { ...JSON.parse(saved), proofs: [null] }]) {
     const invalid = JSON.stringify(record); writeFileSync(services.file, invalid)
     await assert.rejects(services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {},
-      log: { title() {}, log() {} } }), /OWNERSHIP_RECORD_INVALID/)
+      log: reporter({ write() {} }) }), /OWNERSHIP_RECORD_INVALID/)
     assert.equal(readFileSync(services.file, 'utf8'), invalid)
   }
   assert.deepEqual(mutations, [])
@@ -219,7 +321,7 @@ test('start cannot replace a saved proof after DNS drift to make a later stop su
 
   // Legitimate Docker null/[] normalization retains the original proof and permits restart.
   item.HostConfig.Dns = null
-  await services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {}, log: { title() {}, log() {} } })
+  await services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {}, log: reporter({ write() {} }) })
   assert.deepEqual(JSON.parse(readFileSync(services.file, 'utf8')).proofs, JSON.parse(saved).proofs)
   await services.stop({ lock: false })
   assert.equal(item.State.Running, false)
@@ -229,14 +331,14 @@ test('start cannot replace a saved proof after DNS drift to make a later stop su
   mutations.length = 0
   duringStart = () => { item.HostConfig.Dns = ['9.9.9.9'] }
   await assert.rejects(services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {},
-    log: { title() {}, log() {} } }), /START_OWNERSHIP_CONFLICT/)
+    log: reporter({ write() {} }) }), /START_OWNERSHIP_CONFLICT/)
   assert.equal(readFileSync(services.file, 'utf8'), beforeStart)
   assert.equal(mutations.length, 1)
   assert.ok(mutations[0].includes('up'))
 
   // A genuinely empty inventory still supports first-time creation and a proven stop.
   Object.assign(item, structuredClone(originalItem)); present = false; duringStart = () => {}; rmSync(services.file)
-  await services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {}, log: { title() {}, log() {} } })
+  await services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {}, log: reporter({ write() {} }) })
   await services.stop({ lock: false })
   assert.equal(item.State.Running, false)
 })

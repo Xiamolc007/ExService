@@ -14,7 +14,7 @@ export function testSpecifications({ workspace = root, inherited = process.env }
   const node = inherited.INTEGRATION_NODE_BIN ?? configured.INTEGRATION_NODE_BIN ?? process.execPath
   const corepack = inherited.INTEGRATION_COREPACK_JS ?? configured.INTEGRATION_COREPACK_JS ?? join(dirname(process.execPath), 'node_modules/corepack/dist/corepack.js')
   const environment = withNodePath(operatingEnvironment(inherited), node)
-  const logic = ['scripts/api/generate.test.mjs', 'scripts/runtime/settings.test.mjs', 'scripts/runtime/deployment.test.mjs', 'scripts/runtime/application-lock.test.mjs',
+  const logic = ['scripts/api/generate.test.mjs', 'scripts/runtime/settings.test.mjs', 'scripts/runtime/output.test.mjs', 'scripts/runtime/deployment.test.mjs', 'scripts/runtime/application-lock.test.mjs',
     'scripts/docs-integration/ownership.test.mjs', 'scripts/docs-integration/readiness.test.mjs',
     'scripts/docs-integration/test-outline.test.mjs', 'scripts/docs-integration/hydra-client.test.mjs']
   const outlineEnv = isolatedEnvironment(environment, { databaseUrl: 'postgres://isolated:isolated@127.0.0.1:1/outline-test',

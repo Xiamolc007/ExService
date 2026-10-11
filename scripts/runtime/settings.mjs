@@ -79,7 +79,8 @@ export function readRuntimeConfiguration({ workspace = root, inherited = process
   const file = environmentFile(join(workspace, '.env.local'))
   const legacy = ['DATABASE_URL', 'OUTLINE_DATABASE_URL', 'HYDRA_DATABASE_URL', 'OUTLINE_PASSWORD', 'HYDRA_PASSWORD', 'RUNTIME_CONFIG_VERSION']
     .filter(key => file[key] !== undefined || inherited[key] !== undefined)
-  if (legacy.length) throw new RuntimeError('EXPLICIT_CONFIG_CONVERSION_REQUIRED', { keys: legacy, next: 'pnpm infra convert；先阅读 docs/runtime.md 的配置转换说明' })
+  if (legacy.length) throw new RuntimeError('EXPLICIT_CONFIG_CONVERSION_REQUIRED', { keys: legacy,
+    reason: '检测到旧 URL 配置，普通入口只接受数据库组件字段', next: '核对原连接目标和凭据后显式执行 pnpm infra convert；转换会备份原配置，不迁移数据或轮换秘密' })
   const values = { ...pick(file, supportedKeys), ...pick(inherited, supportedKeys) }
   if (!['local', 'deployment'].includes(values.RUNTIME_PROFILE) || profile && values.RUNTIME_PROFILE !== profile)
     throw new RuntimeError('PROFILE_INVALID', { keys: ['RUNTIME_PROFILE'] })

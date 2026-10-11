@@ -146,6 +146,22 @@ test('unexpected mandatory child exit cleans all siblings', async () => {
     assert.equal(f.state(), 'stopped')
   } finally { rmSync(f.directory, { recursive: true, force: true }) }
 })
+test('supervisor renders readiness only after successful checks and suppresses it on failure', async () => {
+  const f = fixture(), notices = []
+  const running = supervise({ ...f.options, readiness: async () => { notices.push('checked') },
+    onReady: () => { assert.equal(f.state(), 'ready'); notices.push('displayed') } })
+  try {
+    await waitFor(() => f.state() === 'ready')
+    assert.deepEqual(notices, ['checked', 'displayed'])
+    f.request('stop'); await running
+  } finally { f.request('stop'); await running; rmSync(f.directory, { recursive: true, force: true }) }
+  const failed = fixture()
+  try {
+    await assert.rejects(supervise({ ...failed.options, readiness: async () => { throw new Error('not ready') },
+      onReady: () => notices.push('incorrectly displayed') }), /not ready/)
+    assert.deepEqual(notices, ['checked', 'displayed'])
+  } finally { rmSync(failed.directory, { recursive: true, force: true }) }
+})
 test('startup failure clears partially spawned children before releasing application ownership', async () => {
   const f = fixture(); let starts = 0
   try {
