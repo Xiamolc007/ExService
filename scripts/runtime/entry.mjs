@@ -54,6 +54,18 @@ async function applicationLogs(state, service) {
   } finally { files.forEach(file => unwatchFile(file)); scope.close() }
 }
 
+async function generateDevelopmentContract(options) {
+  const { generateContract } = await import('../api/generate.mjs')
+  return generateContract(options)
+}
+
+/** Generation must finish before read-only preflight or any application launch. */
+export async function runDevelopmentWithContract(state, options = {},
+  { generate = generateDevelopmentContract, launch = runDevelopment } = {}) {
+  await generate({ workspace: state.workspace })
+  return launch(state, options)
+}
+
 export async function main(input = process.argv.slice(2)) {
   const options = parseRuntimeArguments(input)
   if (options.action === 'convert') {
@@ -77,7 +89,7 @@ export async function main(input = process.argv.slice(2)) {
         cwd: state.workspace, environment: services.environment }, { onLog: output.log, signal: scope.signal }) }
       finally { scope.close() }
     }
-  } else if (options.command === 'dev') await runDevelopment(state, options)
+  } else if (options.command === 'dev') await runDevelopmentWithContract(state, options)
   else if (options.command === 'start') await new NativeApplications(state).start({ log: output })
   else if (options.command === 'stop') { await new NativeApplications(state).stop(); output.title('本项目应用已停止；后台服务与数据已保留') }
   else if (options.command === 'logs') await applicationLogs(state, options.service)

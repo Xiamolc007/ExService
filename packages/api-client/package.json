@@ -9,6 +9,9 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./types": {
+      "types": "./src/generated/schema.d.ts"
     }
   },
   "scripts": {

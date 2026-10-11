@@ -19,6 +19,10 @@ export function serverSpecification(action, args = [], { workspace = root, inher
     args: [...(action === 'start' || compiled ? [] : ['--import', 'tsx']), ...(action === 'dev' ? ['--watch'] : []), entry, ...(args[0] === '--' ? args.slice(1) : args)] }
 }
 export async function main(action = process.argv[2], args = process.argv.slice(3)) {
+  if (action === 'dev') {
+    const { generate } = await import('../api/generate.mjs')
+    await generate('generate')
+  }
   const spec = serverSpecification(action, args), child = spawn(spec.command, spec.args, { cwd: spec.cwd, env: spec.environment, stdio: 'inherit', shell: false, windowsHide: true })
   const relay = signal => { if (!child.killed) child.kill(signal) }
   const interrupt = () => relay('SIGINT'), terminate = () => relay('SIGTERM')

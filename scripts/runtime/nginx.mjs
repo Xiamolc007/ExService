@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { parse } from 'yaml'
+import { readContract } from '../api/read-contract.mjs'
 import { RuntimeError } from './output.mjs'
 
 /** Renders validated deployment addresses. Installation/reload remain explicit operator actions. */
@@ -8,7 +8,7 @@ export function nginxConfiguration(state) {
   if (state.profile !== 'deployment') throw new RuntimeError('DEPLOYMENT_PROFILE_REQUIRED')
   const origin = new URL(state.config.publicOrigin), issuer = new URL(state.config.issuer)
   if (origin.hostname === issuer.hostname || origin.port || issuer.port) throw new RuntimeError('NGINX_DISTINCT_HTTPS_HOSTS_REQUIRED')
-  const contract = parse(readFileSync(join(state.workspace, 'api/openapi.yaml'), 'utf8'))
+  const contract = readContract(join(state.workspace, 'api/generated/openapi.json'))
   const joinBytes = contract.paths['/join/applications'].post['x-fastify-config'].joinUpload.wireBytes
   const overheadBytes = contract.paths['/storage/uploads'].post['x-fastify-config'].storageUpload.wireOverheadBytes
   // Match the storage parser's default; the proxy ceiling includes multipart metadata.

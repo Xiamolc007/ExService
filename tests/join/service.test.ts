@@ -1,7 +1,7 @@
 ﻿import { afterEach, expect, it, vi } from 'vitest'
 import { approvedInvitation, createTestAuth, joinSnapshot, registerInvited, newJoinApplication, type TestAuth } from '@tests/helpers/auth'
-import { JoinRateLimiter } from '@server/src/join/rate-limiter'
-import { publicWebBaseUrl } from '@server/src/invitations/mail'
+import { JoinRateLimiter } from '@server/src/domains/join/applications/rate-limiter'
+import { publicWebBaseUrl } from '@server/src/domains/join/invitations/mail'
 const fixtures:TestAuth[]=[]
 afterEach(async()=>{vi.useRealTimers();await Promise.all(fixtures.splice(0).map(f=>f.close()))})
 async function setup(overrides:Parameters<typeof createTestAuth>[0]={}){const f=await createTestAuth(overrides);fixtures.push(f);return f}

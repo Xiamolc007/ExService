@@ -3,7 +3,7 @@ import { createApp } from '@workspace/server'
 import { createTestAuth, type TestAuth } from '@tests/helpers/auth'
 
 /**
- * `apps/server/src/http/query-coercion.ts` 只按**内联** `type` 强制标量查询参数，
+ * `apps/server/src/http/shared/query-coercion.ts` 只按**内联** `type` 强制标量查询参数，
  * 遇到 `$ref` 会跳过。这在当前是安全的，前提是 `fastify-openapi-glue` 交给路由的
  * querystring schema 里不存在 `$ref` —— 实测 Glue 解析 Contract 时就把
  * `#/components/schemas/*` 展开了。

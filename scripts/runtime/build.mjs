@@ -19,6 +19,8 @@ export function buildSpecifications({ workspace = root, inherited = process.env 
     WEBSITE_INTEGRATION_MODE: 'deployment', URL: 'https://build.invalid/docs', WEBSITE_URL: 'https://build.invalid/', HYDRA_PUBLIC_URL: 'https://issuer.build.invalid/',
     OUTLINE_OIDC_CLIENT_ID: 'ex-outline', WEBSITE_INTERNAL_URL: 'http://server:8080/' }
   return [
+    { name: 'API Contract', command: node, cwd: workspace,
+      args: [join(workspace, 'scripts/api/generate.mjs'), 'generate'], environment: publicEnv },
     ...['@workspace/sdk', '@workspace/web', '@workspace/server'].map(name => ({ name, command: node, cwd: workspace,
       args: [corepack, 'pnpm', '--filter', name, 'build'], environment: publicEnv })),
     // Package existing catalogs without regenerating and overwriting translators' source changes.

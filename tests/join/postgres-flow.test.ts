@@ -1,8 +1,8 @@
 import { afterEach, expect, it } from 'vitest'
 import { createTestAuth, newJoinApplication, testPasswordHasher, type TestAuth } from '@tests/helpers/auth'
 import { openDatabase } from '@server/src/db/client'
-import { InvitationService } from '@server/src/invitations/service'
-import { JoinService } from '@server/src/join/service'
+import { InvitationService } from '@server/src/domains/join/invitations/service'
+import { JoinService } from '@server/src/domains/join/applications/service'
 
 const fixtures: TestAuth[] = []
 afterEach(async () => { await Promise.all(fixtures.splice(0).map(fixture => fixture.close())) })

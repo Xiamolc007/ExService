@@ -15,8 +15,8 @@
     "dev": "node scripts/runtime/entry.mjs dev",
     "infra": "node scripts/runtime/entry.mjs infra",
     "api:lint": "redocly lint api/openapi.yaml",
-    "api:generate": "openapi-typescript api/openapi.yaml -o packages/api-client/src/generated/schema.d.ts",
-    "typecheck": "pnpm -r typecheck && pnpm exec tsc --noEmit -p tests/api-client/tsconfig.json",
+    "api:generate": "node scripts/api/generate.mjs generate",
+    "typecheck": "pnpm -r typecheck && pnpm exec tsc --noEmit -p tests/api-client/tsconfig.json && pnpm exec tsc --noEmit -p tests/server-types/tsconfig.json",
     "test": "node scripts/runtime/tests.mjs",
     "test:watch": "node scripts/runtime/tests.mjs --watch",
     "build": "node scripts/runtime/build.mjs",
@@ -24,7 +24,9 @@
     "stop": "node scripts/runtime/entry.mjs stop",
     "logs": "node scripts/runtime/entry.mjs logs",
     "db:migrate": "pnpm --filter @workspace/server db:migrate",
-    "db:reset": "pnpm --filter @workspace/server db:reset"
+    "db:reset": "pnpm --filter @workspace/server db:reset",
+    "api:bundle": "node scripts/api/generate.mjs bundle",
+    "api:check": "node scripts/api/generate.mjs check"
   },
   "devDependencies": {
     "@redocly/cli": "^2.53.2",

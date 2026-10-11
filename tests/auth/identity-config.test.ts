@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { IdentityConfigError, parseIdentityConfig } from '@server/src/identity/config'
+import { IdentityConfigError, parseIdentityConfig } from '@server/src/modules/identity/config'
 
 const keys = { OUTLINE_INTEGRATION_KEY: 'a'.repeat(64), IDENTITY_DELIVERY_KEY: 'b'.repeat(64),
   IDENTITY_BOOTSTRAP_KEY: 'c'.repeat(64), IDENTITY_FLOW_KEY: 'd'.repeat(64) }

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { validateJoinApplicationPayload, validateStoredJoinForm } from '@server/src/join/form-validation'
+import { validateJoinApplicationPayload, validateStoredJoinForm } from '@server/src/domains/join/applications/form-validation'
 
 const earlierTransferForm = {
   applicationType: 'experienced',

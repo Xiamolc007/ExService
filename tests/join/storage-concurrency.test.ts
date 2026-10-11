@@ -1,7 +1,7 @@
 import { beforeAll, expect, it } from 'vitest'
 import { openDatabase } from '@server/src/db/client'
-import { InvitationService } from '@server/src/invitations/service'
-import { JoinService } from '@server/src/join/service'
+import { InvitationService } from '@server/src/domains/join/invitations/service'
+import { JoinService } from '@server/src/domains/join/applications/service'
 import { experiencedJoinApplication, newJoinApplication } from '@tests/helpers/auth'
 import { isolatedPostgres } from '@tests/helpers/postgres'
 

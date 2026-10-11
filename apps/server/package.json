@@ -10,8 +10,8 @@
   "scripts": {
     "dev": "node ../../scripts/runtime/server.mjs dev",
     "start": "node ../../scripts/runtime/server.mjs start",
-    "build": "tsc -p tsconfig.json && node ../../scripts/rewrite-server-imports.mjs",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "node ../../scripts/api/generate.mjs generate && tsc -p tsconfig.json && node ../../scripts/rewrite-server-imports.mjs",
+    "typecheck": "node ../../scripts/api/generate.mjs check && tsc --noEmit -p tsconfig.json",
     "db:migrate": "node ../../scripts/runtime/server.mjs db:migrate",
     "db:reset": "node ../../scripts/runtime/server.mjs db:reset",
     "db:generate": "drizzle-kit generate",
@@ -31,7 +31,9 @@
     "pg": "^8.16.3",
     "qcloud-cos-sts": "^3.1.3",
     "sharp": "^0.35.4",
-    "yaml": "2.9.1"
+    "yaml": "2.9.1",
+    "fastify-plugin": "6.0.0",
+    "@workspace/api-client": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.20.3",

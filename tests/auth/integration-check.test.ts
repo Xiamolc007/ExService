@@ -6,7 +6,7 @@ import { expect, it } from 'vitest'
 import { openDatabase, type AppDatabase } from '@server/src/db/client'
 import { runMigrations } from '@server/src/db/migration-runner'
 import { APPLICATION_TABLES } from '@server/src/db/schema-check'
-import { parseIntegrationCheckArguments, validateWebsiteIntegrationPreflight } from '@server/src/identity/readiness'
+import { parseIntegrationCheckArguments, validateWebsiteIntegrationPreflight } from '@server/src/integration-readiness'
 
 const serverRoot = fileURLToPath(new URL('../../apps/server/', import.meta.url))
 const preflight = { AUTH_CODE_HMAC_KEY: 'a'.repeat(64), WEBSITE_INTEGRATION_ENABLED: 'true',

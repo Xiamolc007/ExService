@@ -6,7 +6,7 @@ import { basename, dirname, resolve } from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import Ajv from 'ajv'
-import { parse } from 'yaml'
+import { readContract } from '@tests/helpers/contract'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import { createApp, serviceHandlers } from '@workspace/server'
@@ -15,7 +15,7 @@ import { createExAxios, ExAxiosError } from '@sdk/src/http/node'
 import { createTestAuth, experiencedJoinApplication, newJoinApplication, joinSnapshot, type TestAuth } from '@tests/helpers/auth'
 import { applicationPart, joinMultipart, multipartBody } from '@tests/helpers/multipart'
 
-const contract = parse(readFileSync(fileURLToPath(new URL('../../api/openapi.yaml', import.meta.url)), 'utf8'))
+const contract = readContract(new URL('../../api/generated/openapi.json', import.meta.url))
 const definitions = JSON.parse(JSON.stringify(contract.components.schemas).replaceAll('#/components/schemas/', '#/definitions/'))
 function validate(name: string, value: unknown) {
   const check = new Ajv({ strict: false, allErrors: true }).compile({ ...definitions[name], definitions })

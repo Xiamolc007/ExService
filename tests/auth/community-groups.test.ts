@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { assertCommunitySchemaAvailable } from '@server/src/community/schema-check'
+import { assertCommunitySchemaAvailable } from '@server/src/domains/community/schema-check'
 import { createTestAuth, approvedInvitation, type TestAuth } from '@tests/helpers/auth'
 
 const fixtures: TestAuth[] = []

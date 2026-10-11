@@ -1,7 +1,7 @@
 import { assertCliEntry, openDatabase } from '@server/src/db/client.js'
-import { IdentityConfigError } from '@server/src/identity/config.js'
+import { IdentityConfigError } from '@server/src/modules/identity/config.js'
 import { assertWebsiteIntegrationReady, IdentityReadinessError,
-  parseIntegrationCheckArguments, validateWebsiteIntegrationPreflight } from '@server/src/identity/readiness.js'
+  parseIntegrationCheckArguments, validateWebsiteIntegrationPreflight } from '@server/src/integration-readiness.js'
 
 assertCliEntry(import.meta.url)
 

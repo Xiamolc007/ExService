@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createApiClient } from '@api-client/src/client'
 import { readFileSync } from 'node:fs'
-import { parse as parseYaml } from 'yaml'
+import { readContract } from '@tests/helpers/contract'
 
 describe('typed API transport', () => {
   it('supports every declared path and query serialization style in the contract', () => {
-    const contract = parseYaml(readFileSync(new URL('../../api/openapi.yaml', import.meta.url), 'utf8')) as { paths: Record<string, Record<string, { parameters?: Array<{ name: string; in: string; style?: string; explode?: boolean; schema?: { type?: string } }> }>> }
+    const contract = readContract(new URL('../../api/generated/openapi.json', import.meta.url)) as { paths: Record<string, Record<string, { parameters?: Array<{ name: string; in: string; style?: string; explode?: boolean; schema?: { type?: string } }> }>> }
     for (const [path, item] of Object.entries(contract.paths)) for (const [method, operation] of Object.entries(item)) {
       if (!operation || !Array.isArray(operation.parameters)) continue
       for (const parameter of operation.parameters) {

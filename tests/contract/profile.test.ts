@@ -2,8 +2,8 @@
 import { createRequire } from 'node:module'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createApp, serviceHandlers } from '@workspace/server'
-import { ProfileService, publicAvatarBaseUrl } from '@server/src/profile/service'
-import { AuthService } from '@server/src/auth/service'
+import { ProfileService, publicAvatarBaseUrl } from '@server/src/modules/profile/service'
+import { AuthService } from '@server/src/modules/auth/service'
 import { openDatabase } from '@server/src/db/client'
 import { createTestAuth, testPasswordHasher, type TestAuth } from '@tests/helpers/auth'
 

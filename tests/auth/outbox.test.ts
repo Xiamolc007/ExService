@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { configuredIdentityOutboxWorker, IdentityOutboxWorker } from '@server/src/identity/outbox'
-import { parseIdentityConfig } from '@server/src/identity/config'
+import { configuredIdentityOutboxWorker, IdentityOutboxWorker } from '@server/src/modules/identity/outbox'
+import { parseIdentityConfig } from '@server/src/modules/identity/config'
 import { createTestAuth, type TestAuth } from '@tests/helpers/auth'
 
 const fixtures: TestAuth[] = []

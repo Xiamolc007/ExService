@@ -6,27 +6,27 @@ import { createApp, serviceHandlers } from '@workspace/server'
 import { createTestAuth, type TestAuth } from '@tests/helpers/auth'
 import Ajv, { type ValidateFunction } from 'ajv'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { parse as parseYaml } from 'yaml'
+import { readContract as readDocument } from '@tests/helpers/contract'
 
 /**
  * 真实 Fastify HTTP + 原始 handler 输出的 Contract 校验。
  *
- * 只读 `api/openapi.yaml`，不在测试里复制响应结构；同时校验 handler 的
+ * 只读 `api/generated/openapi.json`，不在测试里复制响应结构；同时校验 handler 的
  * 原始返回值，因为 Fastify 会用 response schema 序列化，未声明字段会被静默丢弃。
  */
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
-const contractPath = resolve(projectRoot, 'api/openapi.yaml')
+const contractPath = resolve(projectRoot, 'api/generated/openapi.json')
 
 interface ContractDocument {
   schemas: Record<string, unknown>
 }
 
 function readContract(): ContractDocument {
-  const parsed = parseYaml(readFileSync(contractPath, 'utf8')) as { components?: { schemas?: unknown } }
+  const parsed = readDocument(contractPath) as { components?: { schemas?: unknown } }
   const schemas = parsed.components?.schemas
   if (typeof schemas !== 'object' || schemas === null) {
-    throw new Error(`api/openapi.yaml 缺少 components.schemas：${contractPath}`)
+    throw new Error(`api/generated/openapi.json 缺少 components.schemas：${contractPath}`)
   }
   return { schemas: schemas as Record<string, unknown> }
 }
@@ -323,7 +323,7 @@ describe('notification contract over HTTP', () => {
     expect((history.json() as { items: unknown[] }).items).toHaveLength(0)
     expect(Object.keys(serviceHandlers)).not.toContain('listNotificationClearBatches')
     expect(Object.keys(serviceHandlers)).not.toContain('restoreNotificationClearBatch')
-    const document = parseYaml(readFileSync(contractPath, 'utf8')) as {
+    const document = readDocument(contractPath) as {
       paths: Record<string, unknown>; components: { schemas: Record<string, unknown> }
     }
     expect(document.paths).not.toHaveProperty('/notifications/clear-batches')

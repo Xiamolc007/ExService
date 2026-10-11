@@ -14,11 +14,14 @@ import { NativeApplications } from './native.mjs'
 import { processSpecification, processRecord } from './pm2-process.mjs'
 import { nginxConfiguration } from './nginx.mjs'
 import { logWriter } from './logs.mjs'
-import { parseRuntimeArguments } from './entry.mjs'
-import { testSpecifications, runTests } from './tests.mjs'
+import * as runtimeEntry from './entry.mjs'
+import * as runtimeTests from './tests.mjs'
 import { buildSpecifications, main as build } from './build.mjs'
 import { serverSpecification } from './server.mjs'
 import { verifyHydraBinary, initializeDocumentDatabases } from './infrastructure.mjs'
+
+const { parseRuntimeArguments } = runtimeEntry
+const { testSpecifications, runTests } = runtimeTests
 
 function fixture(t, profile = 'local') {
   const workspace = mkdtempSync(join(tmpdir(), 'runtime-fields-'))
@@ -406,12 +409,14 @@ test('compiled production entries use no tsx, no migration and include all Outli
 test('offline Build excludes runtime secrets, needs no prepared database, and stops at the first failed stage', async t => {
   const f = fixture(t), corepack = join(f.workspace, 'corepack.js'); writeFileSync(corepack, '')
   const specs = buildSpecifications({ workspace: f.workspace, inherited: { INTEGRATION_COREPACK_JS: corepack, DATABASE_URL: 'private', AUTH_CODE_HMAC_KEY: 'private' } })
-  assert.equal(specs.length, 7)
+  assert.equal(specs.length, 8)
+  assert.equal(specs[0].name, 'API Contract')
+  assert.deepEqual(specs[0].args, [join(f.workspace, 'scripts/api/generate.mjs'), 'generate'])
   assert.ok(specs.every(spec => spec.environment.DATABASE_URL === undefined && spec.environment.AUTH_CODE_HMAC_KEY === undefined && spec.environment.NODE_ENV === 'production'))
   const executed = []
   await assert.rejects(build({ workspace: f.workspace, inherited: { INTEGRATION_COREPACK_JS: corepack } }, async spec => {
     executed.push(spec.name); if (executed.length === 2) throw new Error('compiler failure')
-  }), /RUNTIME_BUILD_FAILED:@workspace\/web/)
+  }), /RUNTIME_BUILD_FAILED:@workspace\/sdk/)
   assert.equal(executed.length, 2)
 })
 
@@ -479,7 +484,47 @@ test('unified tests exclude real lifecycle probes and remove development credent
   const specs = testSpecifications({ workspace: root, inherited: { DATABASE_URL: 'developer-private', REDIS_URL: 'developer-redis' } })
   assert.ok(specs.length > 3); assert.ok(specs.every(spec => !Object.values(spec.environment).includes('developer-private')))
   assert.ok(specs[1].args.every(value => !value.endsWith('-real.test.mjs')))
+  assert.ok(specs[1].args.includes('scripts/api/generate.test.mjs'))
   const executed = []
-  await assert.rejects(runTests({ workspace: root }, async spec => { executed.push(spec.name); if (executed.length === 2) throw new Error('group failed') }), /group failed/)
-  assert.deepEqual(executed, ['Website', 'runtime / Docs 脚本'])
+  await assert.rejects(runTests({ workspace: root }, async spec => {
+    executed.push(spec.name)
+    if (spec.name === 'runtime / Docs 脚本') throw new Error('group failed')
+  }, async options => { assert.equal(options.workspace, root); executed.push('API Contract') }), /group failed/)
+  assert.deepEqual(executed, ['API Contract', 'Website', 'runtime / Docs 脚本'])
+})
+
+test('Contract generation failure prevents every test group from starting', async () => {
+  const executed = []
+  await assert.rejects(runTests({ workspace: root }, async spec => {
+    executed.push(spec.name)
+    throw new Error('validation started')
+  }, async () => { throw new Error('contract generation failed') }), /contract generation failed/)
+  assert.deepEqual(executed, [])
+})
+
+test('root development generates before preflight and cannot launch after generation failure', async t => {
+  const state = fixture(t).read(), executed = []
+  await runtimeEntry.runDevelopmentWithContract(state, { verbose: true }, {
+    generate: async options => { assert.equal(options.workspace, state.workspace); executed.push('generate') },
+    launch: async (received, options) => { assert.equal(received, state); assert.equal(options.verbose, true); executed.push('preflight/start') },
+  })
+  assert.deepEqual(executed, ['generate', 'preflight/start'])
+  await assert.rejects(runtimeEntry.runDevelopmentWithContract(state, {}, {
+    generate: async () => { throw new Error('contract generation failed') },
+    launch: async () => { executed.push('unexpected start') },
+  }), /contract generation failed/)
+  assert.deepEqual(executed, ['generate', 'preflight/start'])
+})
+
+test('test watch accepts Contract source changes and ignores generated outputs including Windows paths', () => {
+  for (const path of ['openapi.yaml', 'paths/auth.yaml', 'schemas\\notifications.yaml'])
+    assert.equal(runtimeTests.isTestSourceChange('api', path), true)
+  for (const path of ['generated/openapi.json', 'generated\\openapi.json.random.tmp'])
+    assert.equal(runtimeTests.isTestSourceChange('api', path), false)
+  for (const path of ['generated/schema.d.ts', 'generated\\schema.d.ts.random.tmp'])
+    assert.equal(runtimeTests.isTestSourceChange('packages/api-client/src', path), false)
+  assert.equal(runtimeTests.isTestSourceChange('apps/server/src', 'modules/auth/plugin.ts'), true)
+  assert.equal(runtimeTests.isTestSourceChange('scripts', 'node_modules/tool/index.js'), false)
+  assert.equal(runtimeTests.isTestSourceChange('scripts', 'run.log'), false)
+  assert.equal(runtimeTests.isTestSourceChange('scripts', undefined), false)
 })
