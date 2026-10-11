@@ -70,12 +70,14 @@ it('prefills a legal URL email and waits for an explicit eligibility check', () 
   expect(post).not.toHaveBeenCalled()
 })
 
-it.each([[404, 'INVITATION_APPLICATION_NOT_FOUND', '未找到该邮箱的申请，请先申请加入'], [409, 'INVITATION_NOT_ELIGIBLE', '该邮箱暂不符合注册条件，请确认申请已通过且邀请仍有效']])('does not verify after automatic check %s and notifies once under StrictMode', async (status, code, message) => {
+it.each([[404, 'INVITATION_APPLICATION_NOT_FOUND', '未找到该邮箱的申请。'], [409, 'INVITATION_NOT_ELIGIBLE', '该邮箱暂不符合注册条件，请确认申请已通过且邀请仍有效']])('does not verify after automatic check %s and shows one persistent failure under StrictMode', async (status, code, message) => {
   const notify = vi.spyOn(ExMessage, 'error')
   window.history.replaceState(null, '', '/register?email=member@example.com&code=001234')
   post.mockRejectedValue(failure(status as number, code as string))
   render(<StrictMode><MemoryRouter><InvitationRegistrationFlow presentation="page" /></MemoryRouter></StrictMode>)
-  await waitFor(() => expect(notify).toHaveBeenCalledExactlyOnceWith(message))
+  await waitFor(() => expect(screen.getAllByText(message as string)).toHaveLength(1))
+  expect(screen.getAllByRole('region')).toHaveLength(1)
+  expect(notify).not.toHaveBeenCalled()
   expect(post).toHaveBeenCalledTimes(1)
   expect(screen.queryByLabelText('6 位验证码')).toBeNull()
 })
@@ -212,4 +214,148 @@ it('clears the success timer on close and never switches the closed modal to log
   rendered.unmount()
   await new Promise(resolve => setTimeout(resolve, 1600))
   expect(onLogin).not.toHaveBeenCalled()
+})
+
+const checkCases = [
+  { status: 400, code: 'VALIDATION_ERROR', message: '请输入有效的邮箱地址', panel: false },
+  { status: 404, code: 'INVITATION_APPLICATION_NOT_FOUND', message: '未找到该邮箱的申请。', panel: true },
+  { status: 409, code: 'INVITATION_NOT_ELIGIBLE', message: '该邮箱暂不符合注册条件，请确认申请已通过且邀请仍有效', panel: true },
+  { status: 429, code: 'RATE_LIMITED', retryAfter: '2', message: '检查失败，请在 2 秒后重试', panel: true },
+  { status: undefined, code: '', message: '检查失败，请重试', panel: true },
+]
+for (const presentation of ['page', 'modal'] as const) {
+  it.each(checkCases)(`shows one manual ${presentation} check failure for $status in its owning form`, async ({ status, code, retryAfter, message, panel }) => {
+    const user = userEvent.setup()
+    post.mockRejectedValue(status === undefined ? new Error('private stack') : failure(status, code, retryAfter))
+    render(<MemoryRouter><InvitationRegistrationFlow presentation={presentation} initialEmail="member@example.com" /></MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: '继续' }))
+    expect(await screen.findAllByText(message)).toHaveLength(1)
+    expect(screen.queryAllByRole('region')).toHaveLength(panel ? 1 : 0)
+    expect(ExMessage.error).not.toHaveBeenCalled()
+    expect(screen.queryByText('private stack')).toBeNull()
+    expect(screen.getByLabelText('邮箱').getAttribute('aria-invalid')).toBe(panel ? 'false' : 'true')
+    await user.type(screen.getByLabelText('邮箱'), 'x')
+    expect(screen.queryByText(message)).toBeNull()
+  })
+}
+
+it.each([undefined, '0', '-1', 'NaN', 'Infinity'])('falls back to a safe rate-limit message for wait %s', async retryAfter => {
+  const user = userEvent.setup()
+  post.mockRejectedValue(failure(429, 'RATE_LIMITED', retryAfter))
+  render(<MemoryRouter><InvitationRegistrationFlow presentation="modal" initialEmail="member@example.com" /></MemoryRouter>)
+  await user.click(screen.getByRole('button', { name: '继续' }))
+  expect(await screen.findAllByText('检查失败，请稍后重试')).toHaveLength(1)
+  expect(ExMessage.error).not.toHaveBeenCalled()
+})
+
+it.each(checkCases)('shares the manual check mapping with automatic $status failures under StrictMode', async ({ status, code, retryAfter, message, panel }) => {
+  window.history.replaceState(null, '', '/register?email=member@example.com&code=001234')
+  post.mockRejectedValue(status === undefined ? new Error('offline') : failure(status, code, retryAfter))
+  render(<StrictMode><MemoryRouter><InvitationRegistrationFlow presentation="page" /></MemoryRouter></StrictMode>)
+  expect(await screen.findAllByText(message)).toHaveLength(1)
+  expect(screen.queryAllByRole('region')).toHaveLength(panel ? 1 : 0)
+  expect(screen.getByLabelText('邮箱').getAttribute('aria-invalid')).toBe(panel ? 'false' : 'true')
+  expect(post).toHaveBeenCalledTimes(1)
+  expect(ExMessage.error).not.toHaveBeenCalled()
+})
+
+it('clears a failed check panel while retrying, then uses the existing panel join callback', async () => {
+  const user = userEvent.setup(), next = deferred<typeof eligible>(), onJoin = vi.fn()
+  post.mockRejectedValueOnce(new Error('offline')).mockReturnValueOnce(next.promise)
+  render(<MemoryRouter><InvitationRegistrationFlow presentation="modal" initialEmail="member@example.com" onJoin={onJoin} /></MemoryRouter>)
+  await user.click(screen.getByRole('button', { name: '继续' }))
+  expect(await screen.findByRole('region')).toBeTruthy()
+  await user.click(screen.getByRole('button', { name: '继续' }))
+  expect(screen.queryByRole('region')).toBeNull()
+  await act(async () => { next.reject(failure(404, 'INVITATION_APPLICATION_NOT_FOUND')) })
+  const panel = await screen.findByRole('region', { name: '暂时无法注册' })
+  await user.click(panel.querySelector('button')!)
+  expect(onJoin).toHaveBeenCalledTimes(1)
+  expect(screen.queryByRole('region')).toBeNull()
+})
+
+it('delivers automatic locked verification to the mounted code field once under StrictMode', async () => {
+  window.history.replaceState(null, '', '/register?email=member@example.com&code=001234')
+  post.mockResolvedValueOnce(eligible).mockRejectedValueOnce(failure(429, 'INVITATION_CODE_LOCKED', '2'))
+  render(<StrictMode><MemoryRouter><InvitationRegistrationFlow presentation="page" /></MemoryRouter></StrictMode>)
+  const code = await screen.findByLabelText('6 位验证码') as HTMLInputElement
+  await waitFor(() => expect(code.getAttribute('aria-invalid')).toBe('true'))
+  expect(code.value).toBe('')
+  expect(screen.getAllByText('验证暂时锁定，请稍后重试')).toHaveLength(1)
+  expect(screen.queryByRole('region')).toBeNull()
+  expect((screen.getByRole('button', { name: '重试验证' }) as HTMLButtonElement).disabled).toBe(true)
+  expect((screen.getByRole('button', { name: '重新发送验证码' }) as HTMLButtonElement).disabled).toBe(true)
+  expect(post).toHaveBeenCalledTimes(2)
+})
+
+it('keeps manual verification failure in the field alone and does not loop on countdown renders', async () => {
+  const user = userEvent.setup()
+  post.mockResolvedValueOnce(eligible).mockRejectedValueOnce(failure(400, 'INVITATION_CODE_INVALID'))
+  render(<MemoryRouter><InvitationRegistrationFlow presentation="modal" initialEmail="member@example.com" /></MemoryRouter>)
+  await user.type(await enterCode(user), '001234')
+  expect(await screen.findAllByText('验证码无效或已过期，请重新获取')).toHaveLength(1)
+  expect(screen.queryByRole('region')).toBeNull()
+  expect(ExMessage.error).not.toHaveBeenCalled()
+})
+
+it('puts resend failure in one code-form panel without a field error and clears it before retrying', async () => {
+  const user = userEvent.setup(), next = deferred<{ status: string; serverTime: number; resendAvailableAt: number }>()
+  post.mockResolvedValueOnce(eligible).mockRejectedValueOnce(new Error('offline')).mockReturnValueOnce(next.promise)
+  render(<MemoryRouter><InvitationRegistrationFlow presentation="modal" initialEmail="member@example.com" /></MemoryRouter>)
+  const code = await enterCode(user)
+  await user.type(code, '001')
+  await user.click(screen.getByRole('button', { name: '重新发送验证码' }))
+  expect(await screen.findAllByText('发送失败，请重试')).toHaveLength(1)
+  expect(screen.getAllByRole('region')).toHaveLength(1)
+  expect(code.getAttribute('aria-invalid')).toBe('false')
+  expect(code.value).toBe('001')
+  await user.click(screen.getByRole('button', { name: '重新发送验证码' }))
+  expect(screen.queryByRole('region')).toBeNull()
+  await act(async () => { next.resolve({ status: 'accepted', serverTime: 1000, resendAvailableAt: 1000 }) })
+  expect(code.value).toBe('')
+  expect(ExMessage.info).toHaveBeenCalledExactlyOnceWith('如邮箱符合邀请条件，将发送验证码')
+  expect(ExMessage.error).not.toHaveBeenCalled()
+})
+
+it.each([['COMPLETION_GRANT_INVALID', '验证已过期，请返回邮箱重新验证'], ['OTHER', '注册失败，请重试']])('shows one profile failure for %s and clears it before retrying', async (code, message) => {
+  const user = userEvent.setup(), next = deferred<{ status: string; email: string }>()
+  post.mockResolvedValueOnce(eligible).mockResolvedValueOnce(verified).mockRejectedValueOnce(failure(400, code)).mockReturnValueOnce(next.promise)
+  render(<MemoryRouter><InvitationRegistrationFlow presentation="modal" initialEmail="member@example.com" /></MemoryRouter>)
+  await user.type(await enterCode(user), '001234')
+  await user.type(await screen.findByLabelText('密码'), 'password-one')
+  await user.click(screen.getByRole('button', { name: '完成注册' }))
+  expect(await screen.findAllByText(message)).toHaveLength(1)
+  expect(screen.getAllByRole('region')).toHaveLength(1)
+  expect(screen.getByLabelText('密码').getAttribute('aria-invalid')).toBe('false')
+  await user.click(screen.getByRole('button', { name: '完成注册' }))
+  expect(screen.queryByRole('region')).toBeNull()
+  await user.click(screen.getByRole('button', { name: '返回修改邮箱' }))
+  await act(async () => { next.reject(failure(400, code)) })
+  expect(screen.queryByText(message)).toBeNull()
+  expect(screen.queryByRole('region')).toBeNull()
+  expect(ExMessage.error).not.toHaveBeenCalled()
+})
+
+it('rejects late automatic verification errors after changing the email', async () => {
+  const user = userEvent.setup(), next = deferred<typeof verified>()
+  window.history.replaceState(null, '', '/register?email=member@example.com&code=001234')
+  post.mockResolvedValueOnce(eligible).mockReturnValueOnce(next.promise)
+  render(<MemoryRouter><InvitationRegistrationFlow presentation="page" /></MemoryRouter>)
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(2))
+  await user.type(screen.getByLabelText('邮箱'), 'x')
+  await act(async () => { next.reject(failure(400, 'INVITATION_CODE_INVALID')) })
+  expect(screen.queryByLabelText('6 位验证码')).toBeNull()
+  expect(screen.queryByText('验证码无效或已过期，请重新获取')).toBeNull()
+})
+
+it('rejects a late resend error after returning to email', async () => {
+  const user = userEvent.setup(), next = deferred<typeof eligible>()
+  post.mockResolvedValueOnce(eligible).mockReturnValueOnce(next.promise)
+  render(<MemoryRouter><InvitationRegistrationFlow presentation="modal" initialEmail="member@example.com" /></MemoryRouter>)
+  await enterCode(user)
+  await user.click(screen.getByRole('button', { name: '重新发送验证码' }))
+  await user.click(screen.getByRole('button', { name: '返回修改邮箱' }))
+  await act(async () => { next.reject(new Error('offline')) })
+  expect(screen.queryByText('发送失败，请重试')).toBeNull()
+  expect(screen.queryByRole('region')).toBeNull()
 })

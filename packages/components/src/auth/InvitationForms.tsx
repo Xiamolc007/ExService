@@ -1,10 +1,8 @@
 import { forwardRef, useId, useImperativeHandle, useRef } from "react";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, type GlobalError } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
-  Alert,
-  AlertDescription,
   Button,
   Field,
   FieldContent,
@@ -15,7 +13,8 @@ import {
   InputOTPGroup,
   InputOTPSlot,
 } from "@exre/exui";
-import type { AuthFormHandle } from "@components/src/auth/AuthForm";
+import { ErrorPanel } from "@components/src/ErrorPanel";
+import { invitationFeedback, type InvitationFormHandle } from "@components/src/auth/invitationFeedback";
 import { nicknameSchema } from "@components/src/profileValidation";
 import { ExIcon } from "@components/src/ExIcon";
 import styles from "@components/src/auth/AuthForm.module.scss";
@@ -46,6 +45,14 @@ const profileSchema = z.object({
 });
 export type InvitationProfileValues = z.infer<typeof profileSchema>;
 
+function InvitationRootError({ error, id, onJoin }: {
+  error?: GlobalError; id: string; onJoin?: () => void;
+}) {
+  const feedback = invitationFeedback(error);
+  return feedback && <ErrorPanel id={id} errors={feedback.errors} title={feedback.title}
+    action={feedback.join && onJoin ? <Button type="button" variant="ghost" onClick={onJoin}>申请加入</Button> : undefined} />;
+}
+
 interface EmailProps {
   initialEmail: string;
   busy: boolean;
@@ -54,7 +61,7 @@ interface EmailProps {
   onLogin: () => void;
   onJoin: () => void;
 }
-export const InvitationEmailForm = forwardRef<AuthFormHandle, EmailProps>(
+export const InvitationEmailForm = forwardRef<InvitationFormHandle, EmailProps>(
   function InvitationEmailForm(
     { initialEmail, busy, onSubmit, onEmailChange, onLogin, onJoin },
     ref,
@@ -67,7 +74,7 @@ export const InvitationEmailForm = forwardRef<AuthFormHandle, EmailProps>(
     useImperativeHandle(ref, () => ({
       setServerErrors: (e) => {
         if (e.email) form.setError("email", { message: e.email });
-        if (e.form) form.setError("root.server", { message: e.form });
+        if (e.form) form.setError("root.server", { type: e.formKind ?? "server", message: e.form });
       },
       clearServerErrors: () => form.clearErrors(),
     }));
@@ -78,7 +85,7 @@ export const InvitationEmailForm = forwardRef<AuthFormHandle, EmailProps>(
         className={`${styles.form} ${styles.loginForm}`}
         noValidate
         aria-busy={disabled}
-        onSubmit={form.handleSubmit(({ email }) => onSubmit(email))}
+        onSubmit={form.handleSubmit(({ email }) => { form.clearErrors(); return onSubmit(email); })}
       >
         <div className={`${styles.intro} ${styles.loginIntro}`}>
           <ExIcon size="6rem" className={styles.authIcon} />
@@ -99,13 +106,6 @@ export const InvitationEmailForm = forwardRef<AuthFormHandle, EmailProps>(
             </span>
           </p>
         </div>
-        {form.formState.errors.root?.server && (
-          <Alert variant="destructive">
-            <AlertDescription>
-              {form.formState.errors.root.server.message}
-            </AlertDescription>
-          </Alert>
-        )}
         <Field data-invalid={!!form.formState.errors.email}>
           <FieldContent>
             <FieldLabel htmlFor={id}>邮箱</FieldLabel>
@@ -122,7 +122,8 @@ export const InvitationEmailForm = forwardRef<AuthFormHandle, EmailProps>(
               autoFocus
               aria-invalid={!!form.formState.errors.email}
               aria-describedby={
-                form.formState.errors.email ? `${id}-error` : undefined
+                [form.formState.errors.email ? `${id}-error` : null,
+                  form.formState.errors.root?.server?.message ? `${id}-panel` : null].filter(Boolean).join(" ") || undefined
               }
             />
             {form.formState.errors.email && (
@@ -132,6 +133,7 @@ export const InvitationEmailForm = forwardRef<AuthFormHandle, EmailProps>(
             )}
           </FieldContent>
         </Field>
+        <InvitationRootError error={form.formState.errors.root?.server} id={`${id}-panel`} onJoin={onJoin} />
         <Button type="submit" disabled={disabled}>
           {disabled ? "检查中" : "继续"}
         </Button>
@@ -150,7 +152,7 @@ interface CodeProps {
   onResend: () => Promise<boolean>;
   onBack: () => void;
 }
-export const InvitationCodeForm = forwardRef<AuthFormHandle, CodeProps>(
+export const InvitationCodeForm = forwardRef<InvitationFormHandle, CodeProps>(
   function InvitationCodeForm(
     {
       email,
@@ -174,7 +176,7 @@ export const InvitationCodeForm = forwardRef<AuthFormHandle, CodeProps>(
     useImperativeHandle(ref, () => ({
       setServerErrors: (e) => {
         if (e.code) form.setError("code", { message: e.code });
-        if (e.form) form.setError("root.server", { message: e.form });
+        if (e.form) form.setError("root.server", { type: e.formKind ?? "server", message: e.form });
       },
       clearServerErrors: () => form.clearErrors(),
     }));
@@ -203,13 +205,6 @@ export const InvitationCodeForm = forwardRef<AuthFormHandle, CodeProps>(
           <p>{email}</p>
           <p>请输入邀请邮件中的六位验证码</p>
         </div>
-        {form.formState.errors.root?.server && (
-          <Alert variant="destructive">
-            <AlertDescription>
-              {form.formState.errors.root.server.message}
-            </AlertDescription>
-          </Alert>
-        )}
         <Field data-invalid={!!form.formState.errors.code}>
           <FieldContent>
             <FieldLabel htmlFor={id}>6 位验证码</FieldLabel>
@@ -258,6 +253,7 @@ export const InvitationCodeForm = forwardRef<AuthFormHandle, CodeProps>(
             )}
           </FieldContent>
         </Field>
+        <InvitationRootError error={form.formState.errors.root?.server} id={`${id}-panel`} />
         {lockedSeconds > 0 && (
           <p role="status">验证暂时锁定，{lockedSeconds} 秒后重试</p>
         )}
@@ -271,6 +267,7 @@ export const InvitationCodeForm = forwardRef<AuthFormHandle, CodeProps>(
           variant="outline"
           disabled={disabled || resendSeconds > 0}
           onClick={async () => {
+            form.clearErrors();
             if (await onResend()) {
               form.reset({ code: "" });
               lastAttempt.current = null;
@@ -294,7 +291,7 @@ interface ProfileProps {
   onSubmit: (values: InvitationProfileValues) => Promise<void>;
   onBack: () => void;
 }
-export const InvitationProfileForm = forwardRef<AuthFormHandle, ProfileProps>(
+export const InvitationProfileForm = forwardRef<InvitationFormHandle, ProfileProps>(
   function InvitationProfileForm(
     { email, nickname, busy, onSubmit, onBack },
     ref,
@@ -308,7 +305,7 @@ export const InvitationProfileForm = forwardRef<AuthFormHandle, ProfileProps>(
       setServerErrors: (e) => {
         if (e.nickname) form.setError("nickname", { message: e.nickname });
         if (e.password) form.setError("password", { message: e.password });
-        if (e.form) form.setError("root.server", { message: e.form });
+        if (e.form) form.setError("root.server", { type: e.formKind ?? "server", message: e.form });
       },
       clearServerErrors: () => form.clearErrors(),
     }));
@@ -318,20 +315,13 @@ export const InvitationProfileForm = forwardRef<AuthFormHandle, ProfileProps>(
         className={`${styles.form} ${styles.loginForm}`}
         noValidate
         aria-busy={disabled}
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={form.handleSubmit((values) => { form.clearErrors(); return onSubmit(values); })}
       >
         <div className={`${styles.intro} ${styles.loginIntro}`}>
           <ExIcon size="6rem" className={styles.authIcon} />
           <h2>完善账号</h2>
           <p>{email}</p>
         </div>
-        {form.formState.errors.root?.server && (
-          <Alert variant="destructive">
-            <AlertDescription>
-              {form.formState.errors.root.server.message}
-            </AlertDescription>
-          </Alert>
-        )}
         {(["nickname", "password"] as const).map((name) => (
           <Field key={name} data-invalid={!!form.formState.errors[name]}>
             <FieldContent>
@@ -360,6 +350,7 @@ export const InvitationProfileForm = forwardRef<AuthFormHandle, ProfileProps>(
             </FieldContent>
           </Field>
         ))}
+        <InvitationRootError error={form.formState.errors.root?.server} id={`${id}-panel`} />
         <Button type="submit" disabled={disabled}>
           {disabled ? "提交中" : "完成注册"}
         </Button>

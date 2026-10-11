@@ -11,7 +11,7 @@ _最后更新：2026-10-10_
 | API Contract | `api/` | `.ai/architectures/api/contract-layout.md` |
 | 生成式 Client | `packages/api-client/` | `.ai/decisions/api-client/01-generated-types-committed-and-read-only.md` |
 | 共享组件 | `packages/components/` | `.ai/knowledge/components/ex-message-host-lifecycle.md`、`.ai/knowledge/components/error-panel.md` |
-| Web | `apps/web/` | `.ai/architectures/web/authentication-flow.md` |
+| Web | `apps/web/` | `.ai/architectures/web/authentication-flow.md`、`.ai/knowledge/web/invitation-error-handoff.md` |
 | Server | `apps/server/` | `.ai/architectures/server/request-lifecycle.md`、`.ai/architectures/server/authentication-lifecycle.md` |
 | 存储与 SDK | `apps/server/src/modules/storage/`、`packages/sdk/` | `.ai/knowledge/storage/lifecycle-traps.md` |
 | 文档集成 | `apps/outline/`、`scripts/docs-integration/` | `.ai/architectures/docs-integration/integration-boundaries.md`、`.ai/architectures/docs-integration/unified-reading-interface.md`、`.ai/knowledge/docs-integration/public-reader-refs.md` |
