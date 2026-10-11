@@ -1,6 +1,6 @@
 # 通知读取接受权与固定批量意图
 
-_最后更新：2026-10-10_
+_最后更新：2026-10-12_
 
 ## 读取生命周期
 
@@ -20,11 +20,13 @@ _最后更新：2026-10-10_
 
 ## 偏好即时保存是独立资源
 
-Settings 通知分区只展示两项可选开关。用户切换时由 React Hook Form 与 Zod 校验整份值，再调用现有 `PUT /notification-preferences`，附带 `expectedRevision`；首读、快照同步和切分类不会自行提交。服务通知仍由 catalog 固定接收，设置面板不展示不可修改的开关。成功采用服务器返回的规范值且不显示“已保存”提示，保存中与持续错误仍可反馈。
+Settings 通知分区只展示两项可选开关。用户切换时先由表单的 React Hook Form 与 Zod 校验整份值，再把「字段 + 目标值」交给偏好 module 调用现有 `PUT /notification-preferences`：请求体的 `expectedRevision` 与另一字段由 module 在取得单写锁的同一同步段内从最新规范快照读取，因此取得锁时的最新快照总是胜出；首读、快照同步和切分类不会自行提交。服务通知仍由 catalog 固定接收，设置面板不展示不可修改的开关。成功采用服务器返回的规范值且不显示“已保存”提示，保存中与持续错误仍可反馈。
 
-页面设置和 Header 设置 Modal 可以同时挂载，因此偏好请求的 latest read、write version 和单写锁在控制器模块内共享。它们跟随身份 epoch，独立于收件已读与清理的 seq；两个资源的写入不会互相淘汰响应。已发送的 PUT 在关闭面板后仍持有共享锁，直到服务器返回，再更新同一身份的规范快照；关闭表单不能撤销服务器写入。卸载读取宿主会恢复缓存或提供读取重试，不让其他宿主一直等待。旧账号的响应与 finally 不能覆盖新身份或释放新写入。表单按身份 epoch 创建新的 RHF 所有者，防止旧 handleSubmit 的 finally 清掉新账号的提交状态。
+归属：字段意图、每宿主的失败 slot、取得锁时的重基、409 之后的必要重读门控与 module 拥有的重读，以及跨宿主单写锁都属于 `apps/web` 的偏好 module；表单只保留 RHF/Zod 校验、字段与 root 错误呈现，以及按 `identityEpoch` 重建 RHF 所有者，避免旧 `handleSubmit` 的 finally 清掉新账号的提交状态。分类可见性是两处独立投影：设置面板直接把 `active` 传给表单决定渲染，设置体验把同一分类判断交给 module 作发送前资格，两者互不代替，也都不拥有保存状态。
 
-普通失败恢复最后确认值，重试只保存失败字段的目标值，并合入最新已确认的另一字段。409 自动读取服务器新版本，展示新值并要求用户重新调整，不自动覆盖其他设备的修改。表单和控制器错误使用固定安全文案；成功不新增 ExMessage 或提示容器。
+页面设置和 Header 设置 Modal 可以同时挂载，因此偏好请求的 latest read、write version 和单写锁在控制器模块内共享。它们跟随身份 epoch，独立于收件已读与清理的 seq；两个资源的写入不会互相淘汰响应。已发送的 PUT 在关闭面板后仍持有共享锁，直到服务器返回，再更新同一身份的规范快照；关闭表单不能撤销服务器写入。卸载读取宿主会恢复缓存或提供读取重试，不让其他宿主一直等待。旧账号的响应与 finally 不能覆盖新身份或释放新写入。
+
+普通失败只在当前宿主登记失败意图（标量 `id` + 字段 + 目标值），恢复最后确认值；重试重发该字段的原目标值，另一字段与 revision 同样按取得锁时的最新快照重基。失败意图不跨宿主共享，取得新锁会替代本宿主的旧意图。409 不是可重试的写失败：module 清掉全部宿主的旧意图、置起必要重读门控并自行重读规范值，界面展示新值并要求用户重新调整，不自动覆盖其他设备的修改；重读失败时保留冲突与读取重试，不把旧缓存当成可写状态。表单和控制器错误使用固定安全文案；成功不新增 ExMessage 或提示容器。
 
 ## 证据
 
@@ -33,5 +35,6 @@ Settings 通知分区只展示两项可选开关。用户切换时由 React Hook
 - `apps/web/src/notifications/useNotificationsController.test.tsx`：迟到响应、游标去重、失败重试、固定确认与换号回归。
 - `packages/components/src/notifications/NotificationHistoryModal.tsx` 及其测试：实际滚动 root、短页重检、暂停与焦点恢复。
 - `tests/browser/notification-experience.mjs`：隔离 UI props 的 Chromium 几何、滚动与焦点检查；不作为真实账号/API 或真实设备验收证据。
-- `apps/web/src/notifications/useNotificationPreferencesController.ts` 及其测试：跨设置宿主请求归属、单写锁、409 重读、规范返回值与换号隔离。
-- `packages/components/src/notifications/NotificationPreferencesForm.tsx` 及其测试：用户开关事件即时保存、静默成功、失败回退与单字段重试、按身份隔离 RHF 实例。
+- `apps/web/src/notifications/useNotificationPreferencesController.ts` 及其测试：跨设置宿主请求归属、单写锁、每宿主失败 slot 与锁时重基、409 必要重读门控与 module 拥有的重读、规范返回值与换号隔离。
+- `packages/components/src/notifications/NotificationPreferencesForm.tsx` 及其测试：用户开关事件即时保存、静默成功、字段与 root 错误呈现、按身份隔离 RHF 实例；失败回退与单字段重试的编排证据见上一条。
+- `apps/web/src/settings/NotificationPreferencesExperience.test.tsx`：真实设置体验、设置面板、表单与偏好 module 的联动，覆盖跨宿主失败、关闭结算与 409 恢复。
