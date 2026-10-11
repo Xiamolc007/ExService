@@ -20,6 +20,8 @@ export { ProfileEditor } from '@components/src/ProfileEditor'
 export type { ProfileEditorProps, ProfileTextValues } from '@components/src/ProfileEditor'
 export { ContentAreaState, SettingsContentSkeleton } from '@components/src/ContentAreaState'
 export type { ContentAreaStateProps } from '@components/src/ContentAreaState'
+export { ErrorPanel } from '@components/src/ErrorPanel'
+export type { ErrorPanelItem, ErrorPanelProps } from '@components/src/ErrorPanel'
 export { SettingsPanel } from '@components/src/SettingsPanel'
 export type {
   SettingsPanelProps, SettingsCategory, SettingsTheme, SettingsField, SettingsNotificationsSlice,
