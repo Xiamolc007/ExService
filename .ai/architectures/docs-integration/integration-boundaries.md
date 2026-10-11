@@ -52,4 +52,6 @@ Outline 本地附件存储的上传地址与文件读取地址由 `apps/outline/
 
 集成页面启动所需的 `auth.config` 是公开配置读取，`apps/outline/app/stores/AuthStore.ts` 必须以 `credentials: "omit"` 请求它，避免同主机其他服务或历史登录残留的 `accessToken` 触发会话 CSRF 检查并阻断匿名目录。`apps/outline/app/utils/ApiClient.ts` 将调用方的 credentials 策略传给真实 fetch，未指定时仍为 `same-origin`；`auth.info` 等受保护请求继续携带会话并接受原有 CSRF 校验。公开配置可读取不代表 `localhost` 与配置的 `127.0.0.1` 可互换，登录及写入仍须使用配置中的 public origin。本地集成的 Website 两个开发入口在服务页面前核对 Host：不同来源的 GET/HEAD 以不缓存的 307 跳到配置来源并保留路径和 query，其他方法返回 421；内部路径仍优先拒绝。这样本站 Bearer 的浏览器存储、同源身份探测与 OIDC challenge 使用同一来源。历史别名下的会话不会跨来源搬运，须在配置来源重新登录一次；独立模式保留原入口行为。
 
+文件上传占位通过 `apps/outline/shared/editor/lib/uploadPlaceholder.tsx` 创建独立 React root，不能继承外层 styled-components 主题。其 `FileExtension.tsx` 使用框架无关 ExUI 字体和圆角 token，避免插入普通附件时因缺少 `theme.exui` 中断上传。
+
 local HMR 从 public origin 派生。`httpReady` 显式 Host 分支使用 node:http/node:https 真正传递 Host，保留手动 redirect、真实 Response/expected 和正常 TLS；无 Host 分支使用 fetch。请求、body/expected、剩余总 deadline 与必需 child 退出均受限，不能以另一 smoke helper 或无限等待替代真实就绪。
