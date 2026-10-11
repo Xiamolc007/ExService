@@ -1,20 +1,20 @@
 import { createApp } from '@server/src/app.js'
-import { parseAuthCodeHmacKey } from '@server/src/auth/crypto.js'
-import { assertAuthSchemaAvailable } from '@server/src/auth/service.js'
-import { createAuthServices } from '@server/src/auth/create-services.js'
+import { parseAuthCodeHmacKey } from '@server/src/modules/auth/crypto.js'
+import { assertAuthSchemaAvailable } from '@server/src/modules/auth/service.js'
+import { createAuthServices } from '@server/src/create-services.js'
 import { openDatabase } from '@server/src/db/client.js'
 import { assertDatabaseReady } from '@server/src/db/schema-check.js'
-import { assertCommunitySchemaAvailable } from '@server/src/community/schema-check.js'
-import { ProfileService, avatarDirectory, publicAvatarBaseUrl } from '@server/src/profile/service.js'
-import { assertProfileSchemaAvailable } from '@server/src/profile/schema-check.js'
-import { assertJoinSchemaAvailable } from '@server/src/join/schema-check.js'
+import { assertCommunitySchemaAvailable } from '@server/src/domains/community/schema-check.js'
+import { ProfileService, avatarDirectory, publicAvatarBaseUrl } from '@server/src/modules/profile/service.js'
+import { assertProfileSchemaAvailable } from '@server/src/modules/profile/schema-check.js'
+import { assertJoinSchemaAvailable } from '@server/src/domains/join/applications/schema-check.js'
 import { createStorageModule } from '@server/src/modules/storage/factory.js'
 import { parseStorageConfig, StorageConfigError } from '@server/src/modules/storage/config.js'
 import { CorsConfigError, parseCorsAllowedOrigins } from '@server/src/http/cors.js'
-import { HttpHydraAdmin, OidcService } from '@server/src/identity/oidc.js'
-import { configuredIdentityOutboxWorker, startIdentityOutboxWorker } from '@server/src/identity/outbox.js'
-import { IdentityConfigError, parseIdentityConfig } from '@server/src/identity/config.js'
-import { assertDeploymentBinding } from '@server/src/identity/deployment-binding.js'
+import { HttpHydraAdmin, OidcService } from '@server/src/modules/identity/oidc.js'
+import { configuredIdentityOutboxWorker, startIdentityOutboxWorker } from '@server/src/modules/identity/outbox.js'
+import { IdentityConfigError, parseIdentityConfig } from '@server/src/modules/identity/config.js'
+import { assertDeploymentBinding } from '@server/src/modules/identity/deployment-binding.js'
 import { createNotificationModule, deriveNotificationTokenKey } from '@server/src/modules/notifications/factory.js'
 
 const PORT = Number(process.env.SERVER_PORT ?? '8080')
@@ -58,7 +58,7 @@ try {
     const app = createApp({ authServices, profileServices, joinServices, invitationServices, storageServices,
       notifications,
       identityKeys: identity.enabled ? { clients: { [identity.clientId]: identity.keys.outline }, bootstrapKey: identity.keys.bootstrap } : undefined,
-      oidcServices, logger: true, corsAllowedOrigins })
+      oidcServices, logger: true, trustProxy: ['loopback'], corsAllowedOrigins })
     const outbox = identity.enabled ? configuredIdentityOutboxWorker(db, identity) : undefined
     let stopOutbox: (() => void) | undefined
     // 单实例投影 worker：关闭时停止认领，未完成 lease 由后续运行恢复。

@@ -32,9 +32,6 @@ importers:
       ajv:
         specifier: ^8.20.0
         version: 8.20.0
-      concurrently:
-        specifier: ^10.0.5
-        version: 10.0.5
       jsdom:
         specifier: ^27.4.0
         version: 27.4.0(supports-color@10.2.2)
@@ -62,6 +59,9 @@ importers:
       '@fastify/multipart':
         specifier: 10.1.2
         version: 10.1.2
+      '@workspace/api-client':
+        specifier: workspace:*
+        version: link:../../packages/api-client
       ajv:
         specifier: 8.20.0
         version: 8.20.0
@@ -77,6 +77,9 @@ importers:
       fastify-openapi-glue:
         specifier: ^4.11.4
         version: 4.11.4
+      fastify-plugin:
+        specifier: 6.0.0
+        version: 6.0.0
       pg:
         specifier: ^8.16.3
         version: 8.23.0
@@ -109,8 +112,8 @@ importers:
   apps/web:
     dependencies:
       '@exre/exui':
-        specifier: link:../../../../exui/packages/components
-        version: link:../../../../exui/packages/components
+        specifier: ^0.8.0
+        version: 0.8.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@hookform/resolvers':
         specifier: 5.9.1
         version: 5.9.1(ajv@8.20.0)(react-hook-form@7.88.0(react@19.3.0))(zod@4.6.5)
@@ -182,8 +185,8 @@ importers:
   packages/components:
     dependencies:
       '@exre/exui':
-        specifier: link:../../../../exui/packages/components
-        version: link:../../../../exui/packages/components
+        specifier: ^0.8.0
+        version: 0.8.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@hookform/resolvers':
         specifier: ^5.9.1
         version: 5.9.1(ajv@8.20.0)(react-hook-form@7.88.0(react@19.3.0))(zod@4.6.5)
@@ -232,8 +235,8 @@ importers:
         version: 3.0.0
     devDependencies:
       '@exre/exui':
-        specifier: ^0.7.0
-        version: 0.7.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        specifier: ^0.8.0
+        version: 0.8.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@types/node':
         specifier: ^22.20.3
         version: 22.20.3
@@ -793,8 +796,8 @@ packages:
       '@noble/hashes':
         optional: true
 
-  '@exre/exui@0.7.0':
-    resolution: {integrity: sha512-GSQV9P7EYUe4uGTYbGlffryPmRqiyoWy8KliOqSUURyHmlKUVjaf++xhqgfQaj/Gc63YYeziimFtYdQDxxuLXA==}
+  '@exre/exui@0.8.0':
+    resolution: {integrity: sha512-OZk9QjeOmVxX2utWELWncD7ilvh0bsF71TWgQjEkr6GTyclGNzfa4Sc2SC9gH7PE17/5qz79pPHzyaqtphSrww==}
     peerDependencies:
       react: '>=19.0.0 <20'
       react-dom: '>=19.0.0 <20'
@@ -1862,11 +1865,6 @@ packages:
   compress-commons@6.0.2:
     resolution: {integrity: sha512-6FqVXeETqWPoGcfzrXb37E50NP0LXT8kAMu5ooZayhWWdgEY4lBEEcbQNXtkuKQsGduxiIcI4gOTsxTmuq/bSg==}
     engines: {node: '>= 14'}
-
-  concurrently@10.0.5:
-    resolution: {integrity: sha512-JaP/CoftUrCcAFW/g//RbgEGwlelnEae6cfBLgH6ZdO6s8jPkn6p9SB9u6pdVxYXoiSnFqseOlHfrEfF82TVOg==}
-    engines: {node: '>=22'}
-    hasBin: true
 
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
@@ -3680,7 +3678,7 @@ snapshots:
 
   '@exodus/bytes@1.15.2': {}
 
-  '@exre/exui@0.7.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
+  '@exre/exui@0.8.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
       '@fontsource-variable/outfit': 5.3.0
     optionalDependencies:
@@ -4489,15 +4487,6 @@ snapshots:
       is-stream: 2.0.1
       normalize-path: 3.0.0
       readable-stream: 4.7.0
-
-  concurrently@10.0.5:
-    dependencies:
-      chalk: 5.6.2
-      rxjs: 7.8.2
-      shell-quote: 1.9.0
-      supports-color: 10.2.2
-      tree-kill: 1.2.2
-      yargs: 18.0.0
 
   convert-source-map@2.0.0: {}
 

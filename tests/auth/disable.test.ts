@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { randomUUID } from 'node:crypto'
-import { IdentityOutboxWorker } from '@server/src/identity/outbox'
+import { IdentityOutboxWorker } from '@server/src/modules/identity/outbox'
 import { createTestAuth, type TestAuth } from '@tests/helpers/auth'
 
 const fixtures: TestAuth[] = []

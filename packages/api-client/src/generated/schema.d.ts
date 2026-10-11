@@ -700,8 +700,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Preview a recoverable clear of the whole personal history
-         * @description Snapshots every uncleared receipt the caller could see at preview time, regardless of the current filter or of which pages were loaded, and records the exact receipt set with each receipt's clear revision. The body is closed and empty. The returned token is bound to the caller and expires in 10 minutes; a preview that was never submitted stops being executable when it expires and never stores a body.
+         * Preview a non-restorable clear of the whole personal history
+         * @description Snapshots every uncleared receipt the caller could see at preview time, regardless of the current filter or of which pages were loaded, and records the exact receipt set with each receipt's clear revision. Clearing cannot be restored, and later arrivals are preserved. The body is closed and empty. The returned token is bound to the caller and expires in 10 minutes; a preview that was never submitted stops being executable when it expires and never stores a body.
          */
         post: operations["previewNotificationClear"];
         delete?: never;
@@ -720,50 +720,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Clear exactly the previewed personal history, recoverably
-         * @description Applies the snapshot recorded by `previewNotificationClear`. Only receipts that still belong to the caller, are still visible, are still uncleared and still carry the previewed clear revision are cleared; a receipt that was restored, cleared again or cleared later from another device is skipped rather than overwritten. Clearing sets the personal clear state only: it never writes `readAt`, never deletes the source content, event or business record, and never emits a business event or webhook. The result is idempotent per `requestId`.
+         * Clear exactly the previewed personal history without restoration
+         * @description Applies the snapshot recorded by `previewNotificationClear`. Only receipts that still belong to the caller, are still visible, are still uncleared and still carry the previewed clear revision are cleared; a receipt whose clear revision changed or that was cleared from another device is skipped rather than overwritten. Clearing cannot be restored, and later arrivals are preserved. Clearing sets the personal clear state only: it never writes `readAt`, never deletes the source content, event or business record, and never emits a business event or webhook. The result is idempotent per `requestId`.
          */
         post: operations["clearNotificationsSnapshot"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/notifications/clear-batches": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List the authenticated user's own clear batches
-         * @description Returns clear-batch metadata only: date, counts, status and how many of that batch's items are currently restorable. It never lists preview-only batches, never returns notification bodies or titles and never mixes cleared notifications into the notification list.
-         */
-        get: operations["listNotificationClearBatches"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/notifications/clear-batches/{batchId}/restore": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Restore the items one clear batch actually cleared
-         * @description Restores only the receipts that this batch cleared and that are still cleared by this same batch at the same applied clear revision; receipts cleared again later are not swept in. Each receipt is re-checked against the current read predicate: withdrawn or unauthorized items are skipped without returning private content, and expired items return to history without becoming unread again. Unread and unexpired receipts therefore re-enter the unread count. A partial restore is a normal outcome. `requestId` is the idempotency key for this restore intent.
-         */
-        post: operations["restoreNotificationClearBatch"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1327,7 +1287,7 @@ export interface components {
             clearRevision: number;
             contentAvailable: boolean;
             /** @description 当前策略下可安全渲染的正文；不可用时为 null，调用方必须改用 contentFallbackText，不得展示原始 HTML。 */
-            content: (components["schemas"]["NotificationContent"] | null) & components["schemas"]["NotificationContent"];
+            content: components["schemas"]["NotificationContent"] | null;
             contentFallbackText: string | null;
             actions: components["schemas"]["NotificationAction"][];
             actionsAvailable: boolean;
@@ -1371,35 +1331,6 @@ export interface components {
             clearSnapshotToken: components["schemas"]["NotificationToken"];
         };
         NotificationClearResult: {
-            requestId: components["schemas"]["Uuid"];
-            batchId: components["schemas"]["Uuid"];
-            affectedCount: number;
-            skippedCount: number;
-            unreadCount: number;
-            replayed: boolean;
-            serverTime: components["schemas"]["SafeTimestamp"];
-        };
-        NotificationClearBatchItem: {
-            batchId: components["schemas"]["Uuid"];
-            itemCount: number;
-            affectedCount: number;
-            skippedCount: number;
-            restorableCount: number;
-            /** @enum {string} */
-            status: "applied" | "restored" | "partial";
-            createdAt: components["schemas"]["SafeTimestamp"];
-            appliedAt: number | null;
-            restoredAt: number | null;
-        };
-        NotificationClearBatchList: {
-            items: components["schemas"]["NotificationClearBatchItem"][];
-            nextCursor: string | null;
-            serverTime: components["schemas"]["SafeTimestamp"];
-        };
-        NotificationRestoreRequest: {
-            requestId: components["schemas"]["Uuid"];
-        };
-        NotificationRestoreResult: {
             requestId: components["schemas"]["Uuid"];
             batchId: components["schemas"]["Uuid"];
             affectedCount: number;
@@ -2769,71 +2700,6 @@ export interface operations {
             401: components["responses"]["ErrorResponse"];
             409: components["responses"]["ErrorResponse"];
             410: components["responses"]["ErrorResponse"];
-            default: components["responses"]["ErrorResponse"];
-        };
-    };
-    listNotificationClearBatches: {
-        parameters: {
-            query?: {
-                /** @description Page size. Defaults to 20. */
-                limit?: number;
-                /** @description Opaque signed cursor returned by a previous page. */
-                cursor?: components["schemas"]["NotificationCursor"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description One page of clear batches. */
-            200: {
-                headers: {
-                    "X-Request-Id": components["headers"]["RequestId"];
-                    "Cache-Control": components["headers"]["CacheControl"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationClearBatchList"];
-                };
-            };
-            400: components["responses"]["ErrorResponse"];
-            401: components["responses"]["ErrorResponse"];
-            410: components["responses"]["ErrorResponse"];
-            default: components["responses"]["ErrorResponse"];
-        };
-    };
-    restoreNotificationClearBatch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The caller's own clear batch id. */
-                batchId: components["schemas"]["Uuid"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NotificationRestoreRequest"];
-            };
-        };
-        responses: {
-            /** @description The terminal result for this request id. */
-            200: {
-                headers: {
-                    "X-Request-Id": components["headers"]["RequestId"];
-                    "Cache-Control": components["headers"]["CacheControl"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationRestoreResult"];
-                };
-            };
-            400: components["responses"]["ErrorResponse"];
-            401: components["responses"]["ErrorResponse"];
-            404: components["responses"]["ErrorResponse"];
-            409: components["responses"]["ErrorResponse"];
             default: components["responses"]["ErrorResponse"];
         };
     };

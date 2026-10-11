@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto'
 import { afterEach, expect, it, vi } from 'vitest'
 import { approvedInvitation, createTestAuth, experiencedJoinApplication, joinSnapshot, newJoinApplication, registerInvited, type TestAuth } from '@tests/helpers/auth'
-import { normalizeJoinApplicationPayload } from '@server/src/join/form-validation'
-import { MAX_PROOF_BYTES, validateJoinProofs } from '@server/src/join/attachment-validation'
+import { normalizeJoinApplicationPayload } from '@server/src/domains/join/applications/form-validation'
+import { MAX_PROOF_BYTES, validateJoinProofs } from '@server/src/domains/join/applications/attachment-validation'
 const fixtures: TestAuth[] = []
 afterEach(async () => { vi.restoreAllMocks(); await Promise.all(fixtures.splice(0).map(f => f.close())) })
 async function setup() { const f = await createTestAuth(); fixtures.push(f); return f }

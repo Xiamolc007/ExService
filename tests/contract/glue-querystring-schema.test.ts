@@ -3,7 +3,7 @@ import { createApp } from '@workspace/server'
 import { createTestAuth, type TestAuth } from '@tests/helpers/auth'
 
 /**
- * `apps/server/src/http/query-coercion.ts` 只按**内联** `type` 强制标量查询参数，
+ * `apps/server/src/http/shared/query-coercion.ts` 只按**内联** `type` 强制标量查询参数，
  * 遇到 `$ref` 会跳过。这在当前是安全的，前提是 `fastify-openapi-glue` 交给路由的
  * querystring schema 里不存在 `$ref` —— 实测 Glue 解析 Contract 时就把
  * `#/components/schemas/*` 展开了。
@@ -49,12 +49,9 @@ describe('glue route querystring schema', () => {
     await app.ready()
     // 强制逻辑生效的那条路径：带 limit 的历史列表。
     await app.inject({ method: 'GET', url: '/api/notifications?view=history&limit=20' })
-    await app.inject({ method: 'GET', url: '/api/notifications/clear-batches?limit=20' })
 
     const list = captured.find(entry => entry.url.endsWith('/notifications'))
-    const batches = captured.find(entry => entry.url.endsWith('/clear-batches'))
     expect(list, `captured urls: ${captured.map(entry => entry.url).join(', ')}`).toBeDefined()
-    expect(batches).toBeDefined()
 
     // Contract 里 view / scope / category / cursor 都以 $ref 声明；内联后这五个属性都该在。
     expect(Object.keys(inlineProperties(list!.querystring)).sort())
@@ -62,7 +59,6 @@ describe('glue route querystring schema', () => {
     // 内联必须带上可判定的类型，否则强制无从下手。
     expect(inlineProperties(list!.querystring).limit).toMatchObject({ type: 'integer', minimum: 1, maximum: 50 })
     expect(inlineProperties(list!.querystring).view).toMatchObject({ type: 'string' })
-    expect(inlineProperties(batches!.querystring).limit).toMatchObject({ type: 'integer', minimum: 1, maximum: 50 })
 
     // 对照：Glue 不向 Fastify 注册组件 schema，走的确实是内联展开而不是运行时解析。
     expect(Object.keys(app.getSchemas())).toHaveLength(0)

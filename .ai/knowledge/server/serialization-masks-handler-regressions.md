@@ -2,7 +2,7 @@
 
 **结论：对 Server 的 Contract 断言，只校验 HTTP 响应体是不够的，必须同时校验 `serviceHandlers` 中注册的 handler 的原始返回值。**
 
-_最后更新：2026-09-29_
+_最后更新：2026-10-11_
 
 ## 失败模式
 
@@ -20,7 +20,7 @@ Fastify 用 Contract 的 response schema 序列化响应，这个过程会主动
 
 ## 如何应用
 
-- 断言 handler 原始返回值时，直接使用从包导出的 `serviceHandlers`（`apps/server/src/app.ts` 导出它的目的就在这里），不要再绕一层 HTTP。
+- 断言 handler 原始返回值时，使用 `apps/server/src/http/service-handlers.ts` 汇总、由 `apps/server/src/app.ts` 转出的 `serviceHandlers`，不要再绕一层 HTTP。
 - 新增 operation 时，除 HTTP 断言外必须补一组原始返回值断言，并让返回值通过从 Contract 编译出的 schema 校验。
 - 反向用例（多字段 / 缺必填 / 违反 `const` / 类型错误都必须判为不合法）用于证明校验真的在生效，而不是恰好没有反例。
 - 不要为了「让测试更好写」而在 handler 里放宽返回类型或删掉 `additionalProperties: false`：被放宽的正是这层唯一的保护。
@@ -28,4 +28,4 @@ Fastify 用 Contract 的 response schema 序列化响应，这个过程会主动
 ## 证据
 
 - `tests/contract/health.test.ts` 的 `registered handler output` 与 `contract schema enforcement` 两组用例，以及文件顶部说明这组断言为何必需的注释（含上述三类实测结果）。
-- `apps/server/src/app.ts` 中导出 `serviceHandlers` 及其注释。
+- `apps/server/src/http/service-handlers.ts` 的映射与 `apps/server/src/app.ts` 的转出。

@@ -1,8 +1,8 @@
 ﻿import { afterEach, expect, it, vi } from 'vitest'
 import type { ScryptOptions } from 'node:crypto'
 import { createApp } from '@workspace/server'
-import { ScryptPasswordHasher } from '@server/src/auth/crypto'
-import { createAuthServices } from '@server/src/auth/create-services'
+import { ScryptPasswordHasher } from '@server/src/modules/auth/crypto'
+import { createAuthServices } from '@server/src/create-services'
 import { approvedInvitation, createTestAuth, type TestAuth } from '@tests/helpers/auth'
 
 const work = vi.hoisted(() => ({

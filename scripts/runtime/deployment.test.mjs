@@ -9,8 +9,8 @@ function fixture(t, pending = false) {
   const workspace = mkdtempSync(join(tmpdir(), 'exwebsite-deployment-'))
   t.after(() => rmSync(workspace, { recursive: true, force: true }))
   const state = { workspace, config: { websiteTarget: { database: 'exre' }, publicOrigin: 'https://site.example', issuer: 'https://issuer.example/' },
-    secrets: { OUTLINE_OIDC_CLIENT_SECRET: 'secret', IDENTITY_DELIVERY_KEY: 'delivery' }, website: { DATABASE_URL: 'exre' },
-    values: { OUTLINE_DATABASE_URL: 'outline', HYDRA_ADMIN_URL: 'http://hydra:4445' } }
+    secrets: { OUTLINE_OIDC_CLIENT_SECRET: 'secret', IDENTITY_DELIVERY_KEY: 'delivery' }, databases: { DATABASE: 'exre', OUTLINE_DATABASE: 'outline' },
+    values: { HYDRA_ADMIN_URL: 'http://hydra:4445' } }
   const queries = [], connect = async name => ({ async query(sql) {
     queries.push(sql)
     return { rows: sql.includes('current_database') ? [{ name }] : sql.includes('UNION ALL') ? (pending ? [{}] : []) :

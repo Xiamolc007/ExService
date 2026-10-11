@@ -1,5 +1,4 @@
-import { readFileSync } from 'node:fs'
-import { parse as parseYaml } from 'yaml'
+import { readContract, listOperations } from '../contract/document.js'
 import type { FastifyInstance } from 'fastify'
 import { createErrorEnvelope } from '@server/src/errors.js'
 
@@ -24,14 +23,7 @@ export function parseCorsAllowedOrigins(value: string | undefined): ReadonlySet<
 }
 
 function contractMethods(path: string): Set<string> {
-  const parsed: unknown = parseYaml(readFileSync(path, 'utf8'))
-  const paths = (parsed as { paths?: Record<string, Record<string, unknown>> }).paths
-  if (!paths) throw new Error('API contract paths unavailable')
-  const methods = new Set<string>()
-  for (const item of Object.values(paths)) for (const [method, operation] of Object.entries(item)) {
-    if (operation && typeof operation === 'object' && 'operationId' in operation) methods.add(method.toUpperCase())
-  }
-  return methods
+  return new Set(listOperations(readContract(path)).map(operation => operation.method.toUpperCase()))
 }
 
 function mergeVary(current: unknown, ...values: string[]): string {

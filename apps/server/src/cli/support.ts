@@ -1,4 +1,4 @@
-import { assertAuthSchemaAvailable, AuthService } from '@server/src/auth/service.js'
+import { assertAuthSchemaAvailable, AuthService } from '@server/src/modules/auth/service.js'
 import { openDatabase, type DatabaseOptions } from '@server/src/db/client.js'
 
 export async function createAppAuthService(options: DatabaseOptions = {}) {

@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from 'vitest'
-import { OidcService } from '@server/src/identity/oidc'
-import { parseIdentityConfig } from '@server/src/identity/config'
+import { OidcService } from '@server/src/modules/identity/oidc'
+import { parseIdentityConfig } from '@server/src/modules/identity/config'
 import { createTestAuth, type TestAuth } from '@tests/helpers/auth'
 
 const fixtures: TestAuth[] = []

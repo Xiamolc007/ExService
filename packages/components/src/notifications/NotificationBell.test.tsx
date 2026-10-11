@@ -57,6 +57,15 @@ describe('NotificationBell', () => {
     expect(screen.getByRole('button', { name: '未读通知' })).toBeTruthy()
   })
 
+  it('renders no badge node for confirmed zero and remains clickable with history', async () => {
+    const onOpenChange = vi.fn()
+    render(<NotificationBell {...props({ countState: { kind: 'ready', count: 0 }, onOpenChange })} />)
+    const bell = screen.getByRole('button', { name: '未读通知，0 条' })
+    expect(bell.querySelector('span')).toBeNull()
+    await userEvent.click(bell)
+    expect(onOpenChange).toHaveBeenCalledWith(true)
+  })
+
   it('opens the popup on View all focus and shows at most five unread rows', async () => {
     const onOpenChange = vi.fn()
     render(<NotificationBell {...props({
@@ -66,7 +75,7 @@ describe('NotificationBell', () => {
     expect(document.activeElement).toHaveProperty('textContent', '查看全部')
     expect(screen.getByRole('heading', { name: '未读通知' })).toBeTruthy()
     expect(screen.getAllByRole('listitem')).toHaveLength(5)
-    expect(screen.getByText('打开面板不会自动标为已读。')).toBeTruthy()
+    expect(screen.queryByText('打开面板不会自动标为已读。')).toBeNull()
   })
 
   it('keeps the empty state and View all when there is nothing unread', () => {

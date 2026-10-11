@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { expect, it } from 'vitest'
-import { parseIdentityConfig } from '@server/src/identity/config'
-import { assertDeploymentBinding } from '@server/src/identity/deployment-binding'
+import { parseIdentityConfig } from '@server/src/modules/identity/config'
+import { assertDeploymentBinding } from '@server/src/modules/identity/deployment-binding'
 
 it('requires a matching deployment routing receipt before outbox startup, without secret errors', () => {
   const directory = mkdtempSync(join(tmpdir(), 'website-deployment-')), file = join(directory, 'identity.json')

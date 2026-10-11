@@ -4,7 +4,7 @@
 
 - 默认用中文沟通；代码、标识符、Commit message 和既有文档沿用各自语言约定。
 - 文档、注释和交付说明中的仓库路径以仓库根目录为基准，使用行内代码；不写 `./`、`../`、Markdown 相对链接或本机绝对路径。代码中的 import 和运行时路径遵循工具约定。
-- 开工前从 `.ai/README.md` 查找相关知识；启动步骤与命令见 `README.md`，配置导入、运行和部署材料见 `docs/runtime.md`。
+- 开工前从 `.ai/README.md` 查找相关知识；启动检查单与命令见 `README.md`，配置、运行和资源边界见 `.ai/architectures/runtime/runtime-boundaries.md`。
 - Monica 任务使用当前项目提示词和本工程规则提供项目上下文；Exre 通用 Agents 只定义角色职责，不携带其他项目规则。ExWebsite 项目协作约定见 `.ai/architectures/monica-team/workflow.md`。
 - 开发或修改 `/docs/` 或 Outline 相关功能、代码、页面前，必须先读取并遵守 `apps/outline/AGENTS.md`。
 
@@ -47,7 +47,7 @@
 
 1. 实现 API 调用前读取 `api/openapi.yaml`；不得臆造 endpoint、方法、参数或字段。
 2. API 变更先改 Contract，再运行 `pnpm api:lint` 和 `pnpm api:generate`。`packages/api-client/src/generated/schema.d.ts` 禁止手改，Contract 变更须同时提交重新生成的结果。
-3. 在 `apps/server/src/app.ts` 的 `serviceHandlers` 中显式登记 `operationId`，实现 handler，并通过共享 Client 接入前端。Contract 与登记表必须双向一致；文件名不参与映射。Glue 的 `/api` 前缀须显式配置，`servers[].url` 不能替代它。
+3. 在所属模块的 `api/operations.ts` 中显式登记 `operationId`（系统 operation 在 `apps/server/src/http/system/operations.ts`），由 `apps/server/src/http/service-handlers.ts` 汇总，实现 handler，并通过共享 Client 接入前端。Contract 与登记表必须双向一致；文件名不参与映射。Glue 的 `/api` 前缀须显式配置，`servers[].url` 不能替代它。
 4. 新增或修改 operation 时同步更新 `tests/contract/`：校验真实 HTTP 响应及注册 handler 的原始返回值，防止序列化掩盖回归。原因见 `.ai/knowledge/server/serialization-masks-handler-regressions.md` 与 `.ai/knowledge/server/operation-registration-gaps.md`。
 5. 完成 API 变更后运行 `pnpm typecheck`、`pnpm test`、`pnpm build`；自动检查、真实浏览器验收和部署验收分别报告。
 
@@ -60,6 +60,8 @@ OpenAPI 3.1 schema 仅使用 JSON Schema Draft-07 兼容子集；引入 Draft 20
 - 修改 ExUI 接入或主题前，阅读 `.ai/knowledge/web/exui-integration-traps.md`。全局样式仅在 `apps/web/src/main.tsx` 导入一次；`useTheme` 必须位于 `ThemeProvider` 内，应用按 light/dark 类补充 `color-scheme`。不要另装 ExUI 已打包的 Sonner、Radix、Base UI 等实现库。
 
 ## Server 与数据库规则
+
+Server 按已确认方案组织：公共能力放在 `apps/server/src/modules/{name}/`，具体业务流程放在 `apps/server/src/domains/{name}/`，各模块内部的 `api/` 承载 HTTP 接入。业务与 API 入口均用 `fastify-plugin` 显式注册，业务入口通过 `decorate` 暴露服务；业务核心保持普通 service/factory，通过构造参数依赖公开能力，不依赖 HTTP 层，公共模块不得反向依赖具体业务。各模块只在自己的 `fastify.d.ts` 声明所拥有的扩展，类型提示不能替代运行时依赖检查。`apps/server/src/http/plugin.ts` 汇总 API 插件与 operation 映射，在统一 HTTP 作用域内先安装按 operation 筛选的 hook，检查 Contract 与 handler 双向覆盖，再注册一次 Glue；OpenAPI 源文件独立维护于 `api/`，统一生成 `api/generated/openapi.json`，禁止反向生成或手改产物。具体边界见 `.ai/architectures/server/request-lifecycle.md`。
 
 - 错误统一经 `apps/server/src/errors.ts` 返回 envelope；对外消息仅允许 Contract 校验错误或固定文案，其他异常（含应用抛出的 4xx）的 `error.message` 不得回显。
 - 修改表的职责、关系或数据规则前，先阅读并更新 `.ai/databases/data-model.md`，评审模型影响，再改 schema/migration。纯索引、迁移实现和测试数据调整不要求更新模型；物理结构以 `apps/server/src/db/schema.ts`、`apps/server/drizzle/` 为准。

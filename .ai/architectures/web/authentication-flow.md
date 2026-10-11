@@ -54,6 +54,8 @@ Hero 图片来自 `apps/web/public/images/heros/join/rifling-911/`。构建时�
 
 入口 `apps/web/index.html` 在所有脚本和资源声明之前设置 `no-referrer`，避免邀请 URL 的邮箱和数字码进入资源请求的 Referer。Vite 会在该 meta 前注入开发脚本，因此 `apps/web/vite.config.ts` 还为本地开发服务设置 `Referrer-Policy: no-referrer` 响应头。URL 清理发生在 React 挂载后，不能替代加载前的入口策略；这些策略不会隐藏原始入口请求 URL。
 
+邀请注册的持续错误由所属 RHF 表单持有，根错误展示与跨步骤挂载交接见 `.ai/knowledge/web/invitation-error-handoff.md`。
+
 ## 本地申请审核
 
 `JoinReviewPage` 使用生成 Client 的列表与详情类型，不读取 `/auth/me` 作为本期临时页面的访问前提。过滤变化重置分页偏移；列表与详情各用请求代次拒绝迟到结果，每次打开重新读取详情。

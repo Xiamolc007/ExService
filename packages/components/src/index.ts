@@ -20,6 +20,8 @@ export { ProfileEditor } from '@components/src/ProfileEditor'
 export type { ProfileEditorProps, ProfileTextValues } from '@components/src/ProfileEditor'
 export { ContentAreaState, SettingsContentSkeleton } from '@components/src/ContentAreaState'
 export type { ContentAreaStateProps } from '@components/src/ContentAreaState'
+export { ErrorPanel } from '@components/src/ErrorPanel'
+export type { ErrorPanelItem, ErrorPanelProps } from '@components/src/ErrorPanel'
 export { SettingsPanel } from '@components/src/SettingsPanel'
 export type {
   SettingsPanelProps, SettingsCategory, SettingsTheme, SettingsField, SettingsNotificationsSlice,
@@ -35,7 +37,7 @@ export type { NotificationItemListProps } from '@components/src/notifications/No
 export { NotificationHistoryModal } from '@components/src/notifications/NotificationHistoryModal'
 export type {
   NotificationHistoryModalProps, NotificationAsyncStatus, NotificationListSlice,
-  NotificationDetailSlice, NotificationBulkSlice, NotificationRecordsSlice,
+  NotificationDetailSlice, NotificationBulkSlice,
   NotificationConfirmSlice,
 } from '@components/src/notifications/NotificationHistoryModal'
 export { NotificationPreferencesForm } from '@components/src/notifications/NotificationPreferencesForm'
@@ -49,11 +51,11 @@ export type {
   NotificationContentInput, SafeContentNode, SafeElementNode, SafeTextNode, SafeContentTag,
 } from '@components/src/notifications/notificationContent'
 export {
-  formatClearBatchTime, formatNotificationTime, formatUnreadBadge, isNotificationUnread,
+  formatNotificationTime, formatUnreadBadge, isNotificationUnread,
   notificationActionReasonLabel, notificationCategoryLabel, notificationStateLabel,
 } from '@components/src/notifications/notificationsView'
 export type {
-  NotificationActionView, NotificationCategory, NotificationClearBatchView, NotificationCountState,
+  NotificationActionView, NotificationCategory, NotificationCountState,
   NotificationDetailView, NotificationHistoryFilter, NotificationItemView, NotificationLifecycle,
   NotificationNecessity, NotificationScope, NotificationActionUnavailableReason,
 } from '@components/src/notifications/notificationsView'
@@ -70,6 +72,7 @@ export { AuthModal } from '@components/src/auth/AuthModal'
 export type { AuthModalProps } from '@components/src/auth/AuthModal'
 export { InvitationEmailForm, InvitationCodeForm, InvitationProfileForm, invitationEmailSchema } from '@components/src/auth/InvitationForms'
 export type { InvitationProfileValues } from '@components/src/auth/InvitationForms'
+export type { InvitationFormErrorKind, InvitationFormErrors, InvitationFormHandle } from '@components/src/auth/invitationFeedback'
 export { JoinReviewDialog } from '@components/src/join/JoinReviewDialog'
 export { CompleteJoinApplicationModal } from '@components/src/join/CompleteJoinApplicationModal'
 export type { CompleteJoinApplicationModalHandle, CompleteJoinApplicationModalProps } from '@components/src/join/CompleteJoinApplicationModal'

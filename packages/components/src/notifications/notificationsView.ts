@@ -60,18 +60,6 @@ export interface NotificationDetailView {
   actionsAvailable: boolean
 }
 
-export interface NotificationClearBatchView {
-  batchId: string
-  itemCount: number
-  affectedCount: number
-  skippedCount: number
-  restorableCount: number
-  status: 'applied' | 'restored' | 'partial'
-  createdAt: number
-  appliedAt: number | null
-  restoredAt: number | null
-}
-
 /** 未读计数的展示状态；计数来源失败时展示「未更新」，绝不画成 0。 */
 export type NotificationCountState =
   | { kind: 'hidden' }
@@ -82,7 +70,6 @@ export type NotificationCountState =
 export interface NotificationCopy {
   bell: string
   popupTitle: string
-  popupFooter: string
   viewAll: string
   historyTitle: string
   historyClose: string
@@ -90,12 +77,9 @@ export interface NotificationCopy {
   detailColumn: string
   clearAll: string
   readAll: string
-  showRecords: string
   filterLabel: string
   filterAll: string
   filterUnread: string
-  historyCount: (count: number) => string
-  loadMore: string
   retryNextPage: string
   pageRetrying: string
   nextPageError: string
@@ -110,7 +94,6 @@ export interface NotificationCopy {
   expiredBanner: string
   expiredNotCounted: string
   bodyUnavailable: string
-  selectPlaceholder: string
   selectPlaceholderBody: string
   emptyUnreadTitle: string
   emptyUnreadBody: string
@@ -118,14 +101,6 @@ export interface NotificationCopy {
   emptyUnreadFilteredBody: string
   emptyHistoryTitle: string
   emptyHistoryBody: string
-  emptyRecordsTitle: string
-  emptyRecordsBody: string
-  recordsTitle: string
-  recordsIntro: string
-  restoreBatch: string
-  batchCleared: (affected: number) => string
-  batchRestorable: (restorable: number) => string
-  undoClear: string
   confirmClearTitle: string
   confirmClearBody: (count: number) => string
   confirmClearExtra: string
@@ -139,7 +114,6 @@ export interface NotificationCopy {
   submitting: string
   operationFailed: string
   clearedResult: (affected: number, skipped: number) => string
-  restoredResult: (affected: number) => string
   readAllResult: string
   previewExpired: string
   cursorExpired: string
@@ -164,27 +138,19 @@ export interface NotificationCopy {
 export const notificationCopy: NotificationCopy = {
   bell: '未读通知',
   popupTitle: '未读通知',
-  popupFooter: '打开面板不会自动标为已读。',
   viewAll: '查看全部',
   historyTitle: '通知历史',
   historyClose: '关闭通知历史',
   listColumn: '通知列表',
   detailColumn: '通知正文',
-  clearAll: '清除全部',
-  readAll: '全部已读',
-  showRecords: '恢复清理记录',
+  clearAll: '清理全部',
+  readAll: '已读全部',
   filterLabel: '显示',
-  filterAll: '全部历史',
-  filterUnread: '仅未读',
-  /**
-   * 已加载条数。Contract 不返回总数，所以这里**不能**说成「共 N 条」——
-   * 翻了几页就是几页的量，措辞必须如实。
-   */
-  historyCount: (count) => `已加载 ${count} 条`,
-  loadMore: '加载更多',
-  retryNextPage: '重新加载列表',
+  filterAll: '全部',
+  filterUnread: '未读',
+  retryNextPage: '重新加载通知',
   pageRetrying: '正在重新加载…',
-  nextPageError: '下一页加载失败，已显示的通知保留。',
+  nextPageError: '通知暂时无法继续加载',
   listLoading: '正在加载通知',
   listError: '通知暂时无法加载，计数未更新。',
   detailLoading: '正在加载正文',
@@ -196,26 +162,17 @@ export const notificationCopy: NotificationCopy = {
   expiredBanner: '这条通知已过期，保留正文供查阅。',
   expiredNotCounted: '过期通知不计入未读。',
   bodyUnavailable: '正文格式暂不可用，以下为完整文字。',
-  selectPlaceholder: '选择通知',
-  selectPlaceholderBody: '左侧是全部未清理历史。选择通知后，在这里查看正文与行动。',
+  selectPlaceholderBody: '点击通知查看内容',
   emptyUnreadTitle: '暂时没有未读通知',
   emptyUnreadBody: '有新通知时会显示在这里，历史仍可查看。',
   emptyUnreadFilteredTitle: '暂时没有未读通知',
   emptyUnreadFilteredBody: '当前历史均已读或已过期。可以切回全部历史。',
   emptyHistoryTitle: '还没有通知历史',
   emptyHistoryBody: '收到的公告与个人通知会显示在这里。',
-  emptyRecordsTitle: '还没有清理记录',
-  emptyRecordsBody: '执行清除全部后，可在这里恢复。',
-  recordsTitle: '恢复清理记录',
-  recordsIntro: '仅显示你的清理批次。恢复保留原已读状态，过期通知不增加未读。',
-  restoreBatch: '恢复此次清理',
-  batchCleared: (affected) => `当时清理 ${affected} 条`,
-  batchRestorable: (restorable) => `当前可恢复 ${restorable} 条`,
-  undoClear: '撤销此次清理',
   confirmClearTitle: '清除全部通知？',
   confirmClearBody: (count) =>
     `将清理预览时的 ${count} 条通知，包括未读、已读和过期历史，覆盖所有分页。`,
-  confirmClearExtra: '之后到达的通知会保留。可以撤销，也可在历史中的“恢复清理记录”中恢复。',
+  confirmClearExtra: '清理后无法恢复。之后到达的通知会保留。',
   confirmClearNote: '清理消息不会取消活动参与。',
   confirmReadAllTitle: '全部标为已读？',
   confirmReadAllBody: (count) =>
@@ -227,7 +184,6 @@ export const notificationCopy: NotificationCopy = {
   submitting: '正在提交，请稍候。',
   operationFailed: '操作失败，原状态已保留。请重试。',
   clearedResult: (affected, skipped) => `已清理 ${affected} 条，跳过 ${skipped} 条；新到通知仍保留。`,
-  restoredResult: (affected) => `已恢复 ${affected} 条仍符合条件的通知；过期项只回到历史。`,
   readAllResult: '已标记本次选定通知，新到通知仍未读。',
   previewExpired: '预览已过期，请重新预览。',
   cursorExpired: '分页游标已过期，已刷新第一页。',
@@ -286,14 +242,6 @@ export function formatNotificationTime(timestamp: number, now: number = Date.now
     return `${date.getMonth() + 1} 月 ${date.getDate()} 日`
   }
   return `${date.getFullYear()} 年 ${date.getMonth() + 1} 月 ${date.getDate()} 日`
-}
-
-/** 清理批次时间：批次按执行时刻归档，需要比列表更精确。 */
-export function formatClearBatchTime(timestamp: number): string {
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) return ''
-  const pad = (value: number) => String(value).padStart(2, '0')
-  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 export function isNotificationUnread(item: { readAt: number | null; expired: boolean }): boolean {

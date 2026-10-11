@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from 'vitest'
 import { createApp, serviceHandlers } from '@workspace/server'
 import { createTestAuth, type TestAuth } from '@tests/helpers/auth'
-import { OidcService } from '@server/src/identity/oidc'
+import { OidcService } from '@server/src/modules/identity/oidc'
 
 const fixtures: TestAuth[] = []
 const apps: Array<ReturnType<typeof createApp>> = []

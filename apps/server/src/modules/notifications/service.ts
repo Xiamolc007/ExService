@@ -16,7 +16,7 @@ import type { NotificationRepository, ReceiptListRow } from './repository.js'
  *
  * 所有方法都以 userId 为第一约束，不提供跨用户读取路径。
  * 批量命令按 `(userId, requestId)` 去重：同 key 同摘要返回原终态，
- * 异摘要返回 409；成功后丢响应时重放不会覆盖后来的未读/恢复。
+ * 异摘要返回 409；成功后丢响应时重放不会覆盖后来的个人状态变化。
  */
 
 export interface NotificationServicesOptions {
@@ -70,7 +70,7 @@ export interface NotificationDetailResult {
   stateRevision: number
   clearRevision: number
   contentAvailable: boolean
-  content: { format: 'html'; schemaVersion: 1; policyVersion: string; html: string; text: string } | null
+  content: { format: 'html'; schemaVersion: 1; policyVersion: 'notification-html-v1'; html: string; text: string } | null
   contentFallbackText: string | null
   actions: Array<{
     actionId: string
@@ -121,22 +121,6 @@ export interface ClearResult {
   serverTime: number
 }
 
-export interface ClearBatchListResult {
-  items: Array<{
-    batchId: string
-    itemCount: number
-    affectedCount: number
-    skippedCount: number
-    restorableCount: number
-    status: 'applied' | 'restored' | 'partial'
-    createdAt: number
-    appliedAt: number | null
-    restoredAt: number | null
-  }>
-  nextCursor: string | null
-  serverTime: number
-}
-
 export interface PreferencesResult {
   revision: number
   optionalCategories: { announcement: boolean; personal_update: boolean }
@@ -146,7 +130,6 @@ export interface PreferencesResult {
 
 const DEFAULT_LIMIT = 20
 const MAX_LIMIT = 50
-const DEFAULT_BATCH_LIMIT = 20
 
 export class NotificationService {
   constructor(private readonly options: NotificationServicesOptions) {}
@@ -363,81 +346,6 @@ export class NotificationService {
     })
   }
 
-  async listClearBatches(userId: string, limit: number | null,
-    cursor: string | null): Promise<ClearBatchListResult> {
-    const now = this.options.now()
-    const size = clampLimit(limit, DEFAULT_BATCH_LIMIT, MAX_LIMIT)
-    let afterCreatedAt: number | null = null
-    let afterBatchId: string | null = null
-    if (cursor !== null) {
-      const claims = verifyCursor(this.options.tokenKey, cursor, userId, now)
-      if (claims.v !== 'clear_batches') throw new NotificationError('NOTIFICATION_TOKEN_INVALID')
-      afterCreatedAt = typeof claims.c === 'number' ? claims.c : null
-      afterBatchId = typeof claims.b === 'string' ? claims.b : null
-      if (afterCreatedAt === null || afterBatchId === null) {
-        throw new NotificationError('NOTIFICATION_TOKEN_INVALID')
-      }
-    }
-
-    const rows = await this.options.repository.listClearBatches(userId, size + 1, afterCreatedAt, afterBatchId)
-    const page = rows.slice(0, size)
-    const last = page.at(-1)
-    const nextCursor = rows.length > size && last !== undefined
-      ? signCursor(this.options.tokenKey, userId, now, { v: 'clear_batches', c: last.created_at, b: last.batch_id })
-      : null
-
-    const items = []
-    for (const batch of page) {
-      const restorableCount = await this.options.repository.restorableCount(batch.batch_id, userId)
-      const status: 'applied' | 'restored' | 'partial' =
-        batch.status === 'restored' ? 'restored' : restorableCount === 0 ? 'applied' : 'partial'
-      items.push({
-        batchId: batch.batch_id,
-        itemCount: batch.item_count,
-        affectedCount: batch.affected_count ?? 0,
-        skippedCount: batch.skipped_count ?? 0,
-        restorableCount,
-        status,
-        createdAt: batch.created_at,
-        appliedAt: batch.applied_at,
-        restoredAt: batch.restored_at,
-      })
-    }
-    return { items, nextCursor, serverTime: now }
-  }
-
-  async restoreBatch(userId: string, batchId: string, requestId: string): Promise<ClearResult> {
-    const now = this.options.now()
-    const digest = normalizeDigest({ kind: 'restore', batchId })
-    return await this.options.db.transaction(async tx => {
-      await this.options.repository.lockUser(userId, tx)
-      const replay = await this.claimMutation(userId, requestId, 'restore', digest, tx)
-      if (replay !== null) return { ...(JSON.parse(replay) as ClearResult), replayed: true, serverTime: now }
-
-      await this.options.repository.lockStream(userId, tx)
-      const batch = await this.options.repository.findClearBatchForUpdate(batchId, userId, tx)
-      if (batch === undefined || batch.status === 'preview') {
-        throw new NotificationError('NOTIFICATION_BATCH_NOT_FOUND')
-      }
-      const { affected, skipped } = await this.options.repository.restoreClearBatch(batchId, userId, tx)
-      if (affected > 0) {
-        await tx.query(`UPDATE notification_clear_batches SET status = 'restored', restored_at = $3
-          WHERE batch_id = $1 AND user_id = $2`, [batchId, userId, now])
-      }
-      await this.options.repository.bumpStream(userId, tx)
-      const unreadCount = await this.options.repository.countUnread(userId, now, tx)
-      const result: ClearResult = {
-        requestId, batchId, affectedCount: affected, skippedCount: skipped, unreadCount,
-        replayed: false, serverTime: now,
-      }
-      await this.options.repository.insertMutation({
-        userId, requestId, kind: 'restore', digest, resultJson: JSON.stringify(result),
-        clearBatchId: batchId, createdAt: now,
-      }, tx)
-      return result
-    })
-  }
-
   async getPreferences(userId: string): Promise<PreferencesResult> {
     const stored = await this.options.repository.getPreferences(userId)
     return {
@@ -484,10 +392,9 @@ export class NotificationService {
    *
    * 必须在调用方已持有 user 行锁之后调用：并发提交同一个 requestId 时，
    * 两条命令都会先查到「没有记录」而重复执行；锁把第二条排到第一条提交之后，
-   * 它才会看到去重记录。`clear` 有 batch status 兜底，但 `restore` 的重复执行
-   * 会返回一个 `affected=0` 的错误终态。
+   * 它才会看到去重记录，而不会重复修改收件状态。
    */
-  private async claimMutation(userId: string, requestId: string, kind: 'read_through' | 'clear' | 'restore',
+  private async claimMutation(userId: string, requestId: string, kind: 'read_through' | 'clear',
     digest: string, tx: SqlExecutor): Promise<string | null> {
     const existing = await this.options.repository.findMutation(userId, requestId, tx)
     if (existing === undefined) return null

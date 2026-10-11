@@ -54,6 +54,8 @@ test('replaces inherited database and Redis connections and private service cred
   }
   assert.equal(environment.WEBSITE_INTERNAL_URL, 'http://127.0.0.1:1')
   assert.equal(environment.HYDRA_PUBLIC_URL, 'http://127.0.0.1:1/')
+  assert.equal(environment.URL, 'http://127.0.0.1:8080/docs')
+  assert.equal(environment.COLLABORATION_URL, 'http://127.0.0.1:8080/docs')
   assert.equal(environment.OUTLINE_INTEGRATION_KEY, 'isolated-outline-test-key')
   assert.equal(environment.OUTLINE_OIDC_CLIENT_SECRET, 'isolated-oidc-test-secret')
   assert.match(environment.SECRET_KEY, /^[a-f0-9]{64}$/)

@@ -8,7 +8,7 @@ import { afterAll, beforeAll, expect, it } from 'vitest'
 import { openDatabase, type AppDatabase } from './client.js'
 import { runMigrations } from './migration-runner.js'
 import { assertDatabaseReady } from './schema-check.js'
-import { assertCommunitySchemaAvailable } from '../community/schema-check.js'
+import { assertCommunitySchemaAvailable } from '../domains/community/schema-check.js'
 
 let container: StartedPostgreSqlContainer
 beforeAll(async () => {

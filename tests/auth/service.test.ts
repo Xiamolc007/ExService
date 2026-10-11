@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AuthService } from '@server/src/auth/service'
+import { AuthService } from '@server/src/modules/auth/service'
 import { openDatabase, type AppDatabase } from '@server/src/db/client'
 import { createTestAuth, testPasswordHasher, type TestAuth } from '@tests/helpers/auth'
 

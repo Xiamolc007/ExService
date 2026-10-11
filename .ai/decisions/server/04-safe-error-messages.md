@@ -21,7 +21,7 @@ _最后更新：2026-10-08_
 其他异常（包括应用代码主动抛出的 4xx）一律不回显 `error.message`。另外：
 
 - `error.statusCode` 先被规范到 `[400, 600)`，超出范围一律按 500 处理，避免异常状态码原样透出；
-- 已知业务错误使用 `apps/server/src/auth/errors.ts` 的固定分类与文案；其他异常按状态码推导（404 → `NOT_FOUND`，≥500 → `INTERNAL_ERROR`，其余 → `BAD_REQUEST`）；
+- 已知业务错误使用 `apps/server/src/modules/auth/errors.ts` 的固定分类与文案；其他异常按状态码推导（404 → `NOT_FOUND`，≥500 → `INTERNAL_ERROR`，其余 → `BAD_REQUEST`）；
 - Fastify request ID 同时用于响应中的 `requestId` 与日志关联；5xx 写 `error` 日志，4xx 写 `warn` 日志。
 
 邀请注册的哈希、投递和数据库异常可能带有提交秘密，因此 HTTP 异常日志只记录安全 code/status 分类，不序列化原始 Error、message 或堆栈。本地模拟邮件终端输出是显式投递适配器行为，不是普通请求异常日志。

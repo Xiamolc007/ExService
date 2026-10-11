@@ -40,7 +40,9 @@ playwright
 output
 vendor/exui/
 .local/docs-integration/
+.local/
 
 # Local docs-integration previews and one-off verification artifacts
 .notes/docs-integration/previews/
 .notes/docs-integration/reports/
+.codegraphy/*

@@ -25,7 +25,7 @@ function props(overrides: Partial<SettingsPanelProps> = {}): SettingsPanelProps 
       preferences: { announcement: true, personal_update: true },
       status: 'ready', onRetry: vi.fn(), saving: false, message: null, conflict: false,
       necessaryCategories: ['service_notice'],
-      onSave: vi.fn(async () => undefined), onRefresh: vi.fn(),
+      onSave: vi.fn(async (draft) => draft), onRefresh: vi.fn(),
     },
     onSave: vi.fn(async () => undefined), onUpload: vi.fn(async () => undefined),
     onRemoveAvatar: vi.fn(async () => undefined), onLogout: vi.fn(),
@@ -194,28 +194,29 @@ describe('SettingsPanel', () => {
     }
   })
 
-  it('keeps the notification draft across a notifications to profile round trip', async () => {
-    // 覆盖点：通知表单必须**始终挂载**，由 `active` 决定是否渲染。若只在
-    // `category === 'notifications'` 分支里渲染，切走再切回会卸载重挂，草稿随之丢失。
+  it('keeps canonical notification values across a category round trip without saving again', async () => {
     vi.stubGlobal('ResizeObserver', class {
       observe() {}
       unobserve() {}
       disconnect() {}
     })
     try {
-      const view = render(<SettingsPanel {...props({ category: 'notifications' })} />)
+      const input = props({ category: 'notifications' })
+      const view = render(<SettingsPanel {...input} />)
       await userEvent.click(screen.getByRole('switch', { name: '社区动态' }))
-      expect(screen.getByText('有尚未保存的更改')).toBeTruthy()
+      expect(input.notifications.onSave).toHaveBeenCalledTimes(1)
+      expect(screen.queryByText(/已保存/)).toBeNull()
 
-      view.rerender(<SettingsPanel {...props({ category: 'profile' })} />)
+      view.rerender(<SettingsPanel {...input} category="profile" />)
       expect(screen.getByRole('button', { name: '编辑用户名' })).toBeTruthy()
       // 表单仍在组件树里，只是不渲染任何内容。
       expect(screen.queryByRole('switch', { name: '社区动态' })).toBeNull()
 
-      view.rerender(<SettingsPanel {...props({ category: 'notifications' })} />)
+      view.rerender(<SettingsPanel {...input} category="notifications" />)
       expect((screen.getByRole('switch', { name: '社区动态' }) as HTMLButtonElement)
         .getAttribute('aria-checked')).toBe('false')
-      expect(screen.getByText('有尚未保存的更改')).toBeTruthy()
+      expect(input.notifications.onSave).toHaveBeenCalledTimes(1)
+      expect(screen.queryByText(/已保存/)).toBeNull()
     } finally {
       vi.unstubAllGlobals()
     }

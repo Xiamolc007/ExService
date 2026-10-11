@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { withSidSerial } from '@server/src/identity/sid-serial'
+import { withSidSerial } from '@server/src/modules/identity/sid-serial'
 
 it('keeps protocol logout ahead of queued cleanup for one sid while allowing another sid', async () => {
   const steps: string[] = []

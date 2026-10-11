@@ -63,14 +63,7 @@
   overscroll-behavior: contain;
 }
 
-.foot {
-  flex: none;
-  margin: 0;
-  padding: 0.6rem 1.1rem;
-  border-top: 1px solid var(--exui-border-default);
-  color: var(--exui-text-secondary);
-  font-size: 0.72rem;
-}
+
 
 .notice {
   display: grid;

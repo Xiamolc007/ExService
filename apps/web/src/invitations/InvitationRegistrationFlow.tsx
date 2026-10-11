@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { Alert, AlertDescription, Button, ExMessage } from '@exre/exui'
-import { InvitationEmailForm, InvitationCodeForm, InvitationProfileForm, invitationEmailSchema, type AuthFormHandle, type InvitationProfileValues } from '@workspace/components'
+import { Button, ExMessage } from '@exre/exui'
+import { InvitationEmailForm, InvitationCodeForm, InvitationProfileForm, invitationEmailSchema, type InvitationFormHandle, type InvitationFormErrors, type InvitationProfileValues } from '@workspace/components'
 import type { components } from '@workspace/api-client'
 import { api } from '@web/src/api/client'
 import { ExAxiosError } from '@workspace/sdk/http/browser'
 
 interface Props { presentation: 'page' | 'modal'; initialEmail?: string; onLogin?: (email: string) => void; onJoin?: () => void }
 type Verified = components['schemas']['InvitationVerified']
-const noApplication = '未找到该邮箱的申请，请先申请加入'
+type FormStep = 'email' | 'code' | 'profile'
+type Step = FormStep | 'registered'
+interface PendingFeedback { targetStep: FormStep; generation: number; errors: InvitationFormErrors }
+const noApplication = '未找到该邮箱的申请。'
 const notEligible = '该邮箱暂不符合注册条件，请确认申请已通过且邀请仍有效'
 
 function readEntry(presentation: Props['presentation'], initialEmail: string) {
@@ -25,36 +28,61 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
   const entry = useRef<ReturnType<typeof readEntry> | null>(null)
   if (entry.current === null) entry.current = readEntry(presentation, initialEmail)
   const [email, setEmail] = useState(entry.current.email)
-  const [step, setStep] = useState<'email' | 'code' | 'profile' | 'registered'>('email')
+  const [step, setStep] = useState<Step>('email')
   const [busy, setBusy] = useState(false)
   const [retry, setRetry] = useState(false)
-  const [error, setError] = useState<string | null>(entry.current.error ? '注册入口参数无效，请重新填写邮箱' : null)
   const [nickname, setNickname] = useState('')
   const [resendUntil, setResendUntil] = useState(0)
   const [lockedUntil, setLockedUntil] = useState(0)
   const [clock, setClock] = useState(Date.now())
   const generation = useRef(0), mounted = useRef(false), pending = useRef(false)
   const grant = useRef<Verified | null>(null)
-  const form = useRef<AuthFormHandle>(null)
+  const emailForm = useRef<InvitationFormHandle>(null)
+  const codeForm = useRef<InvitationFormHandle>(null)
+  const profileForm = useRef<InvitationFormHandle>(null)
+  const activeStep = useRef<Step>('email')
+  const pendingFeedback = useRef<PendingFeedback | null>(null)
   const timer = useRef<number | null>(null), finished = useRef(false)
   const autoChain = useRef<ReturnType<typeof runAutomatic> | null>(null)
 
   const valid = (current: number) => mounted.current && current === generation.current
+  function formFor(targetStep: Step) {
+    return targetStep === 'email' ? emailForm.current : targetStep === 'code' ? codeForm.current : targetStep === 'profile' ? profileForm.current : null
+  }
+  function clearFeedback() {
+    pendingFeedback.current = null
+    formFor(activeStep.current)?.clearServerErrors()
+  }
+  function deliverError(targetStep: FormStep, current: number, errors: InvitationFormErrors) {
+    if (!valid(current)) return
+    const target = formFor(targetStep)
+    if (activeStep.current === targetStep && target !== null) {
+      pendingFeedback.current = null
+      target.setServerErrors(errors)
+    } else pendingFeedback.current = { targetStep, generation: current, errors }
+  }
   function cooldown(data: { serverTime: number; resendAvailableAt: number }) {
     const now = Date.now(), delay = Math.max(0, data.resendAvailableAt - data.serverTime)
     setClock(now); setResendUntil(delay === 0 ? 0 : now + delay)
   }
-  function checkFailure(status: number | undefined) {
-    const message = status === 404 ? noApplication : status === 409 ? notEligible : '检查失败，请重试'
-    setError(message); form.current?.setServerErrors({ form: message }); ExMessage.error(message)
+  function checkFailure(current: number, error: unknown) {
+    const status = error instanceof ExAxiosError ? error.status : undefined
+    if (status === 400) { deliverError('email', current, { email: '请输入有效的邮箱地址' }); return }
+    const wait = retrySeconds(error)
+    const form = status === 404 ? noApplication : status === 409 ? notEligible : status === 429
+      ? wait > 0 ? `检查失败，请在 ${wait} 秒后重试` : '检查失败，请稍后重试'
+      : '检查失败，请重试'
+    const formKind = status === 404 ? 'application-not-found' : status === 409 ? 'not-eligible' : status === 429 ? 'rate-limited' : 'check-failed'
+    deliverError('email', current, { form, formKind })
   }
-  function verifyFailure(message: string, retryAfter = 0) {
-    setRetry(true); setError(message)
-    // The automatic entry has an empty OTP form mounted on its next render.
+  function verifyFailure(current: number, error: unknown) {
+    const message = error instanceof ExAxiosError && error.code === 'INVITATION_CODE_LOCKED' ? '验证暂时锁定，请稍后重试' : '验证码无效或已过期，请重新获取'
+    const retryAfter = retrySeconds(error)
+    setRetry(true)
     if (retryAfter > 0) { const now = Date.now(); setClock(now); setLockedUntil(now + retryAfter * 1000) }
-    form.current?.setServerErrors({ code: message })
+    deliverError('code', current, { code: message })
   }
-  function accepted(data: Verified) { grant.current = data; setEmail(data.email); setNickname(data.nickname); setError(null); setRetry(false); setStep('profile') }
+  function accepted(data: Verified) { clearFeedback(); grant.current = data; setEmail(data.email); setNickname(data.nickname); setRetry(false); setStep('profile') }
   async function runAutomatic(current: number, targetEmail: string, code: string) {
     let inspected
     try { inspected = await api.POST('/auth/invitations/check', { body: { email: targetEmail }, alert: false }) }
@@ -69,6 +97,10 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
     mounted.current = true
     let subscribed = true
     const current = generation.current
+    if (entry.current!.error) {
+      entry.current!.error = false
+      deliverError('email', current, { form: '注册入口参数无效，请重新填写邮箱', formKind: 'entry-invalid' })
+    }
     if (presentation === 'page') {
       const url = new URL(window.location.href)
       url.searchParams.delete('code')
@@ -84,11 +116,11 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
       if (!subscribed || !valid(current) || outcome === null) return
       pending.current = false; setBusy(false)
       autoChain.current = null
-      if (outcome.stage === 'checkFailure') { checkFailure(outcome.error instanceof ExAxiosError ? outcome.error.status : undefined); return }
+      if (outcome.stage === 'checkFailure') { checkFailure(current, outcome.error); return }
       cooldown(outcome.eligibility); setEmail(outcome.eligibility.email)
       if (outcome.stage === 'verify') { accepted(outcome.result); return }
       setStep('code')
-      verifyFailure(outcome.error instanceof ExAxiosError && outcome.error.code === 'INVITATION_CODE_LOCKED' ? '验证暂时锁定，请稍后重试' : '验证码无效或已过期，请重新获取', retrySeconds(outcome.error))
+      verifyFailure(current, outcome.error)
     })
     const interval = window.setInterval(() => setClock(Date.now()), 1000)
     return () => {
@@ -96,51 +128,49 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
       window.clearInterval(interval)
       if (timer.current !== null) window.clearTimeout(timer.current)
       // StrictMode immediately re-subscribes; real unmount invalidates the flow.
-      queueMicrotask(() => { if (!mounted.current) { generation.current++; grant.current = null; entry.current!.code = null; autoChain.current = null } })
+      queueMicrotask(() => { if (!mounted.current) { generation.current++; pendingFeedback.current = null; grant.current = null; entry.current!.code = null; autoChain.current = null } })
     }
   }, [])
 
   function invalidate() {
+    clearFeedback()
     generation.current++; pending.current = false; grant.current = null; autoChain.current = null
     entry.current!.code = null
     if (timer.current !== null) { window.clearTimeout(timer.current); timer.current = null }
-    setBusy(false); setRetry(false); setError(null)
+    setBusy(false); setRetry(false)
   }
   function back() { invalidate(); setNickname(''); setLockedUntil(0); setResendUntil(0); setStep('email') }
   async function check(targetEmail: string) {
     if (pending.current) return
     const current = ++generation.current
-    pending.current = true; setBusy(true); setEmail(targetEmail); setError(null); form.current?.clearServerErrors()
+    pending.current = true; setBusy(true); setEmail(targetEmail); clearFeedback()
     try {
       const result = await api.POST('/auth/invitations/check', { body: { email: targetEmail }, alert: false })
       if (!valid(current)) return
       cooldown(result); setEmail(result.email); setStep('code')
-    } catch (error) { if (valid(current)) {
-      if (error instanceof ExAxiosError && error.status === 400) form.current?.setServerErrors({ email: '请输入有效的邮箱地址' })
-      else { checkFailure(error instanceof ExAxiosError ? error.status : undefined); if (error instanceof ExAxiosError && error.status === 429) setError(`检查失败，请在 ${retrySeconds(error)} 秒后重试`) }
-    } }
+    } catch (error) { if (valid(current)) checkFailure(current, error) }
     finally { if (valid(current)) { pending.current = false; setBusy(false) } }
   }
   async function verify(code: string) {
     if (pending.current || Date.now() < lockedUntil) return
     const current = generation.current
-    pending.current = true; setBusy(true); setRetry(false); setError(null); form.current?.clearServerErrors()
+    pending.current = true; setBusy(true); setRetry(false); clearFeedback()
     try {
       const result = await api.POST('/auth/invitations/verify', { body: { email, code }, alert: false })
       if (!valid(current)) return
       accepted(result)
-    } catch (error) { if (valid(current)) verifyFailure(error instanceof ExAxiosError && error.code === 'INVITATION_CODE_LOCKED' ? '验证暂时锁定，请稍后重试' : '验证码无效或已过期，请重新获取', retrySeconds(error)) }
+    } catch (error) { if (valid(current)) verifyFailure(current, error) }
     finally { if (valid(current)) { pending.current = false; setBusy(false) } }
   }
   async function resend() {
     if (pending.current || Date.now() < lockedUntil || Date.now() < resendUntil) return false
     const current = generation.current
-    pending.current = true; setBusy(true); setError(null); form.current?.clearServerErrors()
+    pending.current = true; setBusy(true); clearFeedback()
     try {
       const result = await api.POST('/auth/invitations/code', { body: { email }, alert: false })
       if (!valid(current)) return false
       cooldown(result); setRetry(false); ExMessage.info('如邮箱符合邀请条件，将发送验证码'); return true
-    } catch { if (valid(current)) setError('发送失败，请重试'); return false }
+    } catch { if (valid(current)) deliverError('code', current, { form: '发送失败，请重试', formKind: 'send-failed' }); return false }
     finally { if (valid(current)) { pending.current = false; setBusy(false) } }
   }
   function login() {
@@ -152,12 +182,15 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
   async function complete(values: InvitationProfileValues) {
     if (pending.current || grant.current === null) return
     const current = generation.current, completionToken = grant.current.completionToken
-    pending.current = true; setBusy(true); setError(null); form.current?.clearServerErrors()
+    pending.current = true; setBusy(true); clearFeedback()
     try {
       await api.POST('/auth/invitations/complete', { body: { completionToken, ...values }, alert: false })
       if (!valid(current)) return
-      grant.current = null; setNickname(''); setStep('registered'); ExMessage.info('注册成功，请前往登录')
-    } catch (error) { if (valid(current)) { const message = error instanceof ExAxiosError && error.code === 'COMPLETION_GRANT_INVALID' ? '验证已过期，请返回邮箱重新验证' : '注册失败，请重试'; setError(message); form.current?.setServerErrors({ form: message }) } }
+      clearFeedback(); grant.current = null; setNickname(''); setStep('registered'); ExMessage.info('注册成功，请前往登录')
+    } catch (error) { if (valid(current)) {
+      const expired = error instanceof ExAxiosError && error.code === 'COMPLETION_GRANT_INVALID'
+      deliverError('profile', current, { form: expired ? '验证已过期，请返回邮箱重新验证' : '注册失败，请重试', formKind: expired ? 'completion-expired' : 'complete-failed' })
+    } }
     finally { if (valid(current)) { pending.current = false; setBusy(false) } }
   }
   useEffect(() => {
@@ -166,16 +199,22 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
     return () => { if (timer.current !== null) window.clearTimeout(timer.current) }
   }, [step])
   useEffect(() => {
-    if (step === 'code' && error !== null) form.current?.setServerErrors({ code: error })
-  }, [step, error])
+    activeStep.current = step
+    const feedback = pendingFeedback.current
+    if (!feedback) return
+    if (!valid(feedback.generation)) { pendingFeedback.current = null; return }
+    const target = formFor(step)
+    if (feedback.targetStep !== step || target === null) return
+    pendingFeedback.current = null
+    target.setServerErrors(feedback.errors)
+  }, [step])
   const join = () => { invalidate(); if (onJoin) onJoin(); else navigate('/join/rifling-911') }
   return <>
-    {error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert>}
-    {step === 'email' && <InvitationEmailForm ref={form} initialEmail={email} busy={busy} onSubmit={check} onEmailChange={invalidate} onLogin={login} onJoin={join} />}
-    {step === 'code' && <InvitationCodeForm ref={form} email={email} busy={busy} retry={retry} resendSeconds={Math.max(0, Math.ceil((resendUntil - clock) / 1000))} lockedSeconds={Math.max(0, Math.ceil((lockedUntil - clock) / 1000))} onVerify={verify} onResend={resend} onBack={back} />}
-    {step === 'profile' && <InvitationProfileForm ref={form} email={email} nickname={nickname} busy={busy} onSubmit={complete} onBack={back} />}
+    {step === 'email' && <InvitationEmailForm ref={emailForm} initialEmail={email} busy={busy} onSubmit={check} onEmailChange={invalidate} onLogin={login} onJoin={join} />}
+    {step === 'code' && <InvitationCodeForm ref={codeForm} email={email} busy={busy} retry={retry} resendSeconds={Math.max(0, Math.ceil((resendUntil - clock) / 1000))} lockedSeconds={Math.max(0, Math.ceil((lockedUntil - clock) / 1000))} onVerify={verify} onResend={resend} onBack={back} />}
+    {step === 'profile' && <InvitationProfileForm ref={profileForm} email={email} nickname={nickname} busy={busy} onSubmit={complete} onBack={back} />}
     {step === 'registered' && <section aria-live="polite"><h2>注册成功</h2><p>账号已创建，即将前往登录。</p><Button onClick={login}>前往登录</Button></section>}
   </>
 }
 
-function retrySeconds(error: unknown) { return error instanceof ExAxiosError && error.retryAfterSeconds !== undefined && error.retryAfterSeconds > 0 ? error.retryAfterSeconds : 0 }
+function retrySeconds(error: unknown) { return error instanceof ExAxiosError && error.retryAfterSeconds !== undefined && Number.isFinite(error.retryAfterSeconds) && error.retryAfterSeconds > 0 ? error.retryAfterSeconds : 0 }

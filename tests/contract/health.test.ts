@@ -6,16 +6,16 @@ import { createApp, serviceHandlers } from '@workspace/server'
 import { createTestAuth, type TestAuth } from '@tests/helpers/auth'
 import Ajv, { type ValidateFunction } from 'ajv'
 import { afterEach, describe, expect, it } from 'vitest'
-import { parse as parseYaml } from 'yaml'
+import { readContract as readDocument, listOperations } from '@tests/helpers/contract'
 import { parseCorsAllowedOrigins } from '@server/src/http/cors'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
 /**
- * Contract 是 schema 的唯一来源：这里直接读取 `api/openapi.yaml`，
+ * Contract 是 schema 的唯一来源：这里直接读取 `api/generated/openapi.json`，
  * 而不是在测试中手写或复制响应结构。
  */
-const contractPath = resolve(projectRoot, 'api/openapi.yaml')
+const contractPath = resolve(projectRoot, 'api/generated/openapi.json')
 
 const HTTP_METHODS = new Set(['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'])
 
@@ -26,18 +26,18 @@ interface ContractDocument {
 
 /** 解析结果没有类型保证，因此逐步校验结构，让 Contract 结构漂移以明确报错暴露，而不是静默变成 undefined。 */
 function readContract(): ContractDocument {
-  const parsed: unknown = parseYaml(readFileSync(contractPath, 'utf8'))
+  const parsed: unknown = readDocument(contractPath)
 
   const paths = (parsed as { paths?: unknown } | null)?.paths
   const components = (parsed as { components?: unknown } | null)?.components
   const schemas = (components as { schemas?: unknown } | null)?.schemas
 
   if (typeof paths !== 'object' || paths === null) {
-    throw new Error(`api/openapi.yaml 缺少 paths（Contract 结构已变更）: ${contractPath}`)
+    throw new Error(`api/generated/openapi.json 缺少 paths（Contract 结构已变更）: ${contractPath}`)
   }
 
   if (typeof schemas !== 'object' || schemas === null) {
-    throw new Error(`api/openapi.yaml 缺少 components.schemas（Contract 结构已变更）: ${contractPath}`)
+    throw new Error(`api/generated/openapi.json 缺少 components.schemas（Contract 结构已变更）: ${contractPath}`)
   }
 
   return {
@@ -55,34 +55,7 @@ const contract = readContract()
  * 而其他路由与全部断言仍然通过，所以这层漂移必须由测试主动检查。
  */
 function listContractOperations(): Array<{ operationId: string; location: string }> {
-  const operations: Array<{ operationId: string; location: string }> = []
-
-  for (const [path, pathItem] of Object.entries(contract.paths)) {
-    if (typeof pathItem !== 'object' || pathItem === null) {
-      continue
-    }
-
-    // `$ref` path item 无法在这里枚举 operation；宁可失败，也不要静默跳过导致覆盖检查失效。
-    if ('$ref' in pathItem) {
-      throw new Error(`Contract path ${path} 使用 $ref path item，listContractOperations 无法枚举，请改为内联定义`)
-    }
-
-    for (const [method, operation] of Object.entries(pathItem)) {
-      if (!HTTP_METHODS.has(method)) {
-        continue
-      }
-
-      const operationId = (operation as { operationId?: unknown } | null)?.operationId
-
-      if (typeof operationId !== 'string' || operationId.length === 0) {
-        throw new Error(`Contract operation ${method.toUpperCase()} ${path} 缺少 operationId`)
-      }
-
-      operations.push({ operationId, location: `${method.toUpperCase()} ${path}` })
-    }
-  }
-
-  return operations
+  return listOperations(readDocument(contractPath))
 }
 
 /**
@@ -101,7 +74,7 @@ function compileComponentSchema(name: string): ValidateFunction {
   const schema = definitions[name]
 
   if (typeof schema !== 'object' || schema === null) {
-    throw new Error(`api/openapi.yaml 缺少 components.schemas.${name}`)
+    throw new Error(`api/generated/openapi.json 缺少 components.schemas.${name}`)
   }
 
   const ajv = new Ajv({ allErrors: true, strict: false })

@@ -40,6 +40,6 @@ _最后更新：2026-09-29_
 ## 证据
 
 - `api/openapi.yaml` 的 `/auth/login`、`/auth/sso/login` 与 `/auth/sso/confirm` 响应 schema。
-- `apps/server/src/auth/service.ts` 的普通登录与两条 SSO 完成路径。
+- `apps/server/src/modules/auth/service.ts` 的普通登录与两条 SSO 完成路径。
 - `apps/web/src/auth/AuthFlow.tsx` 的普通登录存储分支和 SSO 完成分支。
 - `tests/contract/auth.test.ts` 对 SSO 不创建新本站会话的断言。

@@ -1,5 +1,5 @@
 import type { FastifyError, FastifyInstance } from 'fastify'
-import { AuthError, type AuthErrorCode } from '@server/src/auth/errors.js'
+import { AuthError, type AuthErrorCode } from '@server/src/modules/auth/errors.js'
 import type { StorageErrorCode } from '@server/src/modules/storage/errors.js'
 
 /**

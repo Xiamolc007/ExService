@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url'
 import { expect,it } from 'vitest'
 const serverRequire=createRequire(new URL('../../apps/server/package.json',import.meta.url))
 const loader=pathToFileURL(serverRequire.resolve('tsx')).href
-const validator=new URL('../../apps/server/src/join/attachment-validation.ts',import.meta.url).href
+const validator=new URL('../../apps/server/src/domains/join/applications/attachment-validation.ts',import.meta.url).href
 
 it.each([
   ['many BOMs then non-SVG',"'\\uFEFF'.repeat(50000)+'<html/>'",'rejected'],

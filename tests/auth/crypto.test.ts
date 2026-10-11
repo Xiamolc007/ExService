@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseAuthCodeHmacKey, ScryptPasswordHasher } from '@server/src/auth/crypto'
+import { parseAuthCodeHmacKey, ScryptPasswordHasher } from '@server/src/modules/auth/crypto'
 
 describe('authentication crypto', () => {
   it('round-trips the production scrypt encoding and rejects another password', async () => {

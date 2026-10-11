@@ -1,120 +1,101 @@
-/**
- * 通知历史 Modal。
- *
- * 两列各自滚动：`.listScroll` 与 `.detailColumn` 是仅有的两个滚动容器，
- * `.dialog` 自身 `overflow: hidden`，`.grid` 用 `min-height: 0` 让子元素能收缩。
- */
-
-.dialog {
+.modal :global(.ex-modal-body) {
   display: flex;
   flex-direction: column;
-  width: min(66rem, calc(100vw - 2rem));
-  height: min(48rem, calc(100dvh - 2rem));
-  max-width: calc(100vw - 2rem);
-  max-height: calc(100dvh - 2rem);
-  padding: 0;
-  gap: 0;
   overflow: hidden;
 }
 
-.head {
+.modalBody {
   display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.7rem;
-  padding: 1rem 3.5rem 1rem 1.5rem;
-  border-bottom: 1px solid var(--exui-border-default);
-}
-
-.title {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: 650;
+  flex: 1;
+  min-height: 0;
 }
 
 .grid {
   display: grid;
   grid-template-columns: minmax(17rem, 22rem) minmax(0, 1fr);
   flex: 1;
-  min-height: 0;
-}
-
-.listColumn {
-  display: flex;
-  flex-direction: column;
   min-width: 0;
   min-height: 0;
-  border-right: 1px solid var(--exui-border-default);
 }
 
+.listColumn,
+.listTabs {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  gap: 0;
+}
+
+.listColumn { border-right: 1px solid var(--exui-border-default); }
+
 .listTools {
-  display: grid;
+  display: flex;
   flex: none;
-  gap: 0.6rem;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
   padding: 0.75rem;
   border-bottom: 1px solid var(--exui-border-default);
 }
 
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
+.tabList {
   min-width: 0;
+  flex-shrink: 1;
+  border-radius: var(--exui-radius-full);
 }
 
-.filterLabel {
-  color: var(--exui-text-secondary);
-  font-size: 0.8rem;
-}
+.tabTrigger { border-radius: var(--exui-radius-full); }
 
-.filterTrigger {
-  min-width: 7.5rem;
-}
-
-.count {
-  color: var(--exui-text-secondary);
-  font-size: 0.75rem;
-}
+.clearAllButton { color: var(--exui-text-secondary); }
 
 .listScroll {
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  margin: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
-.listFooter {
-  display: grid;
-  justify-items: start;
-  gap: 0.5rem;
-  padding: 0.75rem;
-  border-top: 1px solid var(--exui-border-default);
-}
+.sentinel { height: 1px; }
 
 .pageError {
   display: grid;
   justify-items: start;
   gap: 0.4rem;
+  padding: 0.75rem;
   color: var(--exui-feedback-danger);
   font-size: 0.78rem;
 }
 
-.pageError p {
-  margin: 0;
-}
+.pageError p { margin: 0; }
 
 .pageRetrying {
   margin: 0;
+  padding: 0.75rem;
   color: var(--exui-text-secondary);
   font-size: 0.78rem;
+}
+
+.detailEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  flex: 1;
+  min-height: 0;
+  gap: 0.75rem;
+  text-align: center;
+}
+
+.emptyIcon {
+  width: 2rem;
+  height: 2rem;
+  color: var(--exui-text-secondary);
 }
 
 .detailColumn {
@@ -199,70 +180,6 @@
   border-top: 1px solid var(--exui-border-default);
 }
 
-.records {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.6rem;
-  width: 100%;
-}
-
-.recordsTitle {
-  margin: 0;
-  font-size: 1.05rem;
-}
-
-.recordsIntro {
-  margin: 0;
-  color: var(--exui-text-secondary);
-  font-size: 0.8rem;
-  line-height: 1.5;
-}
-
-.batchList {
-  display: grid;
-  gap: 0.75rem;
-  width: 100%;
-}
-
-.batch {
-  display: grid;
-  justify-items: start;
-  gap: 0.4rem;
-  padding: 0.9rem 1rem;
-  border: 1px solid var(--exui-border-default);
-  border-radius: var(--exui-radius-medium);
-}
-
-.batchDate {
-  margin: 0;
-  font-size: 0.9rem;
-}
-
-.batchCounts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  margin: 0;
-  color: var(--exui-text-secondary);
-  font-size: 0.78rem;
-}
-
-.status {
-  display: flex;
-  flex: none;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.6rem 1rem;
-  border-top: 1px solid var(--exui-border-default);
-  font-size: 0.78rem;
-}
-
-.undo {
-  padding: 0;
-}
-
 .notice {
   display: grid;
   justify-items: start;
@@ -270,7 +187,7 @@
   margin: 0.75rem;
   padding: 0.8rem 1rem;
   border: 1px solid var(--exui-feedback-danger);
-  border-radius: var(--exui-radius-medium);
+  border-radius: var(--density-control-radius);
   background: var(--exui-surface-secondary);
   font-size: 0.8rem;
 }
@@ -339,23 +256,7 @@
   display: none;
 }
 
-/* ≤ 42rem：列表与正文切换，Modal 铺满可用视口。 */
-@media (max-width: 42rem) {
-  .dialog {
-    width: calc(100vw - 1rem);
-    height: calc(100dvh - 1rem);
-    max-width: calc(100vw - 1rem);
-    max-height: calc(100dvh - 1rem);
-  }
-
-  .head {
-    padding: 0.75rem 3rem 0.75rem 1rem;
-  }
-
-  .title {
-    font-size: 1.05rem;
-  }
-
+@media (width < 768px) {
   .grid {
     display: block;
     min-height: 0;
@@ -373,15 +274,7 @@
     display: none;
   }
 
-  .grid.detailMode .listColumn {
-    display: none;
-  }
-
-  .grid.detailMode .detailColumn {
-    display: flex;
-  }
-
-  .backButton {
-    display: inline-flex;
-  }
+  .grid.detailMode .listColumn { display: none; }
+  .grid.detailMode .detailColumn { display: flex; }
+  .backButton { display: inline-flex; }
 }
