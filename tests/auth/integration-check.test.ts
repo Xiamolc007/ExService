@@ -13,6 +13,8 @@ const preflight = { AUTH_CODE_HMAC_KEY: 'a'.repeat(64), WEBSITE_INTEGRATION_ENAB
   WEBSITE_INTEGRATION_MODE: 'local', OUTLINE_INTEGRATION_KEY: 'b'.repeat(64),
   IDENTITY_DELIVERY_KEY: 'c'.repeat(64), IDENTITY_FLOW_KEY: 'd'.repeat(64), IDENTITY_BOOTSTRAP_KEY: 'e'.repeat(64) }
 
+const failure = (code: string) => ({ code: 1, output: expect.stringContaining(`[integration:check] ${code}；检查项：`) })
+
 async function cli(connectionString: string, args: string[] = [], env: NodeJS.ProcessEnv = {}) {
   return new Promise<{ code: number; output: string }>((resolveResult, reject) => {
     const child = spawn(process.execPath, ['--import', 'tsx', 'src/cli/integration-check.ts', ...args], {
@@ -25,7 +27,7 @@ async function cli(connectionString: string, args: string[] = [], env: NodeJS.Pr
     child.stdout.on('data', chunk => { output += String(chunk) })
     child.stderr.on('data', chunk => { output += String(chunk) })
     child.once('error', reject)
-    child.once('exit', code => resolveResult({ code: code ?? 1, output: output.trim() }))
+    child.once('close', code => resolveResult({ code: code ?? 1, output: output.trim() }))
   })
 }
 
@@ -65,7 +67,8 @@ it('runs the actual readiness CLI with a read-only role and rejects unsafe targe
   let db: AppDatabase | undefined
   try {
     const initial = await cli(url.href)
-    expect(initial).toEqual({ code: 1, output: '[integration:check] INTEGRATION_CHECK_SCHEMA_NOT_READY' })
+    expect(initial).toEqual(failure('INTEGRATION_CHECK_SCHEMA_NOT_READY'))
+    expect(initial.output).toContain('pnpm db:migrate')
     await runMigrations({ connectionString: url.href })
     db = await openDatabase({ connectionString: url.href })
     const admin = randomUUID(), disabled = randomUUID(), now = Date.now()
@@ -88,31 +91,47 @@ it('runs the actual readiness CLI with a read-only role and rejects unsafe targe
     for (const args of [[], ['--admin-user-id', admin], ['--admin-user-id', admin]]) {
       expect(await cli(reader.href, args)).toEqual({ code: 0, output: '[integration:check] INTEGRATION_CHECK_READY' })
     }
+    const configured = new URL(reader.href)
+    configured.searchParams.set('sslmode', 'disable')
+    configured.searchParams.set('connect_timeout', '3')
+    configured.searchParams.set('options', '-c statement_timeout=2500 -c search_path=missing_schema')
+    expect(await cli(configured.href)).toEqual({ code: 0, output: '[integration:check] INTEGRATION_CHECK_READY' })
+    const configuredDb = await openDatabase({ connectionString: configured.href })
+    try {
+      expect((await configuredDb.query("SELECT current_schema() AS schema, current_setting('statement_timeout') AS timeout")).rows)
+        .toEqual([{ schema: 'public', timeout: '2500ms' }])
+    } finally { await configuredDb.close() }
     expect(await cli(reader.href, [], { WEBSITE_INTEGRATION_ENABLED: 'false' }))
       .toEqual({ code: 0, output: '[integration:check] INTEGRATION_CHECK_READY' })
     for (const id of [disabled, randomUUID()]) {
       expect(await cli(reader.href, ['--admin-user-id', id]))
-        .toEqual({ code: 1, output: '[integration:check] INTEGRATION_CHECK_ADMIN_NOT_ACTIVE' })
+        .toEqual(failure('INTEGRATION_CHECK_ADMIN_NOT_ACTIVE'))
     }
     expect(await cli(reader.href, ['--admin-user-id', 'private']))
-      .toEqual({ code: 1, output: '[integration:check] INTEGRATION_CHECK_ARGUMENTS_INVALID' })
+      .toEqual(failure('INTEGRATION_CHECK_ARGUMENTS_INVALID'))
     for (const [values, code] of [
       [{ AUTH_CODE_HMAC_KEY: 'private-key' }, 'INTEGRATION_CHECK_AUTH_KEY_INVALID'],
       [{ STORAGE_DEFAULT_ADAPTER: 'unknown' }, 'INTEGRATION_CHECK_STORAGE_INVALID'],
       [{ HYDRA_PUBLIC_URL: 'http://identity.exwebsite.test:8090/' }, 'IDENTITY_CONFIG_INVALID:HYDRA_PUBLIC_URL'],
       [{ SERVER_PUBLIC_AVATAR_BASE_URL: '%%%private' }, 'INTEGRATION_CHECK_AVATAR_INVALID'],
     ] as const) {
-      expect(await cli(reader.href, [], values)).toEqual({ code: 1, output: `[integration:check] ${code}` })
+      const result = await cli(reader.href, [], values)
+      expect(result).toEqual(failure(code))
+      expect(result.output).toContain('下一步：')
+      expect(result.output).not.toContain('private')
     }
     const wrong = new URL(reader.href)
     wrong.pathname = '/outline'
-    expect(await cli(wrong.href)).toEqual({ code: 1, output: '[integration:check] INTEGRATION_CHECK_DATABASE_INVALID' })
+    expect(await cli(wrong.href)).toEqual(failure('INTEGRATION_CHECK_DATABASE_URL_INVALID'))
     const wrongCredentials = new URL(reader.href)
     wrongCredentials.password = 'private-invalid-password'
-    expect(await cli(wrongCredentials.href)).toEqual({ code: 1, output: '[integration:check] INTEGRATION_CHECK_DATABASE_INVALID' })
+    const denied = await cli(wrongCredentials.href)
+    expect(denied).toEqual(failure('INTEGRATION_CHECK_DATABASE_AUTH_FAILED'))
+    expect(denied.output).toContain('DATABASE_USER、DATABASE_PASSWORD')
+    expect(denied.output).not.toContain('private-invalid-password')
     expect(await snapshot(db)).toEqual(before)
     await db.query('ALTER TABLE auth_users DROP COLUMN nickname')
-    expect(await cli(reader.href)).toEqual({ code: 1, output: '[integration:check] INTEGRATION_CHECK_SCHEMA_NOT_READY' })
+    expect(await cli(reader.href)).toEqual(failure('INTEGRATION_CHECK_SCHEMA_NOT_READY'))
     expect((await db.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
       AND table_name = 'auth_users' AND column_name = 'nickname'`)).rows).toEqual([])
   } finally { await db?.close(); await container.stop() }

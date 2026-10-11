@@ -39,8 +39,8 @@ export async function resetDatabase(options: DatabaseOptions, confirmation: stri
   if (confirmation !== 'exre') throw new Error('db:reset 必须显式传入 --confirm exre。')
   const connectionString = assertDatabaseUrl(options.connectionString ?? process.env.DATABASE_URL)
   const url = new URL(connectionString)
-  // assertDatabaseUrl rejects URI query fields because node-postgres may use them to
-  // override both the connection authority and search_path.
+  // assertDatabaseUrl permits only connection options that cannot replace the authority;
+  // createVerifiedPool always appends and verifies the owned search_path.
   if (!['127.0.0.1', '[::1]'].includes(url.hostname)) {
     throw new Error('db:reset 只允许回环地址上的 exre。')
   }
