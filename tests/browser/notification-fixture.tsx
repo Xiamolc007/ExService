@@ -5,7 +5,10 @@ import { ThemeProvider } from '@exre/exui'
 import '@exre/exui/style.css'
 import { NotificationBell } from '@components/src/notifications/NotificationBell'
 import { NotificationHistoryModal } from '@components/src/notifications/NotificationHistoryModal'
-import { NotificationPreferencesForm, type NotificationPreferencesDraft } from '@components/src/notifications/NotificationPreferencesForm'
+import {
+  NotificationPreferencesForm,
+  type NotificationPreferencesDraft, type PreferenceField, type PreferenceSaveFailure,
+} from '@components/src/notifications/NotificationPreferencesForm'
 import type { NotificationDetailView, NotificationHistoryFilter, NotificationItemView } from '@components/src/notifications/notificationsView'
 
 const receipts: NotificationItemView[] = Array.from({ length: 65 }, (_, index) => ({
@@ -85,23 +88,35 @@ function PreferencesFixture() {
   const [saved, setSaved] = useState<NotificationPreferencesDraft>({ announcement: true, personal_update: true })
   const [saving, setSaving] = useState(false)
   const [calls, setCalls] = useState(0)
-  const pending = useRef<{ values: NotificationPreferencesDraft; resolve: (values: NotificationPreferencesDraft) => void;
-    reject: (error: Error) => void } | null>(null)
+  const [failure, setFailure] = useState<PreferenceSaveFailure | null>(null)
+  // 测试侧自己的假 binding：只保持 UI 几何、焦点与静默保存，不复制 module 的重基策略，
+  // 也不把假 adapter 放进生产模块。
+  const pending = useRef<{ field: PreferenceField; values: NotificationPreferencesDraft;
+    resolve: (values: NotificationPreferencesDraft) => void; reject: (error: Error) => void } | null>(null)
+  const failureIds = useRef(0)
+  const begin = (field: PreferenceField, values: NotificationPreferencesDraft) => {
+    setSaving(true); setCalls(value => value + 1)
+    return new Promise<NotificationPreferencesDraft>((resolve, reject) => {
+      pending.current = { field, values, resolve, reject }
+    })
+  }
   Object.assign(window, { finishPreferenceSave: (success: boolean) => {
     const request = pending.current
     if (!request) throw new Error('No preference save is pending')
     pending.current = null
-    if (success) { setSaved(request.values); request.resolve(request.values) }
-    else request.reject(new Error('保存失败，请重试。'))
+    if (success) { setSaved(request.values); setFailure(null); request.resolve(request.values) }
+    else {
+      const { field, values } = request
+      setFailure({ id: ++failureIds.current, retryValues: values, onRetrySave: next => begin(field, next) })
+      request.reject(new Error('保存失败，请重试。'))
+    }
     setSaving(false)
   } })
   return <main style={{ maxWidth: '32rem', margin: '2rem auto', padding: '1rem' }}>
     <output data-preference-calls={calls} hidden>{calls}</output>
-    <NotificationPreferencesForm active identityEpoch={1} saved={saved} status="ready" onRetry={() => undefined}
-      saving={saving} message={null} onSave={values => {
-        setSaving(true); setCalls(value => value + 1)
-        return new Promise((resolve, reject) => { pending.current = { values, resolve, reject } })
-      }} />
+    <NotificationPreferencesForm active identityEpoch={1} saved={saved} status="ready"
+      saving={saving} conflict={false} failure={failure} onRetryRead={() => undefined}
+      onSaveField={(field, values) => begin(field, values)} />
   </main>
 }
 

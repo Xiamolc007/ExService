@@ -49,7 +49,6 @@ export const notificationsConfig = proxy({
     snapshot: null as NotificationPreferences | null,
     error: null as string | null,
     saving: false,
-    message: null as string | null,
     conflict: false,
   },
 })
@@ -96,7 +95,6 @@ export function bindNotificationsToken(token: string | null) {
   notificationsConfig.preferences.snapshot = null
   notificationsConfig.preferences.error = null
   notificationsConfig.preferences.saving = false
-  notificationsConfig.preferences.message = null
   notificationsConfig.preferences.conflict = false
 }
 

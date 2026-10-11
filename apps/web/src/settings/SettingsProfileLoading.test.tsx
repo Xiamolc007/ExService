@@ -23,6 +23,12 @@ const profile = {
   id: '8e5b2093-dcce-422c-af4d-e4b58ba66ab5', email: 'person@example.com',
   nickname: 'Person', qq: '123456789', fivemId: null, avatarUrl: null,
 }
+const preferences = {
+  revision: 3,
+  optionalCategories: { announcement: true, personal_update: true },
+  necessaryCategories: ['service_notice'],
+  serverTime: 0,
+}
 
 afterEach(() => {
   cleanup()
@@ -60,4 +66,28 @@ it('keeps the new read when the discarded StrictMode read completes later', asyn
   expect(get).toHaveBeenCalledTimes(2)
   await act(async () => { resolveOld({ ...profile, nickname: 'Outdated' }) })
   expect(screen.getByRole('button', { name: '编辑用户名' })).toHaveProperty('textContent', 'Person')
+})
+
+it('keeps the new notification read when the discarded StrictMode read completes later', async () => {
+  writeToken(window.localStorage, 'test-token')
+  let resolveOld!: (value: typeof preferences) => void
+  let notificationReads = 0
+  get.mockImplementation((path: string) => {
+    if (path !== '/notification-preferences') return Promise.resolve(profile)
+    notificationReads += 1
+    // 第一次读取被 StrictMode 清理丢弃，只有第二次的结果可以落地。
+    return notificationReads === 1
+      ? new Promise((resolve) => { resolveOld = resolve })
+      : Promise.resolve(preferences)
+  })
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
+  try {
+    render(<StrictMode><SettingsExperience initialCategory="notifications" /></StrictMode>)
+    expect(await screen.findByRole('switch', { name: '社区动态' })).toBeTruthy()
+    expect(get).toHaveBeenCalledTimes(2)
+    await act(async () => { resolveOld({ ...preferences, optionalCategories: { announcement: false, personal_update: false } }) })
+    // 迟到读不能回退规范值；资料语义不受这条通知生命周期证据影响。
+    expect(screen.getByRole('switch', { name: '社区动态' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('switch', { name: '个人提醒' }).getAttribute('aria-checked')).toBe('true')
+  } finally { vi.unstubAllGlobals() }
 })

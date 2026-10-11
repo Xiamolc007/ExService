@@ -42,7 +42,8 @@ export type {
 } from '@components/src/notifications/NotificationHistoryModal'
 export { NotificationPreferencesForm } from '@components/src/notifications/NotificationPreferencesForm'
 export type {
-  NotificationPreferencesFormProps, NotificationPreferencesDraft,
+  NotificationPreferencesFormProps, NotificationPreferencesDraft, PreferenceCanonicalValues,
+  PreferenceField, PreferenceFormBinding, PreferenceSaveFailure,
 } from '@components/src/notifications/NotificationPreferencesForm'
 export {
   parseNotificationContent, NOTIFICATION_CONTENT_POLICY_VERSION, NOTIFICATION_CONTENT_SCHEMA_VERSION,

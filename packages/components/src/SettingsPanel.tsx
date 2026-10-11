@@ -13,8 +13,10 @@ import { z } from 'zod'
 import { avatarSchema, fivemIdSchema, nicknameSchema, qqSchema } from '@components/src/profileValidation'
 import { cropAvatar, minimumAvatarZoom } from '@components/src/avatarCrop'
 import { ContentAreaState, SettingsContentSkeleton } from '@components/src/ContentAreaState'
-import { NotificationPreferencesForm, type NotificationPreferencesDraft } from '@components/src/notifications/NotificationPreferencesForm'
-import type { NotificationCategory } from '@components/src/notifications/notificationsView'
+import {
+  NotificationPreferencesForm,
+  type NotificationPreferencesDraft, type PreferenceFormBinding, type PreferenceSaveFailure,
+} from '@components/src/notifications/NotificationPreferencesForm'
 import styles from '@components/src/SettingsPanel.module.scss'
 
 export type SettingsCategory = 'general' | 'profile' | 'account' | 'notifications'
@@ -25,22 +27,18 @@ export type SettingsField = 'nickname' | 'qq' | 'fivemId'
  * 通知分区的独立切片。
  *
  * 它**刻意不与资料共享状态**：资料读取/保存失败不能阻塞通知分区，反之亦然。
- * 共享组件只收 props/callback，读写代次与已确认值仍在 `apps/web`。
+ * 共享组件只收 props/callback，规范快照、revision、单写锁、冲突恢复与失败重试意图
+ * 都在 `apps/web` 的偏好 module。
+ *
+ * 与 `PreferenceFormBinding` 是同一套命令语义，只是保留设置面板原有的
+ * `preferences` 字段名；`SettingsPanel` 负责把它映射成表单的 `saved`。
  */
-export interface SettingsNotificationsSlice {
+export interface SettingsNotificationsSlice extends PreferenceFormBinding {
   /**
    * 身份代次：换号/退出时递增，隔离表单值与在途即时保存。
    */
   identityEpoch: number
   preferences: NotificationPreferencesDraft | null
-  status: 'idle' | 'loading' | 'ready' | 'error'
-  onRetry: () => void
-  saving: boolean
-  message: string | null
-  conflict: boolean
-  necessaryCategories: NotificationCategory[]
-  onSave: (draft: NotificationPreferencesDraft) => Promise<NotificationPreferencesDraft>
-  onRefresh: () => void
 }
 
 export interface SettingsPanelProps {
@@ -151,11 +149,11 @@ export function SettingsPanel(props: SettingsPanelProps) {
         identityEpoch={props.notifications.identityEpoch}
         saved={props.notifications.preferences}
         status={props.notifications.status}
-        onRetry={props.notifications.onRetry}
         saving={props.notifications.saving}
-        message={props.notifications.message}
         conflict={props.notifications.conflict}
-        onSave={props.notifications.onSave}
+        failure={props.notifications.failure}
+        onRetryRead={props.notifications.onRetryRead}
+        onSaveField={props.notifications.onSaveField}
         />
     </div>
   </div>

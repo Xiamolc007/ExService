@@ -22,7 +22,8 @@ type SettingsSource = 'profile' | 'notifications'
 export function SettingsExperience({ initialCategory }: { initialCategory: SettingsCategory }) {
   const [category, setCategory] = useState<SettingsCategory>(initialCategory)
   const settings = useSettingsController()
-  const preferences = useNotificationPreferencesController()
+  // 分类投影：与 SettingsPanel 的可见性 prop 同源，但只作 module 的发送前资格判断。
+  const preferences = useNotificationPreferencesController({ active: category === 'notifications' })
   const auth = useAuth()
 
   // 会话代次：换号后重新读取一次服务器已保存值，不沿用上一个账号的「已读过」记号。
