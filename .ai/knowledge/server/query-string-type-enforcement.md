@@ -2,13 +2,13 @@
 
 **结论：Contract 允许把查询参数声明成 `integer` / `number` / `boolean`，但 HTTP 查询串到达 Fastify 时一律是字符串。全局 `coerceTypes: false` 下，这类参数任何合法取值都会 400，而且与「正确拒绝越界取值」长得一模一样。**
 
-_最后更新：2026-10-09_
+_最后更新：2026-10-11_
 
 ## 失败模式
 
 `api/openapi.yaml` 里 `listNotifications.limit` 是 `type: integer`
 （通知模块引入的标量查询参数；Contract 0.6.0 已删除清理记录入口）。路由 schema 由
-`fastify-openapi-glue` 直接取自 Contract，而 `apps/server/src/app.ts` 的 Ajv 关掉了类型强制，于是：
+`fastify-openapi-glue` 直接取自 Contract，而 `apps/server/src/app.ts` 的 Ajv 关掉了类型强制；缺少归一化 hook 时会出现：
 
 | 请求 | 状态 |
 | --- | --- |
@@ -28,7 +28,7 @@ _最后更新：2026-10-09_
 ## 如何应用
 
 - 修复手段是 `preValidation` 钩子（早于 Fastify 校验）按路由自己的 querystring schema 把标量强制成声明类型，
-  实现见 `apps/server/src/http/query-coercion.ts`。**不复制任何约束**：类型只从 Glue 依 Contract 生成的
+  实现见 `apps/server/src/http/shared/query-coercion.ts`，由 `apps/server/src/http/shared/request-normalization.ts` 在 Glue 注册前安装。**不复制任何约束**：类型只从 Glue 依 Contract 生成的
   schema 读取，上下界、`enum`、`pattern` 仍由 Ajv 判定。
 - 数值只接受 **JSON 数字字面量语法**（`^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$`）。不能用裸
   `Number(value)`：它还接受 `0x10`、`+20`、`.5`、`20.`、前后空白等 JSON 不允许的写法，照单全收等于
@@ -39,7 +39,7 @@ _最后更新：2026-10-09_
   `request.server.getSchemas()` 为空 —— Glue 不向 Fastify 注册组件 schema）。因此不用自己解析 `$ref`；
   若将来换成不走 Glue 的注册方式，这一点必须重新核实。
   这条前提有持久守卫：`tests/contract/glue-querystring-schema.test.ts` 断言路由拿到的 querystring
-  schema 不含 `$ref` 且带内联 `type`。缺了它，前提失效时 `query-coercion.test.ts` 里
+  schema 不含 `$ref` 且带内联 `type`。缺了它，前提失效时 `apps/server/src/http/shared/query-coercion.test.ts` 里
   「`$ref` 属性原样不动」那条**不会**红 —— 它描述的就是这个跳过行为本身。
 - **请求体不受影响**：`coerceTypes: false` 对 body 必须保持，否则数字 QQ 会被转成字符串
   （见 `.notes/archive/auth/rfcs/authentication-rfc.md` 的已接受约束）。不要把 `coerceTypes` 全局放开。
@@ -53,7 +53,7 @@ _最后更新：2026-10-09_
 
 ## 证据
 
-- `apps/server/src/http/query-coercion.test.ts`（纯函数边界：空串、非数字、`Infinity`、布尔字面量、
+- `apps/server/src/http/shared/query-coercion.test.ts`（纯函数边界：空串、非数字、`Infinity`、布尔字面量、
   `type` 数组、重复参数、`$ref` 属性，以及 `0x10` / `+20` / `.5` / `20.` / `007` 这类非 JSON 数字写法）
 - `tests/contract/notifications.test.ts` 的 `accepts every legal limit on the notification list`
   （`limit` 取 1 / 20 / 50 全部 200，并用 `limit=1` 翻页证明值真的传到了 service）

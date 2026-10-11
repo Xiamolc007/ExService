@@ -2,17 +2,19 @@
 
 本文件说明 ExWebsite 当前开发拓扑。HTTP 形状以 `api/openapi.yaml` 为准；Server 请求与数据库生命周期见 `.ai/architectures/server/request-lifecycle.md`，数据规则见 `.ai/databases/data-model.md`。
 
-_最后更新：2026-10-10_
+_最后更新：2026-10-11_
 
 ## 系统结构
 
 ```text
-api/openapi.yaml ──api:generate──▶ packages/api-client ──▶ apps/web
-       │                                                    │
-       └──fastify-openapi-glue──▶ apps/server ◀──/api 代理──┘
-                                    │
-                                    ├──业务服务──▶ PostgreSQL exre
-                                    └──头像文件──▶ apps/server/data/avatars/
+api/openapi.yaml + api/paths/ + api/schemas/
+       │
+       └──api:generate──▶ api/generated/openapi.json ──▶ apps/server
+                                  │                            │
+                                  └──Client 类型──▶ apps/web ──/api 代理──┘
+                                                               │
+                                                               ├──业务服务──▶ PostgreSQL exre
+                                                               └──头像文件──▶ apps/server/data/avatars/
 ```
 
 上图是 Website 业务请求链；`apps/server/` 是唯一 Website Fastify Server。Contract 不依赖实现；Fastify 只注册带 `operationId` 的 operation，Website 前端只经共享 Client 发请求。当前仍是本地开发拓扑，公网部署能力需后续设计。
@@ -23,11 +25,11 @@ api/openapi.yaml ──api:generate──▶ packages/api-client ──▶ apps/
 
 | 路径 | 责任 |
 | --- | --- |
-| `api/` | 唯一 HTTP Contract：路径、operation、请求/响应/错误 schema。 |
+| `api/` | 唯一 HTTP Contract 的源文件与统一生成的 JSON。 |
 | `packages/api-client/` | 生成的类型和 `createApiClient({ baseUrl })`。 |
 | `packages/components/` | 基于 ExUI 的应用级共享 UI。 |
 | `apps/web/` | Vite/React 前端、路由、主题和 Client 接入。 |
-| `apps/server/` | Contract 路由、业务服务、受控 PostgreSQL 访问。 |
+| `apps/server/` | `modules/` 公共能力、`domains/` 具体流程、统一 HTTP/Glue 入口与受控 PostgreSQL 访问。 |
 | `apps/outline/` | 独立文档服务，负责文档数据、权限、公共阅读及协作。 |
 | `tests/contract/` | 对真实 Fastify app 的 HTTP 行为与原始 handler 输出做验证。 |
 
@@ -51,7 +53,7 @@ api/openapi.yaml ──api:generate──▶ packages/api-client ──▶ apps/
 
 ## 新增 operation
 
-先修改 `api/openapi.yaml`，运行 `pnpm api:lint` 与 `pnpm api:generate`；再更新 `apps/server/src/app.ts` 的 `serviceHandlers`、对应 handler 和 `tests/contract/` 的 HTTP 与原始输出断言。前端经 `@workspace/api-client` 调用，最后运行 `pnpm typecheck`、`pnpm test`、`pnpm build`。覆盖原因见 `.ai/knowledge/server/operation-registration-gaps.md` 和 `.ai/knowledge/server/serialization-masks-handler-regressions.md`。
+先修改 `api/openapi.yaml` 及相关 `api/paths/`、`api/schemas/` 源文件，运行 `pnpm api:lint`、`pnpm api:generate` 与 `pnpm api:check`；再更新所属模块的 `api/operations.ts` 和 handler，`apps/server/src/http/service-handlers.ts` 显式汇总映射。同步增加 `tests/contract/` 的 HTTP 与原始输出断言。前端经 `@workspace/api-client` 调用，最后运行 `pnpm typecheck`、`pnpm test`、`pnpm build`。覆盖原因见 `.ai/knowledge/server/operation-registration-gaps.md` 和 `.ai/knowledge/server/serialization-masks-handler-regressions.md`。
 
 ## 数据库边界
 

@@ -1,61 +1,53 @@
 # ExWebsite
 
-ExWebsite 以 `api/openapi.yaml` 为唯一 HTTP Contract，Website 使用独立 PostgreSQL `exre`。Outline 是独立 Git submodule，使用自己的 Yarn、数据库和附件存储。项目仍处开发阶段，不执行公网部署。
+Website 使用独立 PostgreSQL `exre`；Outline 是独立文档服务，使用自己的数据库和附件存储。Docker 运行 PostgreSQL、Redis、Hydra，Website 与 Outline 在宿主机开发监听。当前为本地开发阶段，不部署上线。
 
-## 环境与配置
+## 日常启动检查单
 
-需要 Node 22.12+ 且满足 `apps/outline/package.json` 的 engines、pnpm 11.9.0、Corepack/Yarn。本地依赖使用 Docker Compose；服务器由操作者安装原生 PostgreSQL、Redis、Hydra v2.3.0、PM2 和 Nginx。
+已有环境按以下顺序执行：
 
-根依赖与 Outline 依赖分别按 lockfile 安装。ExUI 使用 registry 发布包，不需要本地源码或链接。普通运行只读取根 `.env.local`，支持的进程变量优先；字段见 `.env.example`，详细说明见 `docs/runtime.md`。不要用示例覆盖已有配置。
+- [ ] Docker Desktop/daemon 已启动：`docker info` 能连接引擎。
+- [ ] 根 `.env.local` 已填写现有配置，`RUNTIME_PROFILE=local`。保留原账号、密码、密钥、库和存储路径。
+- [ ] 执行 `pnpm service:start`，直到显示“后台依赖已就绪”。
+- [ ] 执行 `pnpm service:status`，确认 PostgreSQL、Redis、Hydra 都在运行。
+- [ ] 执行 `pnpm dev`。启动检查通过后显示网站与文档入口，默认网站为 `http://127.0.0.1:8080/`，文档为 `http://127.0.0.1:8080/docs/`。
 
-## 已有环境的切换
+启动失败会直接输出检查项、错误点、相关配置键和下一步。修正该项后重试；不要重复执行初始化或重置来绕过错误。Ctrl+C 结束应用，后台依赖继续运行；`pnpm service:stop` 停止本项目依赖并保留持久数据。
 
-先阅读 `docs/runtime.md` 的维护切换章节。配置转换、PG16→18 恢复、issuer 变更及卷归属迁移是不同步骤；不能以一次配置转换替代数据和身份迁移。
+终端提示自动使用颜色；设置 `NO_COLOR=1` 可关闭。重定向输出和保存的日志保持纯文本；`pnpm dev --verbose` 显示完整日志时间。
 
-```bash
-pnpm infra convert
-```
+## 首次准备检查单
 
-转换保留原连接目标、端口、issuer、密码和密钥，备份原文件，冲突时只报告键名并停止。新运行入口不自动导入旧 URL 配置，不读取旧配置 receipt。现有服务仍需按维护清单完成归属和数据切换后才能被新入口管理。
+仅全新环境执行；已有环境跳过已经完成的项。
 
-## 新环境的首次准备
+- [ ] 安装 Node 22.12+（同时满足 `apps/outline/package.json` 的 engines）、pnpm 11.9.0、Corepack/Yarn 和 Docker Compose。
+- [ ] 安装根依赖：`pnpm install --frozen-lockfile`。安装 Outline 依赖：`corepack yarn --cwd apps/outline install --immutable`。两者分别使用自己的 lockfile。
+- [ ] 按根 `.env.example` 填写 `.env.local`：三库的 host、port、name、user、password 及原始秘密。库名分别为 `exre`、`outline`、`hydra`，各自使用独立 owner；应用只读取根配置，进程变量优先。
+- [ ] 执行 `pnpm infra init`，准备 Outline/Hydra 数据库及 migration。该命令不会创建 Website `exre`。
+- [ ] 显式创建独立 Website `exre` 及其 owner，然后执行 `pnpm db:migrate`。
+- [ ] 执行 `pnpm service:start`。准备已有 active Website 账号；新环境尚无账号时，可先用 `pnpm --filter @workspace/server dev` 启动已迁移 Website，并通过 Website 注册流程建号。
+- [ ] 由用户选择已有 active Website 账号 UUID，执行 `pnpm infra bootstrap --admin-user-id <UUID>`，准备文档身份。
+- [ ] 执行 `pnpm dev`。
 
-1. 安装根 pnpm 与 Outline Yarn 依赖，填写根 `.env.local` 的数据库连接字段和原始秘密。
-2. 显式 `pnpm infra init`：启动受管 PostgreSQL/Redis，只准备 Outline/Hydra 数据库并迁移；不创建 Website `exre`。
-3. 显式创建独立 `exre` 及其 owner，执行 `pnpm db:migrate`。使用已有账号或通过 Website 注册账号；首次注册前可用 Server 的单独 dev 入口运行已迁移 Website。
-4. 执行 `pnpm service:start`。由用户选择一个已有 active Website 用户 UUID，再执行 `pnpm infra bootstrap --admin-user-id <UUID>`。
-5. 执行 `pnpm dev`。
+普通启动只检查就绪状态，不创建库、迁移、重置、登记 client 或授予管理员。已有环境切换旧 URL 配置时，先核对原连接目标和凭据，再显式执行 `pnpm infra convert`；它备份配置并保留原值，不迁移数据。更换持久卷、PostgreSQL 版本、issuer 或已有凭据需要独立维护，不属于启动检查单。
 
-普通启动不会迁移、reset、创建身份 client、账号或管理员；重复 bootstrap 不恢复已明确撤销的管理员权限。
+## 常用命令
 
-## 日常命令
-
-```bash
-pnpm service:start
-pnpm dev
-```
-
-全部就绪后显示网站和文档入口，默认分别为 `http://127.0.0.1:8080/` 和 `http://127.0.0.1:8080/docs/`。使用配置中的 public origin；`localhost` 与 `127.0.0.1` 的会话不互换。Ctrl+C 结束本次应用，后台依赖继续运行。
-
-| 命令 | 职责 |
+| 目的 | 命令 |
 | --- | --- |
-| `pnpm service:start` / `pnpm service:stop` | 启停本项目 PG/Redis/Hydra，真实就绪后 start 退出；保留卷与数据。 |
-| `pnpm service:status` / `pnpm service:logs [postgres\|redis\|hydra]` | 查询实际容器状态或跟随日志；退出日志不停止服务。 |
-| `pnpm dev` | 校验真实结构、marker、client，watch Website 和 Outline。 |
-| `pnpm test` / `pnpm test:watch` | 顺序运行 Website、runtime/Docs 脚本与定制 Outline；不执行 Build。 |
-| `pnpm build` | 构建 SDK、Website 和完整 Outline；不连接数据库、启动 Docker 或自动测试。 |
-| `pnpm start` / `pnpm stop` / `pnpm logs [server\|outline\|hydra]` | PM2 原生运行、停止与查看本项目应用。 |
-| `pnpm infra init` / `pnpm infra migrate` | 显式准备或迁移 Outline/Hydra。 |
-| `pnpm infra bootstrap --admin-user-id <UUID>` | 核验用户明确指定的启用账号，准备文档身份。 |
-| `pnpm infra nginx` | 渲染配置；操作者须独立执行 `nginx -t`，安装及重载。 |
-| `pnpm db:migrate` | 仅迁移已有独立 Website `exre`。 |
-| `pnpm db:reset -- --confirm exre` | 显式开发操作，清除应用数据；核对回环地址、库及对象归属。 |
-| `pnpm api:lint` / `pnpm api:generate` / `pnpm typecheck` | Contract lint、生成 Client 与类型检查。 |
+| 启动/停止后台依赖 | `pnpm service:start` / `pnpm service:stop` |
+| 查看状态/日志 | `pnpm service:status` / `pnpm service:logs [postgres\|redis\|hydra]` |
+| 开发监听 | `pnpm dev` |
+| Website 显式迁移 | `pnpm db:migrate` |
+| Outline/Hydra 显式迁移 | `pnpm infra migrate` |
+| 自动测试/监听测试 | `pnpm test` / `pnpm test:watch` |
+| 构建 | `pnpm build` |
+| Contract 与类型检查 | `pnpm api:lint` / `pnpm api:generate` / `pnpm api:check` / `pnpm typecheck` |
 
-`--verbose` 保留详细日志并继续脱敏。数据库测试使用临时 PG18/Testcontainers，Docker 不可用明确失败，不回退开发库。
+测试使用临时数据库，不连接开发库；Build 不连接数据库或启动 Docker。自动测试、本机生命周期、浏览器和部署验收分别报告。
 
 ## 工程入口
 
-`apps/server/` 是唯一 Website Fastify Server；`apps/web/` 只经 `packages/api-client/` 调用 API；`tests/contract/` 验证真实路由、原始 handler 输出及双向 operation 覆盖。Outline 不属于 pnpm workspace，Website 不接管其 API。
+`api/openapi.yaml` 与 `api/paths/`、`api/schemas/` 是唯一 HTTP Contract 源，统一生成 `api/generated/openapi.json` 和 Client 类型；`apps/server/` 是唯一 Website Fastify Server；Web API 调用只经 `packages/api-client/`。`pnpm dev`、`pnpm test` 和 `pnpm build` 先生成 Contract，生产启动只读取已有 JSON。Outline 不属于 pnpm workspace，Website 不接管其 API。ExUI 使用 lockfile 锁定的 registry 包。
 
-开发规则见 `AGENTS.md`，持久知识从 `.ai/README.md` 查阅；配置、维护和原生运行见 `docs/runtime.md`。自动测试、本机生命周期、浏览器及服务器验收分别报告。
+开发规则见 `AGENTS.md`，模块知识从 `.ai/README.md` 查阅，运行与资源边界见 `.ai/architectures/runtime/runtime-boundaries.md`。

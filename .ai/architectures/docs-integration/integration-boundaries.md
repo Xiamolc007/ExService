@@ -6,7 +6,7 @@ _最后更新：2026-10-10_
 
 ## 运行与服务归属
 
-日常入口由 `scripts/runtime/entry.mjs` 管理。配置、进程、容器与迁移维护边界集中在 `.ai/architectures/runtime/runtime-boundaries.md`，使用步骤见 `docs/runtime.md`。根 `compose.yaml` 仅运行本地 PostgreSQL、Redis、Hydra；Website 与 Outline 是宿主机应用，服务器使用原生服务。历史模式入口和服务器 Docker 打包已退出源码，历史配置与持久数据不能由普通入口接管。
+日常入口由 `scripts/runtime/entry.mjs` 管理。配置、进程、容器与迁移维护边界集中在 `.ai/architectures/runtime/runtime-boundaries.md`，启动检查单见 `README.md`。根 `compose.yaml` 仅运行本地 PostgreSQL、Redis、Hydra；Website 与 Outline 是宿主机应用，服务器使用原生服务。历史模式入口和服务器 Docker 打包已退出源码，历史配置与持久数据不能由普通入口接管。
 
 Outline 仍是独立 Git submodule/Yarn 应用，不属于 pnpm workspace，Website 不接管其 API。两套依赖树使用 registry `@exre/exui` 发布包和各自 lockfile；Outline 的 React 17 只消费框架无关 Tokens 与 CSS，Website 的 React 19 消费 React 组件。工具选择默认当前 Node，必须满足 Outline engines；可显式指定 `INTEGRATION_NODE_BIN`、`INTEGRATION_COREPACK_JS`，不固定历史本机工具目录。
 

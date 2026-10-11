@@ -1,8 +1,8 @@
 # 运行配置与进程边界
 
-运行入口由 `scripts/runtime/entry.mjs`、`settings.mjs`、`services.mjs`、`applications.mjs` 和 `native.mjs` 分担。日常命令、首次准备及显式维护步骤集中在 `docs/runtime.md`；文档身份与公开阅读见 `.ai/architectures/docs-integration/integration-boundaries.md`。
+运行入口由 `scripts/runtime/entry.mjs`、`settings.mjs`、`services.mjs`、`applications.mjs` 和 `native.mjs` 分担。日常启动和首次准备检查单集中在 `README.md`；文档身份与公开阅读见 `.ai/architectures/docs-integration/integration-boundaries.md`。
 
-_最后更新：2026-10-10_
+_最后更新：2026-10-11_
 
 ## 配置来源与消费者
 
@@ -30,9 +30,17 @@ PG 管理角色由 `POSTGRES_USER` 配置，缺省为新安装的 `postgres`；�
 
 ## 构建、测试与证据
 
+`pnpm dev` 在只读 preflight 和应用启动前生成 Contract JSON 与 Client 类型；单独的 Server 开发入口使用同一生成流程。`pnpm test` 的每轮测试（含 watch 重跑）及 `pnpm build` 也先生成，内容未变化时不重写。watch 观察 `api/` 源变更，排除 `api/generated/` 和 Client 生成目录，避免产物触发下一轮。生产 `start` 与 Nginx 渲染只读取已有 `api/generated/openapi.json`，不在运行时生成 Contract 或修改数据库。生成与消费路径详见 `.ai/architectures/api/contract-layout.md`。
+
 Build 只读取工具和固定公开编译设置，执行 SDK、Website Web/Server、Outline clean/vite/i18n/server，不要求运行秘密、数据库或服务。生产 Website 维护 CLI 使用编译入口。根自动测试由明确的文件和原样用例清单驱动，使用临时 PG18 和独立 schema/库；不连接开发库。完整范围见 `.ai/architectures/contract-tests/test-layers.md`。
 
 日志在写入前脱敏，原生应用 JSONL 按大小和数量轮转。Nginx 使用由根设置渲染的同源模板，覆盖 HTTPS、WebSocket、内部拒绝与 Hydra public 白名单；系统安装和重载仍由操作者显式执行。Nginx 用实际连接地址覆盖客户端传入的转发 IP；Website 监听入口只信任回环代理，保留客户端 IP 限流隔离。`createApp()` 默认不信任转发头，直接非回环请求不能用该头改变限流键。
+
+运行输出由 `scripts/runtime/output.mjs` 统一呈现服务状态、地址、错误检查项和下一步。颜色仅用于交互终端，非空 `NO_COLOR`、`TERM=dumb` 或 `FORCE_COLOR=0` 禁用颜色；状态同时保留符号与中文文字。终端持续日志默认使用本地短时间，`--verbose` 使用完整 ISO 时间；开发日志在同一次脱敏后分流保存为含 ISO 时间的纯文本，ANSI 配色不进入日志文件。开发就绪摘要在真实 readiness 通过并保存 ready 状态后输出；`service:status` 只呈现 Docker 容器与其健康检查状态，不把缺少容器健康检查等同于应用健康通过。
+
+Docker 调用将命令缺失、调用超时和已知引擎连接失败分别报告为 `DOCKER_NOT_FOUND`、`DOCKER_COMMAND_TIMEOUT`、`DOCKER_UNAVAILABLE`；其他失败保留 `DOCKER_COMMAND_FAILED`。引擎连接失败提示检查 `docker info`、Docker Desktop/daemon 和 `docker context show`，不回显原始 stderr。`service:status` 仅在成功查询并核验空项目清单后报告服务未创建，并提示检查 Docker 状态及显式启动；Docker 不可用时以失败退出，不能当作空清单。
+
+启动诊断直接给出服务、失败检查项、相关配置键与明确处理步骤，不把阅读文档作为恢复步骤。Website 检查 CLI 区分连接配置、认证、缺库、DNS/网络和结构未就绪；Outline 检查 CLI 只将已知身份/结构错误码和数据库错误码转为固定文案；Hydra 区分缺失 client、配置冲突与网络故障。未知异常不回显原始消息，HTTP 错误 envelope 保持原 Contract。只读检查失败不能自动迁移、创建账号或覆盖身份。
 
 Nginx 的 `/api/` 请求体限额按 Contract 中申请的整份 multipart wire 预算与存储文件上限加 multipart 开销的较大值渲染，默认 64 MiB。`STORAGE_MAX_BYTES` 超过默认预算时同步提高代理限额；非法值或求和超出安全整数时拒绝渲染。代理放行不替代 Server 的单文件、累计字节、wire 和认证校验。`tests/contract/storage.test.ts` 经隔离 HTTPS Nginx、真实 Fastify 与临时 PostgreSQL 验证默认上限文件上传下载及两层超限拒绝；TLS 凭据仅来自公开测试夹具。
 

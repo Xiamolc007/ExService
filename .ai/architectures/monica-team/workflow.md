@@ -46,4 +46,4 @@ Architect 使用 `brainstorming --handoff --module=<模块名>` 自主读取相�
 
 ## 知识入口
 
-开工先按 `.ai/README.md` 查找模块知识；架构及 Contract 见 `.ai/architectures/overview.md`，数据模型见 `.ai/databases/data-model.md`，Form、通知及主题见 `.ai/rules/` 与 `.ai/knowledge/web/exui-integration-traps.md`。测试遵循现有 TESTING.md（存在时）或仓库测试约定；运行入口见 README.md 和 docs/runtime.md。
+开工先按 `.ai/README.md` 查找模块知识；架构及 Contract 见 `.ai/architectures/overview.md`，数据模型见 `.ai/databases/data-model.md`，Form、通知及主题见 `.ai/rules/` 与 `.ai/knowledge/web/exui-integration-traps.md`。测试遵循现有 TESTING.md（存在时）或仓库测试约定；启动检查单与运行命令见 `README.md`，资源边界见 `.ai/architectures/runtime/runtime-boundaries.md`。
