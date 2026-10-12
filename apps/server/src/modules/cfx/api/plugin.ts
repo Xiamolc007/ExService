@@ -15,8 +15,13 @@ const plugin: FastifyPluginAsync = async app => {
     if (route.method === 'POST') route.bodyLimit = 4096
     const guard: onRequestHookHandler = async (request, reply) => {
       reply.header('Cache-Control', 'no-store').header('Referrer-Policy', 'no-referrer').header('X-Content-Type-Options', 'nosniff')
-      const config = request.server.cfxServices.config
       const callback = id === 'receiveCfxCallback'
+      // Fastify exposes HEAD for GET routes; callbacks must not consume authorization through it.
+      if (callback && request.method === 'HEAD') {
+        reply.header('Allow', 'GET')
+        throw Object.assign(new Error('GET required.'), { statusCode: 405 })
+      }
+      const config = request.server.cfxServices.config
       checkSource(request, config, callback)
       if (id === 'completeCfxManualAttempt' && config.enabled && config.mode !== 'manual') throw new CfxError('CFX_FLOW_UNAVAILABLE')
       checkRawQuery(request, callback)

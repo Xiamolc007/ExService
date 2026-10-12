@@ -56,6 +56,33 @@ it('runs manual HTTP completion and rejects unsafe browser requests before consu
   expect((await f.app.inject({ method: 'GET', url, headers: { cookie: f.cookie } })).json()).not.toHaveProperty('identity')
 })
 
+it('rejects HEAD callbacks without completing the attempt before a valid GET callback', async () => {
+  const f = await enabled(true)
+  const headers = { cookie: f.cookie, 'sec-fetch-site': 'cross-site' }
+  const query = new URLSearchParams({ attemptId: f.result.attemptId, payload: f.payload })
+  const callbackUrl = `/api/auth/cfx/callback?${query}`
+  const statusUrl = `/api/auth/cfx/attempts/${f.result.attemptId}`
+
+  const head = await f.app.inject({ method: 'HEAD', url: callbackUrl, headers })
+  expect.soft(head.statusCode).toBe(405)
+  expect.soft(head.headers.allow).toBe('GET')
+  expect(head.body).toBe('')
+  expect(head.headers['cache-control']).toBe('no-store')
+  expect(head.headers['referrer-policy']).toBe('no-referrer')
+  expect(head.headers['x-content-type-options']).toBe('nosniff')
+  const pending = await f.app.inject({ method: 'GET', url: statusUrl, headers: { cookie: f.cookie } })
+  expect(pending.statusCode).toBe(200)
+  expect.soft(pending.json().state).toBe('pending')
+
+  const get = await f.app.inject({ method: 'GET', url: callbackUrl, headers })
+  expect.soft(get.statusCode).toBe(200)
+  expect.soft(compileComponentSchema('CfxCompletion')(get.json())).toBe(true)
+  const ready = await f.app.inject({ method: 'GET', url: statusUrl, headers: { cookie: f.cookie } })
+  expect(ready.statusCode).toBe(200)
+  expect(ready.json().state).toBe('ready')
+  expect(compileComponentSchema('CfxAttemptStatus')(ready.json())).toBe(true)
+})
+
 it('accepts production GET callbacks and keeps secrets out of the actual log stream', async () => {
   const lines: string[] = []
   const stream = new Writable({ write(chunk, _encoding, done) { lines.push(String(chunk)); done() } })

@@ -6,6 +6,8 @@ _最后更新：2026-10-12_
 
 默认关闭；只有 `CFX_ENABLED=true` 才启用。根 runtime 只向 Server 传 `CFX_ENABLED`、`CFX_APPLICATION_NAME`，以显式 development/production 选择 manual/redirect，并将 `PUBLIC_ORIGIN` 映射至受信 `SERVER_PUBLIC_WEB_BASE_URL`。服务不会从请求 header 拼接回调。关闭时不启动 timer、RSA 或论坛请求。
 
+回调 GET 会完成授权，不能把 Fastify 为 GET 自动注册的 HEAD 当作只读探测。Cfx API 守卫在读取浏览器上下文与调用完成服务前拒绝回调 HEAD，返回 405 与 `Allow: GET`，保留 pending 状态供随后 GET 完成。`tests/contract/cfx.test.ts` 通过真实 Contract、Glue 与 handler 验证此顺序。
+
 查询展示的四字段 JSON 不是后续业务的认证输入。未来 Server 业务应通过 `apps/server/src/modules/cfx/api/browser-context.ts` 的 `browserContext(request)` 从真实 Cookie 取得上下文，再调用 `cfxServices.consumeIdentity({ context, identityTicket })`。消费同步迁移 ready 至 consumed，清除身份与 ticket；并发恰好一次成功，后续事务失败不会恢复 ticket。不能接受 body 中的绑定或身份来代替消费。
 
 状态仅在当前进程有效，重启失效。授权、结果、最小终态和绑定分别受独立期限约束，内部使用单调时钟；查询不续期。所有记录、counter、创建预留、RSA/处理槽有界，容量不足显式拒绝，不驱逐有效凭证。预算集中在模块 `config.ts` 与 `rate-limiter.ts`，不是生产吞吐承诺。
