@@ -24,6 +24,14 @@ tags:
   - name: support
     description: 登录用户的反馈提交与恢复。
 paths:
+  /auth/cfx/attempts:
+    $ref: ./paths/cfx.yaml#/~1auth~1cfx~1attempts
+  /auth/cfx/attempts/{id}/complete:
+    $ref: ./paths/cfx.yaml#/~1auth~1cfx~1attempts~1{id}~1complete
+  /auth/cfx/callback:
+    $ref: ./paths/cfx.yaml#/~1auth~1cfx~1callback
+  /auth/cfx/attempts/{id}:
+    $ref: ./paths/cfx.yaml#/~1auth~1cfx~1attempts~1{id}
   /health:
     $ref: ./paths/system.yaml#/~1health
   /auth/captcha/challenges:
@@ -185,6 +193,34 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
   schemas:
+    CfxIdentity:
+      $ref: ./schemas/cfx.yaml#/CfxIdentity
+    CfxMode:
+      $ref: ./schemas/cfx.yaml#/CfxMode
+    CfxPayload:
+      $ref: ./schemas/cfx.yaml#/CfxPayload
+    CfxEmptyRequest:
+      $ref: ./schemas/cfx.yaml#/CfxEmptyRequest
+    CfxCompleteRequest:
+      $ref: ./schemas/cfx.yaml#/CfxCompleteRequest
+    CfxAttemptCreated:
+      $ref: ./schemas/cfx.yaml#/CfxAttemptCreated
+    CfxCompletion:
+      $ref: ./schemas/cfx.yaml#/CfxCompletion
+    CfxCancellation:
+      $ref: ./schemas/cfx.yaml#/CfxCancellation
+    CfxFailureCode:
+      $ref: ./schemas/cfx.yaml#/CfxFailureCode
+    CfxPendingStatus:
+      $ref: ./schemas/cfx.yaml#/CfxPendingStatus
+    CfxReadyStatus:
+      $ref: ./schemas/cfx.yaml#/CfxReadyStatus
+    CfxFailedStatus:
+      $ref: ./schemas/cfx.yaml#/CfxFailedStatus
+    CfxTerminalStatus:
+      $ref: ./schemas/cfx.yaml#/CfxTerminalStatus
+    CfxAttemptStatus:
+      $ref: ./schemas/cfx.yaml#/CfxAttemptStatus
     OidcChallenge:
       $ref: ./schemas/identity.yaml#/OidcChallenge
     OidcInspectRequest:

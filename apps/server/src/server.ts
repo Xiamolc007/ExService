@@ -39,6 +39,8 @@ import {
   parseIdentityConfig,
 } from "@server/src/modules/identity/config.js";
 import { assertDeploymentBinding } from "@server/src/modules/identity/deployment-binding.js";
+import { parseCfxConfig, CfxConfigError } from "@server/src/modules/cfx/config.js";
+import { createCfxServices } from "@server/src/modules/cfx/service.js";
 import {
   createNotificationModule,
   deriveNotificationTokenKey,
@@ -56,6 +58,7 @@ try {
   const identity = parseIdentityConfig();
   assertDeploymentBinding(identity);
   const storageConfig = parseStorageConfig();
+  const cfxServices = createCfxServices({ config: parseCfxConfig() });
   const corsAllowedOrigins = parseCorsAllowedOrigins(
     process.env.SERVER_CORS_ALLOWED_ORIGINS,
   );
@@ -117,6 +120,7 @@ try {
       notifications,
       clickupServices,
       supportServices,
+      cfxServices,
       identityKeys: identity.enabled
         ? {
             clients: { ...identity.integrationClients },
@@ -157,6 +161,7 @@ try {
     );
   } else if (
     error instanceof StorageConfigError ||
+    error instanceof CfxConfigError ||
     error instanceof CorsConfigError
   ) {
     console.error(`[server] 启动失败：${error.message}`);

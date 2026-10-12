@@ -15,6 +15,7 @@ _最后更新：2026-10-15_
 | Web | `apps/web/` | `.ai/architectures/web/authentication-flow.md`、`.ai/knowledge/web/invitation-error-handoff.md` |
 | 通用内容与 About | `apps/web/build/content/`、`apps/web/build/about/`、`apps/web/src/content/`、`apps/web/src/pages/AboutUs/` | `.ai/architectures/web/content-rendering.md`、`.ai/knowledge/web/content-authoring.md` |
 | Server | `apps/server/src/modules/`、`apps/server/src/domains/`、`apps/server/src/http/` | `.ai/architectures/server/request-lifecycle.md`、`.ai/architectures/server/authentication-lifecycle.md`、`.ai/knowledge/server/multipart-lifecycle-traps.md` |
+| Cfx 基础身份 | `apps/server/src/modules/cfx/` | `.ai/knowledge/cfx/identity-lifecycle.md` |
 | 存储与 SDK | `apps/server/src/modules/storage/`、`packages/sdk/` | `.ai/knowledge/storage/lifecycle-traps.md` |
 | 独立身份系统 | `apps/server/src/modules/identity/`、`packages/common/src/node/identity-config/`、`scripts/runtime/hydra-client.mjs` | `.ai/architectures/identity/integration-boundaries.md`；Common 消费规则见 `.agents/rules/package-common.md` |
 | 运行配置与进程 | `scripts/runtime/`、`infra/runtime/` | `.ai/architectures/runtime/runtime-boundaries.md` |

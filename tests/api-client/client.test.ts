@@ -15,6 +15,11 @@ describe('typed API transport', () => {
         } else if (parameter.in === 'query') {
           expect(parameter.style ?? 'form', `${method} ${path} ${parameter.name}`).toBe('form')
           expect(parameter.explode ?? true).toBe(true)
+        } else if (parameter.in === 'header' && parameter.name === 'Cookie') {
+          // HttpOnly browser cookies travel outside params; the client never writes this header.
+          expect((parameter as { required?: boolean }).required ?? false).toBe(false)
+          expect(parameter.style ?? 'simple').toBe('simple')
+          expect(parameter.schema?.type).toBe('string')
         } else throw new Error(`Unsupported parameter location: ${method} ${path} ${parameter.name}`)
         expect(parameter.schema?.type ?? 'string').not.toBe('object')
       }

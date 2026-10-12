@@ -121,6 +121,20 @@ test('ClickUp token overrides root config only in server and is redacted in reta
   }
 })
 
+test('Cfx configuration respects process precedence and is sent only to the Server snapshot', t => {
+  const f = fixture(t)
+  Object.assign(f.values, { CFX_ENABLED: 'false', CFX_APPLICATION_NAME: 'File application' }); f.save()
+  const state = f.read({ CFX_ENABLED: 'true', CFX_APPLICATION_NAME: 'Process application' })
+  assert.equal(state.environments.server.CFX_ENABLED, 'true')
+  assert.equal(state.environments.server.CFX_APPLICATION_NAME, 'Process application')
+  assert.equal(state.environments.server.NODE_ENV, 'development')
+  for (const name of ['web', 'hydra']) {
+    assert.equal(state.environments[name].CFX_ENABLED, undefined)
+    assert.equal(state.environments[name].CFX_APPLICATION_NAME, undefined)
+  }
+  assert.equal(fixture(t, 'deployment').read({ CFX_ENABLED: 'true' }).environments.server.NODE_ENV, 'production')
+})
+
 test('Docker status failures explain engine availability without exposing command output', t => {
   const state = fixture(t).read(); state.workspace = root
   const cases = [

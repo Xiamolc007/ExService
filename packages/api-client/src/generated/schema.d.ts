@@ -4,6 +4,110 @@
  */
 
 export interface paths {
+    "/auth/cfx/attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * createCfxAttempt
+         * @description Browser-bound Cfx verification; does not create a Website account or session.
+         *     Configured mode only; mutations require exact configured Origin. Query keys cannot repeat.
+         *     Cookie is optional in the schema but ownership is mandatory except for creation.
+         *     Fixed CFX errors cover disabled/flow/origin, ownership/state, payload/nonce/version,
+         *     user/email/upstream, timeout, capacity/rate and closed-service failures.
+         */
+        post: operations["createCfxAttempt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/cfx/attempts/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * completeCfxManualAttempt
+         * @description Browser-bound Cfx verification; does not create a Website account or session.
+         *     Configured mode only; mutations require exact configured Origin. Query keys cannot repeat.
+         *     Cookie is optional in the schema but ownership is mandatory except for creation.
+         *     Fixed CFX errors cover disabled/flow/origin, ownership/state, payload/nonce/version,
+         *     user/email/upstream, timeout, capacity/rate and closed-service failures.
+         */
+        post: operations["completeCfxManualAttempt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/cfx/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * receiveCfxCallback
+         * @description Browser-bound Cfx verification; does not create a Website account or session.
+         *     Configured mode only; mutations require exact configured Origin. Query keys cannot repeat.
+         *     Cookie is optional in the schema but ownership is mandatory except for creation.
+         *     Fixed CFX errors cover disabled/flow/origin, ownership/state, payload/nonce/version,
+         *     user/email/upstream, timeout, capacity/rate and closed-service failures.
+         */
+        get: operations["receiveCfxCallback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/cfx/attempts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * getCfxAttempt
+         * @description Browser-bound Cfx verification; does not create a Website account or session.
+         *     Configured mode only; mutations require exact configured Origin. Query keys cannot repeat.
+         *     Cookie is optional in the schema but ownership is mandatory except for creation.
+         *     Fixed CFX errors cover disabled/flow/origin, ownership/state, payload/nonce/version,
+         *     user/email/upstream, timeout, capacity/rate and closed-service failures.
+         */
+        get: operations["getCfxAttempt"];
+        put?: never;
+        post?: never;
+        /**
+         * cancelCfxAttempt
+         * @description Browser-bound Cfx verification; does not create a Website account or session.
+         *     Configured mode only; mutations require exact configured Origin. Query keys cannot repeat.
+         *     Cookie is optional in the schema but ownership is mandatory except for creation.
+         *     Fixed CFX errors cover disabled/flow/origin, ownership/state, payload/nonce/version,
+         *     user/email/upstream, timeout, capacity/rate and closed-service failures.
+         */
+        delete: operations["cancelCfxAttempt"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -860,6 +964,69 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        CfxIdentity: {
+            id: string;
+            username: string;
+            /** Format: uri */
+            avatarUrl: string;
+            email: components["schemas"]["Email"];
+        };
+        /** @enum {string} */
+        CfxMode: "manual" | "redirect";
+        /** @description RSA-OAEP encrypted standard Base64; ASCII whitespace is accepted. */
+        CfxPayload: string;
+        CfxEmptyRequest: Record<string, never>;
+        CfxCompleteRequest: {
+            payload: components["schemas"]["CfxPayload"];
+        };
+        CfxAttemptCreated: {
+            attemptId: components["schemas"]["OpaqueIdentifier"];
+            mode: components["schemas"]["CfxMode"];
+            /** Format: uri */
+            authorizationUrl: string;
+            expiresAt: components["schemas"]["SafeTimestamp"];
+        };
+        CfxCompletion: {
+            attemptId: components["schemas"]["OpaqueIdentifier"];
+            /** @enum {string} */
+            state: "ready";
+        };
+        CfxCancellation: {
+            attemptId: components["schemas"]["OpaqueIdentifier"];
+            /** @enum {string} */
+            state: "cancelled" | "failed" | "expired" | "consumed";
+        };
+        /** @enum {string} */
+        CfxFailureCode: "CFX_INVALID_PAYLOAD" | "CFX_NONCE_INVALID" | "CFX_API_VERSION_UNSUPPORTED" | "CFX_USER_INVALID" | "CFX_EMAIL_UNAVAILABLE" | "CFX_UPSTREAM_UNAVAILABLE" | "CFX_UPSTREAM_TIMEOUT";
+        CfxPendingStatus: {
+            attemptId: components["schemas"]["OpaqueIdentifier"];
+            /** @enum {string} */
+            state: "pending" | "processing";
+            expiresAt: components["schemas"]["SafeTimestamp"];
+        };
+        CfxReadyStatus: {
+            attemptId: components["schemas"]["OpaqueIdentifier"];
+            /** @enum {string} */
+            state: "ready";
+            expiresAt: components["schemas"]["SafeTimestamp"];
+            identity: components["schemas"]["CfxIdentity"];
+            identityTicket: components["schemas"]["OpaqueIdentifier"];
+            ticketExpiresAt: components["schemas"]["SafeTimestamp"];
+        };
+        CfxFailedStatus: {
+            attemptId: components["schemas"]["OpaqueIdentifier"];
+            /** @enum {string} */
+            state: "failed";
+            expiresAt: components["schemas"]["SafeTimestamp"];
+            failureCode: components["schemas"]["CfxFailureCode"];
+        };
+        CfxTerminalStatus: {
+            attemptId: components["schemas"]["OpaqueIdentifier"];
+            /** @enum {string} */
+            state: "cancelled" | "expired" | "consumed";
+            expiresAt: components["schemas"]["SafeTimestamp"];
+        };
+        CfxAttemptStatus: components["schemas"]["CfxPendingStatus"] | components["schemas"]["CfxReadyStatus"] | components["schemas"]["CfxFailedStatus"] | components["schemas"]["CfxTerminalStatus"];
         OidcChallenge: string;
         OidcInspectRequest: {
             /** @enum {string} */
@@ -1783,6 +1950,758 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    createCfxAttempt: {
+        parameters: {
+            query?: never;
+            header?: {
+                Cookie?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CfxEmptyRequest"];
+            };
+        };
+        responses: {
+            /** @description Browser-bound verification result */
+            201: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    /** @description HttpOnly binding; SameSite=Lax, Path=/, Max-Age=1200; Secure in production. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CfxAttemptCreated"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            400: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            403: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            413: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            415: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            429: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            500: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            503: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            default: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    completeCfxManualAttempt: {
+        parameters: {
+            query?: never;
+            header?: {
+                Cookie?: string;
+            };
+            path: {
+                id: components["schemas"]["OpaqueIdentifier"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CfxCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Browser-bound verification result */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CfxCompletion"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            400: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            403: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            404: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            409: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            410: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            413: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            415: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            429: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            500: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            502: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            503: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            504: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            default: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    receiveCfxCallback: {
+        parameters: {
+            query: {
+                attemptId: components["schemas"]["OpaqueIdentifier"];
+                payload: components["schemas"]["CfxPayload"];
+            };
+            header?: {
+                Cookie?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Browser-bound verification result */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CfxCompletion"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            400: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            403: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            404: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            409: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            410: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            429: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            500: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            502: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            503: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            504: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            default: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getCfxAttempt: {
+        parameters: {
+            query?: never;
+            header?: {
+                Cookie?: string;
+            };
+            path: {
+                id: components["schemas"]["OpaqueIdentifier"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Browser-bound verification result */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CfxAttemptStatus"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            400: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            403: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            404: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            429: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            500: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            503: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            default: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    cancelCfxAttempt: {
+        parameters: {
+            query?: never;
+            header?: {
+                Cookie?: string;
+            };
+            path: {
+                id: components["schemas"]["OpaqueIdentifier"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Browser-bound verification result */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CfxCancellation"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            400: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            403: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            404: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            429: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            500: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            503: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Safe Cfx or framework error */
+            default: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    "Referrer-Policy"?: "no-referrer";
+                    "X-Content-Type-Options": components["headers"]["ContentTypeOptions"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     getHealth: {
         parameters: {
             query?: never;
