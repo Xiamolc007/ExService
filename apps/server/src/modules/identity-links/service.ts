@@ -1,0 +1,250 @@
+import { randomUUID } from 'node:crypto'
+import type { components } from '@workspace/api-client/types'
+import type { AppDatabase, SqlExecutor } from '../../db/client.js'
+import { AuthError } from '../auth/errors.js'
+import type { AuthService, SessionIdentity } from '../auth/service.js'
+import type { CfxBrowserContext, CfxIdentity, CfxServices } from '../cfx/types.js'
+import { IdentityLinkError } from './errors.js'
+
+export type IdentityLink = components['schemas']['IdentityLink']
+interface LinkRow {
+  id: string
+  user_id: string
+  provider: 'cfx'
+  external_user_id: string
+  external_username: string
+  provider_email: string | null
+  linked_at: number
+}
+interface Intent {
+  userId: string
+  sessionId: string
+  expiresAt: number
+  invalid: boolean
+  consuming: boolean
+  attemptId?: string
+  context?: CfxBrowserContext
+}
+export interface IdentityLinkServiceDependencies {
+  db: AppDatabase
+  auth: AuthService
+  cfx: CfxServices
+  now?: () => number
+}
+export class IdentityLinkService {
+  private readonly now: () => number
+  private readonly intents = new Set<Intent>()
+  private readonly work = new Set<Promise<unknown>>()
+  private timer?: ReturnType<typeof setInterval>
+  private closed = false
+  private closing?: Promise<void>
+  constructor(private readonly d: IdentityLinkServiceDependencies) {
+    this.now = d.now ?? Date.now
+  }
+  async start() {
+    if (!this.closed && !this.timer) {
+      this.timer = setInterval(() => this.prune(), 1000)
+      this.timer.unref()
+    }
+  }
+  close(): Promise<void> {
+    if (this.closing) return this.closing
+    this.closed = true
+    clearInterval(this.timer)
+    for (const intent of this.intents) intent.invalid = true
+    this.closing = Promise.allSettled([...this.work]).then(() => {
+      this.intents.clear()
+    })
+    return this.closing
+  }
+  async findBySubjectInside(tx: SqlExecutor, provider: 'cfx', subject: string) {
+    const row = (
+      await tx.query<LinkRow>('SELECT * FROM auth_identity_links WHERE provider=$1 AND external_user_id=$2', [
+        provider,
+        subject,
+      ])
+    ).rows[0]
+    return row ? { ...project(row), userId: row.user_id } : undefined
+  }
+  async listInside(tx: SqlExecutor, userId: string): Promise<IdentityLink[]> {
+    return (
+      await tx.query<LinkRow>('SELECT * FROM auth_identity_links WHERE user_id=$1 ORDER BY provider', [
+        userId,
+      ])
+    ).rows.map(project)
+  }
+  async createInside(
+    tx: SqlExecutor,
+    identity: Pick<CfxIdentity, 'id' | 'username' | 'email'>,
+    userId: string,
+  ): Promise<IdentityLink> {
+    const id = randomUUID(),
+      now = this.now()
+    try {
+      await tx.query(
+        `INSERT INTO auth_identity_links (id,user_id,provider,external_user_id,external_username,provider_email,linked_at)
+        VALUES ($1,$2,'cfx',$3,$4,$5,$6)`,
+        [id, userId, identity.id, identity.username, identity.email, now],
+      )
+    } catch (error) {
+      if (uniqueViolation(error)) throw new IdentityLinkError('IDENTITY_LINK_CONFLICT')
+      throw error
+    }
+    return {
+      id,
+      provider: 'cfx',
+      externalUserId: identity.id,
+      externalUsername: identity.username,
+      providerEmail: identity.email,
+      linkedAt: now,
+    }
+  }
+  async list(session: SessionIdentity): Promise<components['schemas']['IdentityLinksResponse']> {
+    return this.track(async () =>
+      this.d.db.transaction(async (tx) => {
+        await this.lockOwner(tx, session)
+        const links = await this.listInside(tx, session.userId)
+        return {
+          providers: [
+            { provider: 'cfx', available: this.d.cfx.config.enabled, link: links[0] ?? null },
+            { provider: 'google', available: false, link: null },
+            { provider: 'qq', available: false, link: null },
+          ],
+        }
+      }),
+    )
+  }
+  begin(session: SessionIdentity, input: { bindingToken?: string; clientIp: string; signal?: AbortSignal }) {
+    return this.track(async () => {
+      this.prune()
+      if (
+        this.intents.size >= 256 ||
+        [...this.intents].filter((i) => i.userId === session.userId).length >= 3
+      )
+        throw new IdentityLinkError('REGISTRATION_CAPACITY_EXCEEDED')
+      const intent: Intent = {
+        userId: session.userId,
+        sessionId: session.id,
+        expiresAt: this.now() + 600_000,
+        invalid: false,
+        consuming: false,
+      }
+      this.intents.add(intent)
+      try {
+        await this.d.db.transaction((tx) => this.lockOwner(tx, session))
+        this.assertIntent(intent)
+        const result = await this.d.cfx.begin(input)
+        const context = this.d.cfx.resolveBrowserContext({
+          bindingToken: result.cookieValue,
+          clientIp: input.clientIp,
+        })
+        intent.attemptId = result.response.attemptId
+        intent.context = context
+        if (this.closed || intent.invalid || this.now() >= intent.expiresAt) {
+          try {
+            this.d.cfx.cancel(context, intent.attemptId)
+          } catch {
+            /* Cfx owns expiry. */
+          }
+          throw new IdentityLinkError('IDENTITY_LINK_ATTEMPT_INVALID')
+        }
+        return result
+      } catch (error) {
+        this.intents.delete(intent)
+        throw error
+      }
+    })
+  }
+  link(
+    session: SessionIdentity,
+    context: CfxBrowserContext,
+    attemptId: string,
+    identityTicket: string,
+  ): Promise<IdentityLink> {
+    return this.track(async () => {
+      const intent = [...this.intents].find((i) => i.attemptId === attemptId)
+      if (!intent) throw new IdentityLinkError('IDENTITY_LINK_ATTEMPT_INVALID')
+      if (intent.consuming) throw new IdentityLinkError('IDENTITY_LINK_ATTEMPT_INVALID')
+      try {
+        this.assertIntent(intent)
+        if (
+          intent.consuming ||
+          intent.userId !== session.userId ||
+          intent.sessionId !== session.id ||
+          intent.context?.bindingDigest !== context.bindingDigest
+        )
+          throw new IdentityLinkError('IDENTITY_LINK_ATTEMPT_INVALID')
+        intent.consuming = true
+        const identity = this.d.cfx.consumeIdentity({
+          context,
+          identityTicket,
+          expectedAttemptId: intent.attemptId,
+        })
+        return await this.d.db.transaction(async (tx) => {
+          await this.lockOwner(tx, session)
+          this.assertIntent(intent)
+          return this.createInside(tx, identity, session.userId)
+        })
+      } finally {
+        intent.invalid = true
+        this.intents.delete(intent)
+      }
+    })
+  }
+  unlink(session: SessionIdentity): Promise<{ status: 'unlinked' }> {
+    return this.track(() =>
+      this.d.db.transaction(async (tx) => {
+        await this.lockOwner(tx, session)
+        for (const intent of this.intents) if (intent.userId === session.userId) intent.invalid = true
+        await tx.query('DELETE FROM auth_identity_links WHERE user_id=$1 AND provider=$2', [
+          session.userId,
+          'cfx',
+        ])
+        return { status: 'unlinked' as const }
+      }),
+    )
+  }
+  private async lockOwner(tx: SqlExecutor, session: SessionIdentity) {
+    const row = (
+      await tx.query<{ disabled_at: number | null }>(
+        'SELECT disabled_at FROM auth_users WHERE id=$1 FOR NO KEY UPDATE',
+        [session.userId],
+      )
+    ).rows[0]
+    if (!row || row.disabled_at !== null) throw new AuthError('SESSION_INVALID')
+    await this.d.auth.assertSessionCurrent(session, tx, true)
+  }
+  private assertIntent(intent: Intent) {
+    if (this.closed || intent.invalid || this.now() >= intent.expiresAt)
+      throw new IdentityLinkError('IDENTITY_LINK_ATTEMPT_INVALID')
+  }
+  private prune() {
+    for (const intent of this.intents)
+      if (!intent.consuming && intent.attemptId && (intent.invalid || this.now() >= intent.expiresAt))
+        this.intents.delete(intent)
+  }
+  private track<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.closed) return Promise.reject(new IdentityLinkError('IDENTITY_LINK_ATTEMPT_INVALID'))
+    const work = fn()
+    this.work.add(work)
+    void work.then(
+      () => this.work.delete(work),
+      () => this.work.delete(work),
+    )
+    return work
+  }
+}
+function project(row: LinkRow): IdentityLink {
+  if (row.provider_email === null) throw new Error('Identity link email missing')
+  return {
+    id: row.id,
+    provider: row.provider,
+    externalUserId: row.external_user_id,
+    externalUsername: row.external_username,
+    providerEmail: row.provider_email,
+    linkedAt: row.linked_at,
+  }
+}
+export function uniqueViolation(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505'
+}

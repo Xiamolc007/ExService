@@ -9,7 +9,11 @@ import {
 } from '@workspace/components'
 import { api } from '@web/src/api/client'
 import { ExAxiosError } from '@workspace/sdk/http/browser'
-import { readToken, writeSsoSuccess, writeToken } from '@web/src/auth/storage'
+import { readToken, writeSsoSuccess } from '@web/src/auth/storage'
+import type { components } from '@workspace/api-client'
+import { installBrowserSession } from './session-install'
+import { CfxAuthorization } from '@web/src/registration/CfxAuthorization'
+import { PublicRegistrationFlow } from '@web/src/registration/PublicRegistrationFlow'
 
 export interface AuthFlowProps {
   initialMode?: 'login'
@@ -39,6 +43,9 @@ export function AuthFlow({
   const [email, setEmail] = useState(initialEmail)
   const [fatalSsoError, setFatalSsoError] = useState<string | null>(null)
   const [ssoRetryError, setSsoRetryError] = useState<string | null>(null)
+  const [cfxBusy,setCfxBusy] = useState(false)
+  const [cfxNotice,setCfxNotice] = useState<string|null>(null)
+  const [cfxGrant,setCfxGrant] = useState<Extract<components['schemas']['CfxSignInResult'],{kind:'registration-required'}>|null>(null)
   const generation = useRef(0)
   const authForm = useRef<AuthFormHandle>(null)
   const pendingDraft = useRef<LoginDraft | null>(null)
@@ -121,49 +128,7 @@ export function AuthFlow({
         body: { email: draft.email, password: draft.password }, alert: false,
       })
       if (current !== generation.current) return
-      let oldToken: string | null
-      try {
-        oldToken = readToken(window.localStorage)
-      } catch {
-        authForm.current?.setServerErrors({ form: '浏览器无法读取登录信息，请检查存储设置后重试' })
-        return
-      }
-      if (oldToken !== null && oldToken !== result.token) {
-        try {
-          await api.POST('/auth/logout', {
-            headers: { Authorization: `Bearer ${oldToken}` }, alert: false,
-          })
-          if (current !== generation.current) return
-        } catch (error) {
-          if (current !== generation.current) return
-          if (!(error instanceof ExAxiosError && error.code === 'SESSION_INVALID')) {
-            authForm.current?.setServerErrors({ form: '旧账号退出失败，请重试登录' })
-            return
-          }
-          // ExAxios may already have removed this expired token; never accept a replacement token.
-          if (readToken(window.localStorage) === null) oldToken = null
-        }
-      }
-      try {
-        if (readToken(window.localStorage) !== oldToken) {
-          authForm.current?.setServerErrors({ form: '登录状态已在其他页面更改，请重试' })
-          return
-        }
-        writeToken(window.localStorage, result.token)
-      } catch {
-        authForm.current?.setServerErrors({ form: '浏览器无法保存登录信息，请检查存储设置后重试' })
-        return
-      }
-      if (onSessionCreated) {
-        onSessionCreated(result.token)
-        return
-      }
-      onFinished?.()
-      if (presentation === 'modal') {
-        window.location.reload()
-      } else {
-        window.location.replace('/')
-      }
+      await acceptSession(result.token,current)
     } catch (error) {
       if (current !== generation.current) return
       if (error instanceof ExAxiosError) {
@@ -173,11 +138,29 @@ export function AuthFlow({
     }
   }
 
+  async function acceptSession(token:string,current:number,signal?:AbortSignal) {
+    const installed=await installBrowserSession(token,()=>current===generation.current&&!signal?.aborted)
+    if(installed.status==='failed'){authForm.current?.setServerErrors({form:installed.message});return}
+    if(installed.status!=='installed')return
+    if(onSessionCreated){onSessionCreated(token);return}
+    onFinished?.()
+    if(presentation==='modal')window.location.reload()
+    else window.location.replace('/')
+  }
+  async function cfx(ticket:string,_attemptId:string,signal:AbortSignal) {
+    const current=++generation.current
+    const result=await api.POST('/auth/cfx/sign-in',{body:{identityTicket:ticket},signal,alert:false})
+    if(current!==generation.current||signal.aborted)return
+    if(result.kind==='signed-in')await acceptSession(result.token,current,signal)
+    else if(result.kind==='registration-required'){pendingDraft.current=null;setCfxGrant(result)}
+    else {setEmail(result.email);setCfxNotice('该邮箱已有账号，请登录后在设置中主动关联 Cfx。')}
+  }
+
   function join() {
     generation.current += 1
     pendingDraft.current = null
     if (onJoin) onJoin()
-    else navigate('/join/rifling-911')
+    else navigate('/register')
   }
 
   function finishSso(requestId: string) {
@@ -193,6 +176,9 @@ export function AuthFlow({
   }
 
   const visibleFooter = step === 'captcha' ? null : footer
+
+  if(cfxGrant!==null&&ssoRequestId===undefined)return <PublicRegistrationFlow presentation={presentation} initialGrant={cfxGrant} onSessionCreated={onSessionCreated}
+    onLogin={targetEmail=>{setCfxGrant(null);setEmail(targetEmail);setStep('credentials')}}/>
 
   if (fatalSsoError !== null) {
     return <><Alert variant="destructive" role="alert"><AlertDescription>{fatalSsoError}</AlertDescription></Alert>{visibleFooter}</>
@@ -215,15 +201,18 @@ export function AuthFlow({
   return (
     <>
       <AuthForm
+      key={email}
       ref={authForm}
       step={step}
-      busy={flowBusy}
+      busy={flowBusy||cfxBusy}
       initialEmail={email}
       description={description}
       onContinueLogin={continueLogin}
       onCaptchaSubmit={submitCaptcha}
       onJoin={join}
       />
+      {cfxNotice&&<p role="status">{cfxNotice}</p>}
+      {ssoRequestId===undefined&&step==='credentials'&&<CfxAuthorization disabled={flowBusy} onActiveChange={setCfxBusy} onTicket={cfx}/>}
       {visibleFooter}
     </>
   )

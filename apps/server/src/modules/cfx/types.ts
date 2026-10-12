@@ -17,5 +17,5 @@ export interface CfxServices {
   complete(input: { context: CfxBrowserContext; attemptId: string; payload: string; source: 'manual' | 'redirect'; signal?: AbortSignal }): Promise<CfxCompletion>
   inspect(context: CfxBrowserContext, attemptId: string): CfxAttemptStatus
   cancel(context: CfxBrowserContext, attemptId: string): CfxCancellation
-  consumeIdentity(input: { context: CfxBrowserContext; identityTicket: string }): CfxIdentity
+  consumeIdentity(input: { context: CfxBrowserContext; identityTicket: string; expectedAttemptId?: string }): CfxIdentity
 }

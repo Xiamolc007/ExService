@@ -11,6 +11,8 @@ export { serviceHandlers } from './http/service-handlers.js'
 
 export interface CreateAppOptions extends BusinessServices {
   identityKeys?: { clients: Record<string, string>; bootstrapKey?: string };
+  publicOrigin?: string;
+  production?: boolean;
   /**
    * 测试中保持静默；`server.ts` 开启日志，以便用 requestId 关联日志与响应。
    */
@@ -29,18 +31,18 @@ export interface CreateAppOptions extends BusinessServices {
 
 /** Create synchronously; service decorators and API routes become available after Fastify boot. */
 export function createApp({
-  authServices, profileServices, joinServices, invitationServices, storageServices, notifications, clickupServices, supportServices,
+  authServices, profileServices, joinServices, identityLinkServices, registrationServices, communityServices, storageServices, notifications, clickupServices, supportServices,
   cfxServices = createCfxServices({ config: { enabled: false } }),
-  identityKeys, oidcServices, logger = false, trustProxy = false, corsAllowedOrigins = new Set(), genReqId,
+  identityKeys, oidcServices, publicOrigin = 'http://127.0.0.1:8080', production = false, logger = false, trustProxy = false, corsAllowedOrigins = new Set(), genReqId,
 }: CreateAppOptions): FastifyInstance {
   const app = Fastify({
     logger: safeRequestLogger(logger), trustProxy, requestIdHeader: false, bodyLimit: 4 * 1024 * 1024, genReqId,
     ajv: { customOptions: { coerceTypes: false, removeAdditional: false } },
   })
   app.register(businessPlugins, Object.freeze({
-    authServices, profileServices, joinServices, invitationServices, storageServices, notifications, oidcServices, clickupServices, supportServices, cfxServices,
+    authServices, profileServices, joinServices, identityLinkServices, registrationServices, communityServices, storageServices, notifications, clickupServices, supportServices, oidcServices, cfxServices,
   }))
   app.register(httpFoundation, { origins: corsAllowedOrigins })
-  app.register(websiteApi, { identityKeys })
+  app.register(websiteApi, { identityKeys, publicOrigin, production })
   return app
 }

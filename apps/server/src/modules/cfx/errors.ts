@@ -22,7 +22,9 @@ export type CfxErrorCode = keyof typeof definitions
 export class CfxError extends Error {
   readonly statusCode: number
   readonly publicMessage: string
-  constructor(readonly code: CfxErrorCode, readonly retryAfterSeconds?: number) {
+  readonly retryAfterSeconds?: number
+  constructor(readonly code: CfxErrorCode, retryAfterSeconds?: number) {
     super(definitions[code][1]); this.statusCode = definitions[code][0]; this.publicMessage = definitions[code][1]
+    this.retryAfterSeconds = retryAfterSeconds ?? (this.statusCode === 503 ? 60 : undefined)
   }
 }

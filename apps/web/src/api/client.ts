@@ -17,6 +17,7 @@ const baseUrl: string = new URL(import.meta.env.VITE_API_BASE_URL || '/api', pag
 export const http = createExAxios({
   baseUrl,
   websiteBaseUrl: baseUrl,
+  sameOriginCookies: true,
   onSessionExpired: () => {
     if (syncSessionToken() !== null) return
     if (window.location.pathname === '/support' || window.location.pathname.startsWith('/support/')) return

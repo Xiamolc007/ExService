@@ -58,6 +58,32 @@ it('verifies real OAEP and delivers four fields plus a browser-bound ticket cons
   expect(f.service.inspect(f.context, ready.attemptId)).not.toHaveProperty('identity')
 })
 
+it('rejects tickets from another attempt in the same browser without consuming either proof', async () => {
+  const f = await fixture()
+  const second = await f.create('127.0.0.1', f.first.cookieValue)
+  await f.complete()
+  await f.service.complete({ context: f.context, attemptId: second.response.attemptId,
+    payload: f.payload({}, second), source: 'manual' })
+  const firstReady = f.service.inspect(f.context, f.first.response.attemptId)
+  const secondReady = f.service.inspect(f.context, second.response.attemptId)
+  if (firstReady.state !== 'ready' || secondReady.state !== 'ready') throw new Error('expected both ready')
+
+  expect(() => f.service.consumeIdentity({ context: f.context, identityTicket: secondReady.identityTicket,
+    expectedAttemptId: firstReady.attemptId })).toThrow(expect.objectContaining({ code: 'CFX_IDENTITY_TICKET_INVALID' }))
+  expect(() => f.service.consumeIdentity({ context: f.context, identityTicket: firstReady.identityTicket,
+    expectedAttemptId: secondReady.attemptId })).toThrow(expect.objectContaining({ code: 'CFX_IDENTITY_TICKET_INVALID' }))
+  expect(f.service.inspect(f.context, firstReady.attemptId).state).toBe('ready')
+  expect(f.service.inspect(f.context, secondReady.attemptId).state).toBe('ready')
+
+  expect(f.service.consumeIdentity({ context: f.context, identityTicket: firstReady.identityTicket,
+    expectedAttemptId: firstReady.attemptId })).toEqual({ id: '8914174', username: 'Dogleg',
+    avatarUrl: 'https://forum.cfx.re/avatar/512.png', email: 'user@example.com' })
+  expect(() => f.service.consumeIdentity({ context: f.context, identityTicket: firstReady.identityTicket,
+    expectedAttemptId: firstReady.attemptId })).toThrow(expect.objectContaining({ code: 'CFX_IDENTITY_TICKET_INVALID' }))
+  expect(f.service.consumeIdentity({ context: f.context, identityTicket: secondReady.identityTicket,
+    expectedAttemptId: secondReady.attemptId })).toHaveProperty('id', '8914174')
+})
+
 it.each([
   [{ nonce: '0'.repeat(32) }, 'CFX_NONCE_INVALID'],
   [{ api: 3 }, 'CFX_API_VERSION_UNSUPPORTED'],

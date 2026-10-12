@@ -6,7 +6,9 @@ import { startApplication, APPLICATION_CLEANUP_FAILED } from "@server/src/start-
 import { BusinessPluginLoadError, formatBusinessPluginError } from "@server/src/business-plugin-errors.js";
 import { parseAuthCodeHmacKey } from "@server/src/modules/auth/crypto.js";
 import { assertAuthSchemaAvailable } from "@server/src/modules/auth/service.js";
-import { createAuthServices } from "@server/src/create-services.js";
+import { createAuthServices, createRegistrationServices } from "@server/src/create-services.js";
+import { developmentRegistrationMailer, RegistrationMailConfigurationError } from './development-registration-mailer.js';
+import { validateOrigin } from './modules/identity-links/api/source.js';
 import { openDatabase } from "@server/src/db/client.js";
 import { assertDatabaseReady } from "@server/src/db/schema-check.js";
 import { assertCommunitySchemaAvailable } from "@server/src/domains/community/schema-check.js";
@@ -59,6 +61,10 @@ try {
   assertDeploymentBinding(identity);
   const storageConfig = parseStorageConfig();
   const cfxServices = createCfxServices({ config: parseCfxConfig() });
+  const mailer = developmentRegistrationMailer(process.env);
+  const publicOrigin = identity.enabled ? identity.publicOrigin : process.env.SERVER_PUBLIC_WEB_BASE_URL;
+  if (!publicOrigin) throw new Error('Trusted public origin is required.');
+  validateOrigin({publicOrigin,production:process.env.NODE_ENV === 'production'});
   const corsAllowedOrigins = parseCorsAllowedOrigins(
     process.env.SERVER_CORS_ALLOWED_ORIGINS,
   );
@@ -75,7 +81,7 @@ try {
     await assertProfileSchemaAvailable(db);
     await assertCommunitySchemaAvailable(db);
     await assertJoinSchemaAvailable(db);
-    const { authServices, invitationServices, joinServices } =
+    const { authServices, passwordHasher } =
       createAuthServices({
         db,
         codeHmacKey: parseAuthCodeHmacKey(process.env.AUTH_CODE_HMAC_KEY),
@@ -111,16 +117,19 @@ try {
     await notifications.assertReady();
     const clickupServices = createClickUpServices(readClickUpConfig(process.env));
     const supportServices = createSupportServices({ db, clickup: clickupServices, profile: profileServices });
+    const registration = createRegistrationServices({db,authServices,passwordHasher,
+      codeHmacKey:parseAuthCodeHmacKey(process.env.AUTH_CODE_HMAC_KEY),cfxServices,notifications,mailer});
     const appOptions: CreateAppOptions = {
       authServices,
       profileServices,
-      joinServices,
-      invitationServices,
+      ...registration,
       storageServices,
       notifications,
       clickupServices,
       supportServices,
       cfxServices,
+      publicOrigin,
+      production:process.env.NODE_ENV === 'production',
       identityKeys: identity.enabled
         ? {
             clients: { ...identity.integrationClients },
@@ -162,7 +171,8 @@ try {
   } else if (
     error instanceof StorageConfigError ||
     error instanceof CfxConfigError ||
-    error instanceof CorsConfigError
+    error instanceof CorsConfigError ||
+    error instanceof RegistrationMailConfigurationError
   ) {
     console.error(`[server] 启动失败：${error.message}`);
   } else {

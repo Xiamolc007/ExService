@@ -188,11 +188,12 @@ export function createCfxServices(dependencies: CfxDependencies): CfxServices {
       if (isActive(attempt.state)) store.terminal(attempt, 'cancelled', now(), wall())
       return { attemptId: attempt.id, state: attempt.state as 'cancelled' | 'failed' | 'expired' | 'consumed' }
     },
-    consumeIdentity({ context, identityTicket }) {
+    consumeIdentity({ context, identityTicket, expectedAttemptId }) {
       available()
       try { bindingFor(context) } catch { throw new CfxError('CFX_IDENTITY_TICKET_INVALID') }
       const id = store.tickets.get(digest(identityTicket)), attempt = id ? store.attempts.get(id) : undefined
       if (!attempt || attempt.binding !== context.bindingDigest) throw new CfxError('CFX_IDENTITY_TICKET_INVALID')
+      if (expectedAttemptId !== undefined && attempt.id !== expectedAttemptId) throw new CfxError('CFX_IDENTITY_TICKET_INVALID')
       if (attempt.state === 'expired') throw new CfxError('CFX_IDENTITY_TICKET_EXPIRED')
       if (attempt.state !== 'ready') throw new CfxError('CFX_IDENTITY_TICKET_INVALID')
       const identity = { ...attempt.identity! }
