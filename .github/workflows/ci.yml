@@ -66,11 +66,12 @@ jobs:
       - name: Type-check workspaces
         run: pnpm typecheck
 
-      - name: Test Website, runtime and Outline
-        run: pnpm test
-
       - name: Build Website and Outline
         run: pnpm build
+
+      # Readiness CLI tests launch the compiled Outline scripts.
+      - name: Test Website, runtime and Outline
+        run: pnpm test
 
   ci-gate:
     name: ci-gate

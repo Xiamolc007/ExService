@@ -30,7 +30,7 @@ schema 经 `tests/helpers/contract.ts` 从 `api/generated/openapi.json` 读取�
 
 ## GitHub CI
 
-`.github/workflows/ci.yml` 在目标为 `main` 的 PR、`main` push 和手动触发时执行。`verify` 使用 Ubuntu 24.04 runner，递归检出锁定的 Outline 子模块，分别按 pnpm 与 Yarn lockfile 安装依赖，然后执行 `pnpm api:check`、`pnpm typecheck`、`pnpm test` 和 `pnpm build`。Linux runner 提供测试夹具所需的 Docker；Docker 不可用时失败，不改用开发服务。
+`.github/workflows/ci.yml` 在目标为 `main` 的 PR、`main` push 和手动触发时执行。`verify` 使用 Ubuntu 24.04 runner，递归检出锁定的 Outline 子模块，分别按 pnpm 与 Yarn lockfile 安装依赖，然后执行 `pnpm api:check`、`pnpm typecheck`、`pnpm build` 和 `pnpm test`。Outline readiness CLI 用例启动 `apps/outline/build/server/scripts/` 中的真实编译入口，因此完整构建必须先于测试。Linux runner 提供测试夹具所需的 Docker；Docker 不可用时失败，不改用开发服务。
 
 CI 使用 Node 22、pnpm 11.9.0 与 Corepack 0.34.6。通过 `INTEGRATION_NODE_BIN` 和 `INTEGRATION_COREPACK_JS` 显式提供实际工具路径，避免 runtime 按 Node 安装目录推测 Corepack 位置。测试入口和定制 Outline 清单沿用前述统一流程，不复制或缩减测试范围。
 
