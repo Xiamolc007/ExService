@@ -3,6 +3,7 @@ node_modules/
 
 # Build output
 dist/
+apps/web/.source/
 *.tsbuildinfo
 
 # Server-generated avatar bytes stay local. `apps/server/data/.gitkeep` is tracked.

@@ -29,7 +29,7 @@ import styles from '@components/src/SiteHeader.module.scss'
 const NAV_ITEMS = [
   { to: '/docs/', label: 'Document' },
   { to: '/gallery', label: 'Gallery' },
-  { to: '/about', label: 'About Us' },
+  { to: '/aboutus', label: 'About Us' },
   { to: '/join/rifling-911', label: 'Join' },
 ] as const
 const COMMUNITY_ITEMS = [
@@ -71,7 +71,8 @@ export function SiteHeader({ auth, mobileMenuButtonRef, glassAtTop = false, noti
   const scrolled = useSyncExternalStore(subscribeToScroll, isScrolled, serverIsScrolled)
   const location = useLocation()
   const navigate = useNavigate()
-  const selectedNavigation = [...NAV_ITEMS, ...COMMUNITY_ITEMS].some(({ to }) => to === location.pathname)
+  const aboutActive = location.pathname === '/about' || location.pathname === '/aboutus' || location.pathname.startsWith('/aboutus/')
+  const selectedNavigation = aboutActive ? '/aboutus' : [...NAV_ITEMS, ...COMMUNITY_ITEMS].some(({ to }) => to === location.pathname)
     ? location.pathname : ''
 
   return (
@@ -96,7 +97,7 @@ export function SiteHeader({ auth, mobileMenuButtonRef, glassAtTop = false, noti
               {NAV_ITEMS.filter(({ to }) => to !== '/join/rifling-911').map(({ to, label }) => (
                 <NavigationMenuItem key={to}>
                   <NavigationMenuLink asChild className={navigationMenuTriggerStyle()}>
-                    {to === '/docs/' ? <a href={to}>{label}</a> : <Link to={to}>{label}</Link>}
+                    {to === '/docs/' ? <a href={to}>{label}</a> : <Link to={to} aria-current={to === '/aboutus' && aboutActive ? 'page' : undefined}>{label}</Link>}
                   </NavigationMenuLink>
                 </NavigationMenuItem>
               ))}

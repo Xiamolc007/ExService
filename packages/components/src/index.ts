@@ -11,6 +11,9 @@
  * 该导入点在 `apps/web/src/main.tsx`。
  */
 export { SiteHeader } from '@components/src/SiteHeader'
+export { CodeBlock } from './content/CodeBlock'
+export { Callout, ContentImage, ContentProse } from './content/Content'
+export type { ContentImageProps } from './content/Content'
 export { ExIcon } from '@components/src/ExIcon'
 export type { ExIconProps } from '@components/src/ExIcon'
 export type { SiteHeaderProps } from '@components/src/SiteHeader'
