@@ -28,6 +28,12 @@ Busboy 的头部限制可能截断而非拒绝输入，实际 header 字节/对�
 
 有效证明包括容量满后的拒绝、主动断开、截断、期限到期、事务写失败及随后有效重试。Fastify inject 和普通成功请求不能证明真实连接上的释放；`tests/contract/join-upload-sockets.test.ts` 与 `tests/contract/upload-lifecycle-sockets.test.ts` 使用真实本机 HTTP socket。测试缩短期限以覆盖回收，不能据此改短 Contract 默认期限。
 
+## 下载与上传的容量彼此独立
+
+下载在读取 BLOB 前占用**独立**响应容量，慢下载不占上传槽：join 下载有自己的 `activeDownloads` 与 `joinDownload.slots`，与上传容量互不影响（两者共同 module 只覆盖上传）。
+
+下载开始后到期只能终止连接，不能追加 JSON 错误：join 下载到期直接 `reply.raw.destroy()`；storage 下载在响应头尚未发出时才改写成 408 envelope，头已发出后同样只销毁连接。
+
 ## 提前终结的响应归属
 
 期限到期、wire 计数报错、连接断开这类**外部事件**会抢在 Fastify 之前终结请求。响应归属必须同步确定，否则会出现两份响应、或原错误 envelope 被覆盖。
@@ -49,7 +55,8 @@ Busboy 的头部限制可能截断而非拒绝输入，实际 header 字节/对�
 ## 证据
 
 - `apps/server/src/http/shared/multipart-upload-lifecycle.ts`（共同生命周期、响应归属、注册表）、`apps/server/src/http/shared/multipart-counter.ts`（wire/header 预算与扫描 buffer 清理）、`apps/server/src/errors.ts`（`resolveErrorResponse` 共用安全映射）。
-- `apps/server/src/domains/join/api/transport.ts`、`apps/server/src/modules/storage/api/transport.ts`（配置核验、前置认证/限流、payload parser、可信 getter、错误分类）。
+- `apps/server/src/domains/join/api/transport.ts`、`apps/server/src/modules/storage/api/transport.ts`（配置核验、前置认证/限流、payload parser、可信 getter、错误分类，以及两条下载路径的独立容量与到期处理）。
+- `apps/server/src/domains/join/api/handlers.ts`、`apps/server/src/modules/storage/api/handlers.ts`（handler 侧核对可信解析上下文、拒绝伪造标记）。
 - `tests/contract/join-upload.test.ts`、`tests/contract/storage.test.ts`：生成 Client 互通、原始 handler 输出、字节/头部及存储失败。
 - `tests/contract/upload-lifecycle.test.ts`：接管状态码边界、Contract envelope 与 handler 原始返回值。
 - `tests/contract/upload-lifecycle-sockets.test.ts`：接管 envelope 与 content-type、CORS 保留、raw 还原、槽位回收、按实例与按 operation 的容量独立、chunked wire 预算、admission 先于读体。
