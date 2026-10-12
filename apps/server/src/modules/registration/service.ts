@@ -359,9 +359,8 @@ export class RegistrationService {
           kind: 'registration-required' as const,
           ...grant,
           suggestedNickname:
-            [...identity.username.trim()].length <= 32 &&
             !/[\u0000-\u001f\u007f-\u009f]/u.test(identity.username)
-              ? identity.username.trim() || null
+              ? [...identity.username.trim()].slice(0, 32).join('') || null
               : null,
         }
       })

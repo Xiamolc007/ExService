@@ -148,13 +148,16 @@ it('uses the current link ahead of provider email and never automatically merges
   })
   expect((await f.db.query('SELECT * FROM auth_identity_links')).rows).toHaveLength(0)
 })
-it('returns null nickname suggestion for a valid Cfx username outside the Website nickname contract', async () => {
+it.each([
+  ['a'.repeat(80), 'a'.repeat(32)],
+  ['😀'.repeat(40), '😀'.repeat(32)],
+])('truncates Cfx nickname suggestions to 32 code points: %s', async (username, suggestion) => {
   const f = await setup()
-  f.external.username = 'a'.repeat(80)
+  f.external.username = username
   const proof = await f.ready()
   expect(await f.registration.signIn(proof.context, proof.ticket, 'browser')).toMatchObject({
     kind: 'registration-required',
-    suggestedNickname: null,
+    suggestedNickname: suggestion,
   })
 })
 it('keeps all four mail slots occupied after timeout until the adapters actually settle', async () => {
