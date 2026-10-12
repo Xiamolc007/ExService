@@ -1,29 +1,35 @@
-# Server 认证与邀请注册生命周期
+# Server 认证、公开注册与社区准入生命周期
 
-本文件说明认证、加入申请、邀请与资料服务之间的控制边界。HTTP 形状以 `api/openapi.yaml` 为准；表职责和状态规则见 `.ai/databases/data-model.md`。
+本文件说明认证、公开注册、第三方关联、社区申请与资料服务的控制边界。HTTP 形状以 `api/openapi.yaml` 为准；表职责和历史迁移规则见 `.ai/databases/data-model.md`。
 
-_最后更新：2026-10-15_
+_最后更新：2026-10-16_
 
 ## 组合与依赖
 
-`apps/server/src/server.ts` 连接独立的 PostgreSQL `exre`，检查迁移和必需结构，校验验证码密钥与邮件链接配置，再向 `createApp()` 注入认证、资料、申请和邀请服务。显式 `IDENTITY_ENABLED=true` 时还组装 Hydra OIDC 服务、内部身份调用方密钥及撤销 outbox worker，根 runtime 启用该能力；独立 Server 未启用时保持身份 operation 不可用。启动只检查，不迁移或登记客户端。`apps/server/src/create-services.ts` 组装服务并共享 ScryptPasswordHasher；认证与资料属于 `apps/server/src/modules/`，申请和邀请属于 `apps/server/src/domains/join/`，各自的 `api/` 处理 HTTP 接入。密码计算和邮件发送留在事务外。跨服务身份流程见 `.ai/architectures/identity/integration-boundaries.md`。
+`apps/server/src/server.ts` 连接独立的 PostgreSQL `exre`，检查迁移和必需结构，显式传入可信 public origin，再注入认证、资料、注册、社区、通知、存储与支持中心业务对象。`apps/server/src/create-services.ts` 先组装共享 PasswordHasher 与 AuthService，再由 `createRegistrationServices` 组合 Cfx、通知、IdentityLinkService、RegistrationService、CommunityService 和 JoinService。公共能力属于 `apps/server/src/modules/`，社区申请与支持中心业务属于 `apps/server/src/domains/`；运行时不再注入 InvitationService。密码计算和邮件发送在事务外执行。显式 `IDENTITY_ENABLED=true` 时另行组装 Hydra OIDC、内部身份调用方密钥及撤销 outbox worker；未启用时身份 operation 不可用。启动只检查，不迁移或登记客户端。跨服务边界见 `.ai/architectures/identity/integration-boundaries.md`。
 
-JoinService 与 InvitationService 共享数据库访问边界。业务事务内查询使用同一个 PostgreSQL 客户端；跨多语句的只读状态查询使用一致快照。申请、审核、邀请和完善注册仍依赖数据库约束、行锁与条件更新处理并发。细节与测试范围见 `.notes/archive/server-promotion/rfcs/server-postgresql-migration-rfc.md`。
+业务插件的依赖与构造依赖对应，各模块只声明自己的 decorator。RegistrationService 与 IdentityLinkService 的 start/close 由所属插件绑定；工厂不启动计时器。服务关闭先等待实际邮件、密码及关联写入 settle，再由应用所有者关闭数据库；模块不关闭注入的其他服务。注册启动恢复遗留 pending 投递，不创建数据库、不隐式 migration 或 reset。
 
-受保护 operation 的 Bearer security handler 等待异步会话校验，才把身份写入请求。退出、SSO 会话确认与异步头像处理在写入前复查会话；邀请完善只使用自己的短期凭证，不能用本站会话 token 代替。密码队列最多并行两项、等待十六项，仍由共享组装边界协调。
+受保护 operation 等待真实会话验证；写入前重新核验停用及撤销事实。社区 multipart 先认证再解析，Glue 在解析后继续复核，上传预算与清理保持共享 transport 规则。公开注册使用独立浏览器绑定及短期 grant，不能用本站会话代替。密码预算由共享 hasher 协调，登录与公开注册共用两项并行、十六项等待。
 
-## 申请、资格与完善
+## 注册与关联
 
-申请不创建正式账号。完整申请的 multipart 传输与语义验证完成后，申请、邮箱登记、表单和附件在一个事务中写入。审核先提交状态、邀请及投递尝试，再调用邮件适配器；投递失败不回滚审核。详情读取根据验证码版本选择投递结果，避免迟到旧尝试覆盖新码。
+邮箱路径验证六位码后取得浏览器绑定 grant，强制设置密码再建号；注册不签发会话。Cfx sign-in 消费真实一次性 ticket：已有外部关联登录当前 UUID，重复邮箱返回 account-exists 并要求先登录再主动关联，其余返回短期注册 grant。Cfx 邮箱在注册界面只读，不据此声称本站邮箱已验证。
 
-资格和申请状态查询只读一致快照，跳过惰性清理与投递，不签发凭证；独立的内存 IP 计数仍可能变化。验证和完善都重新检查实际资格。验证码验证消费码并交付完善凭证；完善阶段在异步密码哈希后进入事务复查授权与邮箱唯一性，创建账号并完成邀请。同凭证在期限内仅允许得到原结果，不覆盖既有账号。
+完善在事务外哈希密码，在事务内复核 grant、邮箱唯一及外部身份关系；成功重读返回原结果。主动关联要求当前账号、会话、浏览器和真实 attempt/ticket；解绑使旧关联意图失效，保留账号与密码。Cfx 基础消费约束见 `.ai/knowledge/cfx/identity-lifecycle.md`，浏览器与异步资源陷阱见 `.ai/knowledge/registration/browser-credentials-and-settlement.md`。
+
+## 社区申请与决定
+
+提交从真实 session 推导 UUID，按当前社区要求核验关联，保存账户与外部身份快照、表单和附件。申请归属、历史只读及唯一规则集中于数据模型。审核员必须有该社区的明确授权，平台 admin 不隐含审核资格。
+
+写事务按 UUID 排序锁账户，再锁当前会话、社区及相应授权和申请。审批与拒绝写审核事实，并用通知 producer.publishInside 在同一连接发布必要结果事件；通过时同时写成员资格。相同决定重读不再次发布，相反决定冲突。解绑不取消待审申请，也不阻止形成决定。通知投影在提交后独立执行，失败不撤销决定。
 
 ## 邮件、SSO 与头像
 
-邮件链接使用校验后的 `SERVER_PUBLIC_WEB_BASE_URL`，不从请求 Host 推断。本地适配器在终端输出开发期邮件。事务先提交 pending 投递尝试；适配器结束或超时后只能更新仍 pending 的同一次尝试。失败窗口计数须在事务提交后再把业务错误返回客户端，避免回滚防猜测计数。错误 envelope 入口是 `apps/server/src/errors.ts`，不记录或回显秘密与数据库异常。
+邮件仅经 RegistrationMailer；缺失适配器返回明确不可用。开发模拟器须同时满足 NODE_ENV=development 与显式 SERVER_REGISTRATION_MAIL_SIMULATOR=true，单独终端通道不代表真实投递。可信 origin 来自配置，不从 Host 推断。失败窗口在提交计数后再返回错误，防止防猜测记录回滚；统一错误入口不记录或回显秘密及数据库异常。
 
 普通登录签发固定期限本站会话；原 token 只交给浏览器，数据库保存摘要，使用不续期。SSO 请求由显式 CLI 创建，HTTP 接收端检查并确认，不创建普通会话。当前仍没有生产发起方或轮询协议。
 
 账号停用、恢复与会话撤销的持久化规则见 `.ai/databases/data-model.md`。集成模式通过独立受控 CLI 停用或恢复账号；登录、SSO 接收、OIDC 接受和内部会话核验都复查停用事实。恢复后不会复活原会话。
 
-头像先写入 `apps/server/data/avatars/`，随后在会话复核和数据库事务中更新引用，最后清理旧文件。失败时清理新文件；孤立旧文件留待显式核查。新上传头像经 Sharp 归一化为 512×512 WebP，公开 URL 使用 `SERVER_PUBLIC_AVATAR_BASE_URL`。图片验证码仍是占位能力，没有服务端挑战验证；当前临时审核也不构成公网权限方案。
+头像先写入 `apps/server/data/avatars/`，随后复核会话和更新引用，最后清理旧文件；失败清理新文件，孤立旧文件留待显式核查。图片经 Sharp 归一化为 512×512 WebP，公开 URL 使用 SERVER_PUBLIC_AVATAR_BASE_URL。图片验证码仍是占位能力；网站侧社区要求满足不表示游戏已放行，也不构成公网部署验收。

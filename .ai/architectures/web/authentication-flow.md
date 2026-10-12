@@ -1,66 +1,72 @@
-# `web` 模块：申请、邀请注册与认证 UI
+# `web` 模块：公开注册、社区申请与认证 UI
 
 本文件说明共享认证 UI、应用流程和浏览器存储之间的边界。HTTP operation 与字段形状以 `api/openapi.yaml` 和生成 Client 类型为准。
 
-_最后更新：2026-10-15_
+_最后更新：2026-10-16_
 
 ## 责任分层
 
 ```text
 packages/components
-  登录与邀请表单 / AuthModal / CompleteJoinApplicationModal / JoinReviewDialog
+  登录与注册表单 / AuthModal / IdentityLinksPanel / CompleteJoinApplicationModal / JoinReviewDialog
           ↑ props 与回调
 apps/web
-  AuthFlow / InvitationRegistrationFlow / AuthProvider / 路由页面
+  AuthFlow / PublicRegistrationFlow / CfxAuthorization / AuthProvider / 路由页面
           ↓
   @workspace/api-client
 ```
 
 共享组件只管理字段、校验、焦点和可访问状态。它不读取浏览器存储、不调用 API、不决定导航。`apps/web` 负责请求分支、token 生命周期、SSO 上下文和整页跳转。设置 Modal 与 `/account/profile` 通过同一个设置控制层读取、更新及上传本人资料，界面由共享组件接收值和回调。
 
-登录、邀请注册与申请表单使用 React Hook Form 与 Zod；服务端字段错误通过 `setError` 展示。`AuthForm` 只分派登录与图片验证码步骤；邀请的邮箱、数字码和完善资料各有独立表单。登录中的 Google、QQ 入口仅为禁用占位，不发请求，也不代表已经接入第三方认证。
+登录、公开注册与申请表单使用 React Hook Form 与 Zod；服务端字段错误通过 setError 展示。邮箱、数字码和完善资料各有独立表单；Google、QQ 为禁用入口，不发请求。普通登录可选择 Cfx；专用 SSO 接收流程仍仅使用密码与确认，不接入 Cfx。
 
-普通登录与 SSO 密码登录先在凭据表单点击“继续”，再于同一认证容器切换到图片验证码步骤。该步骤目前只显示矩形图片占位与可留空的输入框，明确提示尚未启用校验；点击“登录”时才由 `AuthFlow` 调用对应 operation，不附加伪造的验证码凭证。邀请注册不经过这个占位步骤。
+普通密码登录与 SSO 密码登录先在凭据表单点击“继续”，再于同一容器切换到图片验证码占位步骤。点击“登录”才调用对应 operation，不附加伪造的验证码凭证；公开注册不经过此步骤。
 
 ## 入口与容器
 
 - 顶栏登录与注册使用受控 Modal；关闭会卸载当前流程。
 - `/login` 使用 `AuthFlow`，`/register` 使用 `InvitationRegistrationPage`；两者位于 `RootLayout` 之外，不渲染站点顶栏或认证 Modal，复用认证背景与外围容器。
-- 顶栏桌面与移动注册入口挂载同一个 `InvitationRegistrationFlow`；完成后在原 Dialog 切到普通登录。关闭按当前桌面或移动触发器恢复焦点。
-- `/join/rifling-911`、`/join/result` 与临时审核页 `/admin/join-applications` 位于 `RootLayout` 内。登录的加入回调先关闭 Dialog，再前往 `/join/rifling-911`。
+- 顶栏桌面与移动注册入口挂载同一个 PublicRegistrationFlow；完成后在原 Dialog 切到普通登录。关闭按当前桌面或移动触发器恢复焦点。
+- 登录的“注册账号”在 Modal 内切到公开注册，独立页导航到 `/register`；社区页面位于 RootLayout 内。
 - `/sso/success` 与 `/sso/*` 的兜底页面也位于 `RootLayout` 之外，不渲染站点顶栏；认证页面代码集中在 `apps/web/src/pages/AuthPage/`。
 - 普通独立认证页通过左上角 Home 返回首页；带 `ssoRequestId` 的登录页面隐藏该入口。独立认证页与 SSO 成功页复用 `MeshGradient` 背景，共享组件不依赖着色器。
 - 登录入口只要 URL 中出现 `ssoRequestId`，就必须通过格式与单值检查；空值、重复值或非法值显示无效入口，不能回退成普通登录。
 
 图片验证码的取图与提交字段已在 Contract 中预留，真实校验启用前须单独决定有效期、重试规则以及要求凭证的版本策略。
 
-## 申请与邀请注册
+## 社区申请与公开注册
 
-`/join/rifling-911` 是说明与申请入口展示页，两类入口各挂载独立 `CompleteJoinApplicationModal`。共享组件从 Zod 推导含 File 的 UI 草稿，以 RHF 管理完整字段、当前步骤校验、确认摘要及文件选择；前进只校验当前步，最终校验全部，后退保留值和文件。关闭弹窗时，页面按申请类别在内存中分别保存草稿和步骤，重新打开时恢复；附件保留原 File 对象，不写浏览器存储。提交成功清除对应类别的草稿，刷新或页面卸载释放全部草稿；提交在途保护关闭和重复提交，失败保留草稿。
+`/join/rifling-911` 读取服务器社区要求及本人状态，两类入口各挂载独立 CompleteJoinApplicationModal。共享组件从 Zod 推导含 File 的草稿，以 RHF 管理字段、分步校验和文件；后退、关闭再打开保留对应类别的内存草稿及 File。提交在途保护关闭和重复提交，失败保留草稿，成功清空并锁定一次申请入口。任意已有申请状态关闭新提交。
+
+联系方式只读展示服务器账户邮箱及名字，payload 仅 qq 与 form。匿名草稿通过 CommunityAuthentication 的 onSessionCreated 在原处继续；首次登录可采用该草稿，既有 owner 退出或换号立即清空。私有请求捕获 owner token 并显式传 Bearer，迟到请求不替换新账号数据。当前 Cfx 要求缺失时进入已有关联分区，再读取资格，客户端提示不能代替服务器复核。
 
 报名表单的字段与提交状态由 ExUI `ExForm` 内部的 React Hook Form 实例持有，接入约束见 `.ai/rules/frontend-forms.md`。分步校验使用原字段路径的独立 Zod schema，复用完整提交 schema 的规则；未填写的后续字段不能阻止当前步骤继续，最终提交仍校验完整申请。可选预设字段的“其它”仅控制输入区域展开，提交值始终是实际答案字符串，不向 HTTP Contract 增加界面状态字段。证明附件的文件名在选择时由共享 Zod schema 校验；非法名称先在表单中提示，Server 仍独立校验上传文件，不以客户端校验作为信任边界。
 
 Hero 图片来自 `apps/web/public/images/heros/join/rifling-911/`。构建时按文件名排序收集支持的图片格式；多张图片时点击背景循环切换，也支持聚焦背景后按 Enter 或空格，不显示独立切换按钮。画面上的申请按钮与结果查询链接独立响应，不触发切图；单张图片作为静态背景。图片切换尊重减少动态效果偏好。
 
-`apps/web/src/join/client.ts` 将草稿映射为生成 DTO，通过生成 Client 的 bodySerializer 一次组装 JSON Blob 与 proofs File 的 FormData。共享组件不复制 HTTP DTO、不调用 API；应用侧不持久化申请草稿。成功显示来自事务完成的确认，不建立账号。成功态提醒申请人留意申请邮箱，并提供固定的 `/join/result` 查询入口；“面试预约”仍为禁用占位。提交成功不表示审核通过，也不表示通知邮件已投递。审核和账号创建的职责及字段归属见 `.ai/databases/data-model.md`。
+`apps/web/src/join/client.ts` 将草稿映射为生成 DTO，以 JSON Blob 与 proofs File 构造 FormData，经生成 Client 提交带 communityId 的 operation。共享组件不复制 HTTP DTO 或访问 API。成功仅表示申请事务已完成，结果入口固定为 `/join/result`；“面试预约”仍为禁用占位。申请、审核、注册及通知的职责见数据模型。
 
-`/join/result` 只在用户提交邮箱时请求，不自动查询或轮询，不把邮箱/结果写入 URL 或浏览器持久存储。编辑邮箱立即清空显示并增加请求代次；新请求及卸载也使旧代次失效，迟到结果不能覆盖新邮箱。状态与下一步必须匹配 Contract；导航使用固定站内路由，不夹带验证码或凭证。
+`/join/result` 登录后分页读取当前 owner 的社区状态，选择社区查看申请、成员资格及当前关联要求；websiteReady 与审核结果分别表达。旧 email/code 参数清除并说明，不提供任意邮箱查询。分页、选社区、owner 变化及卸载使旧请求代次失效；结果不进入 URL 或持久存储。
 
-`InvitationRegistrationFlow` 在应用层控制 email、code、profile、registered 四个状态。邮箱通过只读资格检查后才挂载空验证码表单；检查不请求发码。验证成功取得完善凭证才挂载用户名与密码表单，邮箱只读，QQ 来自申请。主动重发使用服务器时间差计算冷却，采用条件式发送反馈；验证的失败重试由用户输入或显式重试按钮触发，不由渲染循环驱动。
+PublicRegistrationFlow 在应用层控制 email、code、profile、registered。邮箱发码成功后挂载验证码表单，验证成功取得 grant 后挂载必填用户名和密码；邮箱只读。重发冷却使用服务器时间差，验证失败由输入或显式按钮重试，不由渲染循环驱动。错误归属集中于 `.ai/knowledge/web/invitation-error-handoff.md`。
 
-独立页纯读取一次 URL 入口快照。合法 email 只预填，合法 email/code 才自动检查后验证；非法或重复参数不请求。passive effect 删除所有 code 参数并保留 `history.state`。自动链 Promise 与响应订阅分别保存：StrictMode 重新订阅同一次请求，实际返回、修改邮箱或卸载则拒绝迟到结果和通知。数字码、密码和完善凭证只在内存保存，返回或关闭清理，不写日志、路由 state 或浏览器存储。
+旧 `/register?code=` 仅说明流程已调整并删除 code，不自动消费。数字码、密码、grant 和 Cfx ticket 只在内存保存，返回或关闭清理，不写日志、路由 state 或浏览器存储。
+
+CfxAuthorization 支持本地手工加密结果与 redirect；授权在新标签打开，被拦截时保留再次打开入口。只有可见页面串行轮询，取消、owner 变化与卸载使旧 generation 失效。真实 ticket 交给对应业务 operation，显示的外部资料不能替代证明。已有账户的 Cfx 登录与普通登录使用同一安装本站会话逻辑，撤销旧会话期间保持表单锁定；公开注册成功不创建会话。
 
 注册成功清空敏感材料并使用 `ExMessage.info` 提示，随后一次性前往普通登录。页面 replace 到 `/login`，只用内存路由 state 传邮箱；弹窗切换原容器。手动前往登录或卸载清理自动切换计时器，不创建会话，不带入 SSO 上下文。资格检查与持续错误的通知规则统一见 `.ai/rules/frontend-notifications.md`。
 
-入口 `apps/web/index.html` 在所有脚本和资源声明之前设置 `no-referrer`，避免邀请 URL 的邮箱和数字码进入资源请求的 Referer。Vite 会在该 meta 前注入开发脚本，因此 `apps/web/vite.config.ts` 还为本地开发服务设置 `Referrer-Policy: no-referrer` 响应头。URL 清理发生在 React 挂载后，不能替代加载前的入口策略；这些策略不会隐藏原始入口请求 URL。
+入口 `apps/web/index.html` 在所有脚本和资源声明之前设置 `no-referrer`，避免旧邀请 URL 的邮箱和数字码进入资源请求的 Referer。Vite 会在该 meta 前注入开发脚本，因此 `apps/web/vite.config.ts` 还为本地开发服务设置 `Referrer-Policy: no-referrer` 响应头。URL 清理发生在 React 挂载后，不能替代加载前的入口策略；这些策略不会隐藏原始入口请求 URL。
 
-邀请注册的持续错误由所属 RHF 表单持有，根错误展示与跨步骤挂载交接见 `.ai/knowledge/web/invitation-error-handoff.md`。
+浏览器绑定 Cookie 的真实传输约束见 `.ai/knowledge/registration/browser-credentials-and-settlement.md`。
 
 ## 本地申请审核
 
-`JoinReviewPage` 使用生成 Client 的列表与详情类型，不读取 `/auth/me` 作为本期临时页面的访问前提。过滤变化重置分页偏移；列表与详情各用请求代次拒绝迟到结果，每次打开重新读取详情。
+JoinReviewPage 从本人 review-access 取得明确授权社区，平台 admin 不隐含审核资格；列表、详情、决定及附件均使用对应社区路径与捕获的 token。过滤或社区变化重置分页，列表与详情各用代次拒绝迟到结果，每次打开重新读取。历史三种记录只读，当前两种记录按状态决定；服务器是最终授权依据。附件 401/403 清空受保护内容，要求显式重读授权，不继续展示旧详情。
 
 共享 `JoinReviewDialog` 接收展示内容和回调，不复制 DTO 或调用 API。申请与审核两个 Tab、标题和底部动作固定，内容区滚动。关闭保留过滤与分页；原列表行仍存在时恢复查看按钮焦点，行已被审批移除时回到可聚焦的列表操作。已经提交的审批不会因关闭 Dialog 撤销，完成后刷新列表；只有仍对应当前选择的结果才更新详情和通知。审核人未记录时不伪造身份。
+
+`/admin/communities` 使用服务器 isPlatformAdmin 提示管理资格，创建与编辑表单采用 RHF、Zod 和 ExUI。配置更新携带 expectedRevision；审核员列表分页，授予及撤销使用明确 UUID。页面不通过可见性授予权限，也不赋予管理员隐含审核范围。
 
 ## 本站会话
 
@@ -87,6 +93,8 @@ Hero 图片来自 `apps/web/public/images/heros/join/rifling-911/`。构建时�
 登录用户菜单的“设置”和“个人资料”打开同一 Modal，分别默认选中通用和个人资料；`/account/profile` 以页面容器复用相同主体。共享界面负责分类、单项表单和头像裁剪；`apps/web/src/settings/` 负责经生成 Client 请求本人资料。通用分类的主题由 ExUI `ThemeProvider` 决定，Valtio 中的值只是读取投影。
 
 设置资料只缓存在内存，按当前 token 归属并用请求代次拒绝迟到结果。重新打开会刷新，明确失效或账号切换会清空。保存成功先采用服务器返回的完整本人资料，再调用既有 `AuthContext.refreshProfile()` 同步顶栏；顶栏刷新失败不会回滚已经保存的设置。退出仍交给 `AuthContext.logout()`。设置状态与认证状态的职责依据见 `.ai/decisions/web/04-settings-state-separate-from-auth-context.md`。
+
+关联账户分区由 IdentityLinksExperience 独立读取，不受本人资料或通知偏好错误阻断。当前平台关联存在时不静默替换；Cfx disabled 仍展示和允许确认解绑。社区影响读取未完成或失败时明确显示未知影响，解绑不删除成员资格。关联 POST 结果不确定时 GET 本人关联校准界面，不盲目重复授权。token owner 变化立即卸载旧分区，迟到结果不能覆盖新账户。
 
 ## SSO 接收流程
 

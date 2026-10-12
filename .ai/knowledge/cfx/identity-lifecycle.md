@@ -12,6 +12,8 @@ _最后更新：2026-10-12_
 
 状态仅在当前进程有效，重启失效。授权、结果、最小终态和绑定分别受独立期限约束，内部使用单调时钟；查询不续期。所有记录、counter、创建预留、RSA/处理槽有界，容量不足显式拒绝，不驱逐有效凭证。预算集中在模块 `config.ts` 与 `rate-limiter.ts`，不是生产吞吐承诺。
 
+消费方若拥有指定授权流程的意图，必须向 `consumeIdentity` 传入 `expectedAttemptId`。基础服务在同步消费前将其与票据索引找到的真实 attempt 比较，不能以客户端同时提交 attempt 和 ticket 证明两者属于同一次授权。不同 attempt 即使共享浏览器 Cookie 也返回 `CFX_IDENTITY_TICKET_INVALID`，不消费被误传的票据；不传该参数的普通消费保持原有语义。回归通过真实 OAEP 及同浏览器两次 ready attempt 验证，外部论坛请求是替身。
+
 取消、过期和关闭先失效任务版本，再中止请求；迟到结果不能恢复 ready。异步 RSA 不能强制取消，生成槽保留到真实工作 settle，`close()` 等待它完成。业务插件的 preClose/onClose 共用关闭 Promise；import 和 factory 本身不创建生命周期资源。
 
 论坛只接收固定地址的两个认证 GET，使用同一 Key/clientId，拒绝 redirect，限制 JSON 响应大小并中止超时。主邮箱不自动具有 email_verified 语义；头像只规范化 URL，不下载。RSA 使用系统 OAEP-SHA1，不降级 PKCS#1；本地引用释放不能证明堆内存完全清零，也不表示论坛远端 Key 已撤销。
