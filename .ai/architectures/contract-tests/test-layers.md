@@ -34,4 +34,6 @@ schema 经 `tests/helpers/contract.ts` 从 `api/generated/openapi.json` 读取�
 
 CI 使用 Node 22、pnpm 11.9.0 与 Corepack 0.34.6。通过 `INTEGRATION_NODE_BIN` 和 `INTEGRATION_COREPACK_JS` 显式提供实际工具路径，避免 runtime 按 Node 安装目录推测 Corepack 位置。测试入口和定制 Outline 清单沿用前述统一流程，不复制或缩减测试范围。
 
+根 `pnpm typecheck` 先构建 `@workspace/sdk`，再检查所有 workspace 与专项类型测试。SDK 的公开导出指向 `packages/sdk/dist/` 中的 JavaScript 和声明；仅执行 SDK 的 `tsc --noEmit` 不会生成这些文件，干净检出不能依赖此前 Build 留下的产物。
+
 唯一汇总检查名为 `ci-gate`。它在 `verify` 结束后始终执行，仅当 `verify` 的结果为 `success` 时通过；失败、取消或跳过均不能通过。工作流仅有 `contents: read` 权限，不使用 App 私钥或业务环境秘密。主分支 Ruleset 是否已将 `ci-gate` 设为必需检查，需独立核对 GitHub；本地配置校验不代表远程 CI 已通过。

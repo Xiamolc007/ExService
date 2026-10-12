@@ -16,7 +16,7 @@
     "infra": "node scripts/runtime/entry.mjs infra",
     "api:lint": "redocly lint api/openapi.yaml",
     "api:generate": "node scripts/api/generate.mjs generate",
-    "typecheck": "pnpm -r typecheck && pnpm exec tsc --noEmit -p tests/api-client/tsconfig.json && pnpm exec tsc --noEmit -p tests/server-types/tsconfig.json",
+    "typecheck": "pnpm --filter @workspace/sdk build && pnpm -r typecheck && pnpm exec tsc --noEmit -p tests/api-client/tsconfig.json && pnpm exec tsc --noEmit -p tests/server-types/tsconfig.json",
     "test": "node scripts/runtime/tests.mjs",
     "test:watch": "node scripts/runtime/tests.mjs --watch",
     "build": "node scripts/runtime/build.mjs",
