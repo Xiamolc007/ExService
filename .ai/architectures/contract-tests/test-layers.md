@@ -2,7 +2,7 @@
 
 Contract Test 对真实 Fastify app 的 HTTP 行为、Glue 映射和原始 handler 输出分别断言；数据库行为测试使用独立 PostgreSQL 容器。单条断言的失败模式见 `.ai/knowledge/server/serialization-masks-handler-regressions.md` 与 `.ai/knowledge/contract-tests/contract-parsing-constraints.md`。
 
-_最后更新：2026-10-11_
+_最后更新：2026-10-12_
 
 ## 隔离夹具
 
@@ -27,3 +27,11 @@ schema 经 `tests/helpers/contract.ts` 从 `api/generated/openapi.json` 读取�
 根 `vitest.config.ts` 只包含 Website 自有测试路径，并显式排除 `apps/outline/`、`vendor/` 和 `output/`；Outline 使用自己的 Yarn 测试项目。`scripts/runtime/tests.mjs` 每轮先生成 Contract，再统一执行 Website、当前 runtime/共享 Docs 逻辑与 `scripts/runtime/test-manifest.mjs` 的定制 Outline 清单；`scripts/api/generate.test.mjs` 纳入默认脚本测试。旧模式专属文件和真实生命周期验收不加入默认测试。Website 分组限制为两个 worker，减少独立数据库容器和 CPU 争用，全部文件与断言仍执行。前端按 app、shared-node、shared-jsdom 分别选文件，DOM 用例只运行在 jsdom。
 
 `scripts/docs-integration/test-outline.mjs` 仅接受一条 `server/` 或 `plugins/` 测试文件路径及一个以上原样例名。它为每个指定例分别创建临时 PG18、Redis 与附件目录，执行完整 Outline migration，使用仅保留操作系统和包缓存变量的环境白名单及隔离的身份配置；测试要求恰好一个指定用例通过，无匹配、重复匹配、未处理错误或准备失败均失败。注入标记禁止读取 Outline 子目录 dotenv，必需的 URL 也由测试夹具提供。不要用 Outline 默认测试环境或本机开发库替代该入口。自动测试与真实浏览器、socket、数据库恢复及服务器验收分开报告。
+
+## GitHub CI
+
+`.github/workflows/ci.yml` 在目标为 `main` 的 PR、`main` push 和手动触发时执行。`verify` 使用 Ubuntu 24.04 runner，递归检出锁定的 Outline 子模块，分别按 pnpm 与 Yarn lockfile 安装依赖，然后执行 `pnpm api:check`、`pnpm typecheck`、`pnpm test` 和 `pnpm build`。Linux runner 提供测试夹具所需的 Docker；Docker 不可用时失败，不改用开发服务。
+
+CI 使用 Node 22、pnpm 11.9.0 与 Corepack 0.34.6。通过 `INTEGRATION_NODE_BIN` 和 `INTEGRATION_COREPACK_JS` 显式提供实际工具路径，避免 runtime 按 Node 安装目录推测 Corepack 位置。测试入口和定制 Outline 清单沿用前述统一流程，不复制或缩减测试范围。
+
+唯一汇总检查名为 `ci-gate`。它在 `verify` 结束后始终执行，仅当 `verify` 的结果为 `success` 时通过；失败、取消或跳过均不能通过。工作流仅有 `contents: read` 权限，不使用 App 私钥或业务环境秘密。主分支 Ruleset 是否已将 `ci-gate` 设为必需检查，需独立核对 GitHub；本地配置校验不代表远程 CI 已通过。
