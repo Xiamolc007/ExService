@@ -1,14 +1,14 @@
 # PostgreSQL 数据库生命周期陷阱
 
-_最后更新：2026-09-29_
+_最后更新：2026-10-11_
 
 ## 缺库或半迁移不能靠启动修复
 
-`apps/server/src/server.ts` 在监听前连接并检查 `exre` 身份、migration journal 与必需结构。空库、半迁移或配置缺失会使启动失败；它不会创建数据库或执行 migration。先由数据库管理员建立独立 `exre`，配置本机 `apps/server/.env.local`，再显式运行 `pnpm db:migrate`。`outline` 不能作为替代目标。
+`apps/server/src/server.ts` 在监听前连接并检查 `exre` 身份、migration journal 与必需结构。空库、半迁移或配置缺失会使启动失败；它不会创建数据库或执行 migration。先由数据库管理员建立独立 `exre`，配置仓库根 `.env.local`，再显式运行 `pnpm db:migrate`。`outline` 不能作为替代目标。
 
 ## URL 与连接后的身份都要核对
 
-`apps/server/src/db/client.ts` 拒绝缺失、错误数据库名或带查询参数的 `DATABASE_URL`，连接后还检查 `current_database()` 和预期 schema。查询参数可能改变连接目标或 `search_path`，不能作为配置捷径。凭据只存本机环境，不写进文档或测试快照。
+`apps/server/src/db/client.ts` 拒绝缺失或错误数据库名的 `DATABASE_URL`，连接后还检查 `current_database()` 和预期 schema。支持的连接选项与受控 `search_path` 规则见 `.ai/architectures/server/request-lifecycle.md` 的数据库连接与事务部分；不能用 query 覆盖连接目标，也不能把所有 query 一律拒绝。迁移测试应验证业务表与 journal 只写入受控 schema、其他 schema 保持不变；非法目标覆盖应断言 `DatabaseConfigurationError.code`，避免固定诊断文案调整使数据保护测试误报。凭据只存本机环境，不写进文档或测试快照。
 
 ## 重置的对象范围比数据库小
 

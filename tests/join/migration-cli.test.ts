@@ -5,6 +5,7 @@ import { expect, it } from 'vitest'
 import { isolatedPostgres } from '@tests/helpers/postgres'
 import { resetDatabase } from '@server/src/db/reset-plan'
 import { runMigrations } from '@server/src/db/migration-runner'
+import { APPLICATION_TABLES } from '@server/src/db/schema-check'
 
 const requireServer = createRequire(new URL('../../apps/server/package.json', import.meta.url))
 const entry = fileURLToPath(new URL('../../apps/server/src/db/migrate.ts', import.meta.url))
@@ -35,7 +36,7 @@ it('rejects a wrong database target before writing migration state', async () =>
   } finally { await fixture.close() }
 }, 30_000)
 
-it('rejects a DSN search_path override before migration writes any schema or journal', async () => {
+it.each(['library', 'CLI'] as const)('keeps %s migration writes in the owned schema despite a DSN search_path override', async (mode) => {
   const fixture = await isolatedPostgres({ migrate: false })
   const otherSchema = `${fixture.schema}_other`
   const objects = async (schema: string) => (await fixture.db.query<{ relname: string }>(
@@ -43,19 +44,38 @@ it('rejects a DSN search_path override before migration writes any schema or jou
       WHERE n.nspname = $1 AND c.relkind IN ('r','p','v','m','S','f','i','I') ORDER BY c.relname`, [schema])).rows
   try {
     await fixture.db.query(`CREATE SCHEMA "${otherSchema}"`)
-    const before = await Promise.all(['public', fixture.schema, otherSchema, 'drizzle'].map(objects))
+    const schema = mode === 'library' ? fixture.schema : 'public'
+    const journalSchema = mode === 'library' ? fixture.schema : 'drizzle'
+    const untouchedSchemas = mode === 'library' ? ['public', otherSchema, 'drizzle'] : [fixture.schema, otherSchema]
+    const before = await Promise.all(untouchedSchemas.map(objects))
     const overridden = new URL(fixture.connectionString)
     overridden.searchParams.set('options', `-c search_path=${otherSchema}`)
-    await expect(runMigrations({ connectionString: overridden.toString() })).rejects.toThrow('DATABASE_URL')
-    const result = spawnSync(process.execPath, ['--import', tsx, entry], {
-      cwd: fileURLToPath(new URL('../../apps/server/', import.meta.url)),
-      env: { ...process.env, DATABASE_URL: overridden.toString() },
-      encoding: 'utf8', timeout: 15_000,
-    })
-    expect(result.error).toBeUndefined()
-    expect(result.status).not.toBe(0)
-    expect(result.stderr).toContain('[db:migrate]')
-    expect(await Promise.all(['public', fixture.schema, otherSchema, 'drizzle'].map(objects))).toEqual(before)
+    if (mode === 'library') {
+      await runMigrations({ connectionString: overridden.toString(), searchPath: schema, migrationsSchema: journalSchema })
+    } else {
+      const result = spawnSync(process.execPath, ['--import', tsx, entry], {
+        cwd: fileURLToPath(new URL('../../apps/server/', import.meta.url)),
+        env: { ...process.env, DATABASE_URL: overridden.toString() },
+        encoding: 'utf8', timeout: 15_000,
+      })
+      expect(result.error).toBeUndefined()
+      expect(result.status).toBe(0)
+      expect(result.stderr).not.toContain(fixture.connectionString)
+    }
+    expect(await Promise.all(untouchedSchemas.map(objects))).toEqual(before)
+    const tables = await fixture.db.query<{ name: string }>(
+      'SELECT tablename AS name FROM pg_catalog.pg_tables WHERE schemaname = $1 ORDER BY tablename', [schema])
+    expect(tables.rows.map(row => row.name)).toEqual(
+      [...APPLICATION_TABLES, ...(schema === journalSchema ? ['__drizzle_migrations'] : [])].sort())
+    if (mode === 'CLI') {
+      expect(await objects(journalSchema)).toEqual([
+        { relname: '__drizzle_migrations' },
+        { relname: '__drizzle_migrations_id_seq' },
+        { relname: '__drizzle_migrations_pkey' },
+      ])
+    }
+    expect((await fixture.db.query<{ n: number }>(
+      `SELECT count(*)::integer AS n FROM "${journalSchema}".__drizzle_migrations`)).rows[0]?.n).toBeGreaterThan(0)
   } finally {
     await fixture.db.query(`DROP SCHEMA IF EXISTS "${otherSchema}" CASCADE`)
     await fixture.close()
@@ -98,15 +118,17 @@ it.each([
   try {
     await fixture.db.query('INSERT INTO auth_users (id,email,nickname,password_hash,created_at) VALUES ($1,$2,$3,$4,$5)',
       ['user-1', 'keep@example.com', 'Keep', 'hash', 100])
+    const journalBefore = (await fixture.db.query('SELECT * FROM __drizzle_migrations ORDER BY id')).rows
     const overridden = new URL(loopbackUrl(fixture.connectionString))
     overridden.searchParams.set(key, value)
     await expect(resetDatabase({ connectionString: overridden.toString(), searchPath: fixture.schema }, 'exre'))
-      .rejects.toThrow('DATABASE_URL')
+      .rejects.toMatchObject({ code: 'DATABASE_URL_OPTIONS_INVALID' })
     expect((await fixture.db.query<{ email: string }>('SELECT email FROM auth_users')).rows)
       .toEqual([{ email: 'keep@example.com' }])
     expect((await fixture.db.query<{ n: number }>(
       'SELECT count(*)::integer AS n FROM pg_catalog.pg_tables WHERE schemaname = $1 AND tablename = $2',
       [fixture.schema, '__drizzle_migrations'])).rows).toEqual([{ n: 1 }])
+    expect((await fixture.db.query('SELECT * FROM __drizzle_migrations ORDER BY id')).rows).toEqual(journalBefore)
   } finally { await fixture.close() }
 }, 30_000)
 
