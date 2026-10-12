@@ -34,11 +34,62 @@ export function createErrorEnvelope(code: ErrorCode, message: string, requestId:
   return { error: { code, message, requestId } }
 }
 
+/** 未声明路径的 404 文案；正常错误链与提前终结适配共用同一常量。 */
+export const NOT_FOUND_MESSAGE = 'The requested route is not part of the API contract.'
+
 function codeForStatus(statusCode: number): ErrorCode {
   if (statusCode === 404) {
     return 'NOT_FOUND'
   }
   return statusCode >= 500 ? 'INTERNAL_ERROR' : 'BAD_REQUEST'
+}
+
+/** `request.log` 的安全子集：只接受结构化字段与固定文案，不回显原始异常。 */
+export interface SafeErrorLog {
+  warn(fields: { code: ErrorCode; statusCode: number }, message: string): void
+  error(fields: { code: ErrorCode; statusCode: number }, message: string): void
+}
+
+export interface ErrorResolution {
+  statusCode: number
+  code: ErrorCode
+  message: string
+  retryAfterSeconds?: number
+  /** 精确符合 Contract ErrorEnvelope 的对象；不得追加 cause、stack 或其他字段。 */
+  envelope: { error: { code: ErrorCode; message: string; requestId: string } }
+}
+
+/**
+ * 既有安全映射的唯一实现：正常错误链与 multipart 上传的提前终结适配共用它。
+ *
+ * 提取的功能面是全部 operation 的错误响应，不只是两条上传，因此任何改动都必须先通过
+ * 非上传错误 envelope 的逐字节回归。日志等级与字段（`request failed` / `request rejected`）
+ * 一并属于本函数的契约，调用方不得自行再记一份。
+ */
+export function resolveErrorResponse(error: unknown, log: SafeErrorLog, requestId: string): ErrorResolution {
+  const publicError = findPublicError(error)
+  const reportedStatus = (error as { statusCode?: unknown } | null | undefined)?.statusCode
+  const reported = publicError?.statusCode ?? (typeof reportedStatus === 'number' ? reportedStatus : 500)
+  const statusCode = reported >= 400 && reported < 600 ? reported : 500
+
+  const message = publicError?.publicMessage ?? resolvePublicMessage(statusCode, error as FastifyError)
+  const code = publicError?.code ?? codeForStatus(statusCode)
+
+  // Exceptions from hashing, delivery or PostgreSQL can contain submitted secrets.
+  // Request ID remains attached by Fastify; log only the safe classification.
+  if (statusCode >= 500) {
+    log.error({ code, statusCode }, 'request failed')
+  } else {
+    log.warn({ code, statusCode }, 'request rejected')
+  }
+
+  return {
+    statusCode,
+    code,
+    message,
+    ...(publicError?.retryAfterSeconds === undefined ? {} : { retryAfterSeconds: publicError.retryAfterSeconds }),
+    envelope: createErrorEnvelope(code, message, requestId),
+  }
 }
 
 /**
@@ -57,31 +108,18 @@ export function registerErrorHandlers(app: FastifyInstance): void {
     void reply
       .header('Cache-Control', 'no-store')
       .status(404)
-      .send(createErrorEnvelope('NOT_FOUND', 'The requested route is not part of the API contract.', request.id))
+      .send(createErrorEnvelope('NOT_FOUND', NOT_FOUND_MESSAGE, request.id))
   })
 
   // Fastify 5 的 setErrorHandler 默认把错误参数推断为 unknown，因此显式声明 FastifyError。
   app.setErrorHandler<FastifyError>((error, request, reply) => {
-    const publicError = findPublicError(error)
-    const reported = publicError?.statusCode ?? (typeof error.statusCode === 'number' ? error.statusCode : 500)
-    const statusCode = reported >= 400 && reported < 600 ? reported : 500
-
-    const message = publicError?.publicMessage ?? resolvePublicMessage(statusCode, error)
-    const code = publicError?.code ?? codeForStatus(statusCode)
-
-    // Exceptions from hashing, delivery or PostgreSQL can contain submitted secrets.
-    // Request ID remains attached by Fastify; log only the safe classification.
-    if (statusCode >= 500) {
-      request.log.error({ code, statusCode }, 'request failed')
-    } else {
-      request.log.warn({ code, statusCode }, 'request rejected')
-    }
+    const resolution = resolveErrorResponse(error, request.log, request.id)
 
     void reply.header('Cache-Control', 'no-store')
-    if (publicError?.retryAfterSeconds !== undefined) {
-      void reply.header('Retry-After', String(publicError.retryAfterSeconds))
+    if (resolution.retryAfterSeconds !== undefined) {
+      void reply.header('Retry-After', String(resolution.retryAfterSeconds))
     }
-    void reply.status(statusCode).send(createErrorEnvelope(code, message, request.id))
+    void reply.status(resolution.statusCode).send(resolution.envelope)
   })
 }
 

@@ -1,9 +1,11 @@
 import type { components } from '@workspace/api-client/types'
-import type { IncomingMessage } from 'node:http'
-import type { Readable, Transform } from 'node:stream'
-import type { FastifyInstance, FastifyRequest, FastifyReply, RouteOptions } from 'fastify'
+import type { FastifyInstance, FastifyRequest, RouteOptions } from 'fastify'
 import { AuthError } from '@server/src/modules/auth/errors.js'
-import { MultipartWireCounter, multipartBoundary, type MultipartWireErrors } from '@server/src/http/shared/multipart-counter.js'
+import type { MultipartWireErrors } from '@server/src/http/shared/multipart-counter.js'
+import {
+  createMultipartUploadRegistry, declaredResponseStatuses,
+  type MultipartParseResult, type MultipartUploadLimits, type MultipartUploadScope,
+} from '@server/src/http/shared/multipart-upload-lifecycle.js'
 import { normalizeJoinApplicationPayload } from '@server/src/domains/join/applications/form-validation.js'
 import type { JoinProofInput } from '@server/src/domains/join/applications/attachment-validation.js'
 
@@ -11,7 +13,7 @@ import type { JoinProofInput } from '@server/src/domains/join/applications/attac
 export type JoinTransportBody = components['schemas']['JoinApplicationRequest']
 export interface ParsedJoinUpload { application: components['schemas']['JoinApplicationPayload']; proofs: JoinProofInput[] }
 
-interface UploadLimits {
+interface UploadLimits extends MultipartUploadLimits {
   wireBytes: number; jsonBytes: number; fileBytes: number; totalFileBytes: number
   proofs: number; parts: number; fieldNameBytes: number; headerPairs: number
   headerBytes: number; slots: number; deadlineMs: number
@@ -24,24 +26,28 @@ const JOIN_WIRE_ERRORS: MultipartWireErrors = {
   unsupportedMediaType: () => new AuthError('JOIN_UNSUPPORTED_MEDIA_TYPE'),
 }
 interface DownloadLimits { slots: number; deadlineMs: number }
-interface UploadContext {
-  proofs: JoinProofInput[]; source?: Readable; counter?: Transform; file?: Readable
-  failure?: AuthError; parsing?: boolean; release: () => void
-}
-const uploads = new WeakMap<FastifyRequest, UploadContext>()
+
+/**
+ * 加入申请的上传生命周期注册表。
+ *
+ * 连接时序（raw 适配、流接入、deadline、abort、buffer 与单次槽位释放）由共用 module 拥有；
+ * 这里只保留配置核验、前置限流、payload 规则、错误分类与可信 getter。
+ * controller 按 transport 注册创建，容量因此归该 Fastify 实例私有。
+ */
+const joinUploads = createMultipartUploadRegistry<ParsedJoinUpload>()
 
 /** Buffers never enter the JSON schema body. Nonempty markers require the trusted parser context. */
 export function getJoinProofs(request: FastifyRequest): JoinProofInput[] {
-  const context = uploads.get(request)
   const proofs = (request.body as { proofs?: unknown } | undefined)?.proofs
   if (!Array.isArray(proofs) || proofs.some(value => typeof value !== 'string')) throw new AuthError('BAD_REQUEST')
-  if (context === undefined) {
+  const parsed = joinUploads.getParsed(request)
+  if (parsed === undefined) {
+    // 直接 handler 调用没有解析上下文；此时只允许空的 proofs 标记。
     if (proofs.length !== 0) throw new AuthError('BAD_REQUEST')
     return []
   }
-  if (context.failure !== undefined) throw context.failure
-  if (proofs.length !== context.proofs.length || proofs.some((value, i) => value !== `join-proof-${i}`)) throw new AuthError('BAD_REQUEST')
-  return context.proofs
+  if (proofs.length !== parsed.proofs.length || proofs.some((value, i) => value !== `join-proof-${i}`)) throw new AuthError('BAD_REQUEST')
+  return parsed.proofs
 }
 
 function config<T extends object>(value: unknown, keys: readonly string[]): T {
@@ -55,138 +61,95 @@ function config<T extends object>(value: unknown, keys: readonly string[]): T {
   return value as T
 }
 
-function appendHook<K extends 'onRequest' | 'preParsing' | 'preValidation' | 'onResponse' | 'onError' | 'onRequestAbort'>(route: RouteOptions, key: K, hook: NonNullable<RouteOptions[K]>): void {
+function appendHook<K extends 'onRequest' | 'preValidation' | 'onResponse' | 'onError' | 'onRequestAbort'>(route: RouteOptions, key: K, hook: NonNullable<RouteOptions[K]>): void {
   const previous = route[key]
   // Each stage keeps existing Glue/consumer hooks in their declared order.
   Object.assign(route, { [key]: [...(previous === undefined ? [] : Array.isArray(previous) ? previous : [previous]), hook] })
 }
 
-function destroyUpload(context: UploadContext): void {
-  context.source?.unpipe(context.counter)
-  context.file?.destroy()
-  context.counter?.destroy()
-  // Stop consuming input; close the rejected connection after sending its safe response.
-  context.source?.pause()
+/** 恰好一个 application JSON 文件与至多 proofs 个附件；未知字段与非文件 part 一律拒绝。 */
+async function parseJoinUpload(
+  _request: FastifyRequest, scope: MultipartUploadScope, budget: UploadLimits,
+): Promise<MultipartParseResult<ParsedJoinUpload>> {
+  let application: unknown
+  let seenApplication = false
+  let total = 0
+  let count = 0
+  const proofs: JoinProofInput[] = []
+  for await (const part of scope.parts({
+    parts: budget.parts, files: budget.parts, fields: budget.parts,
+    fieldSize: budget.jsonBytes,
+    fileSize: Math.max(budget.fileBytes, budget.jsonBytes),
+    fieldNameSize: budget.fieldNameBytes,
+    headerPairs: budget.headerPairs,
+    headerSize: budget.headerBytes,
+  })) {
+    // 字段名按 UTF-8 字节数显式复核，不能只信任 busboy 的 fieldNameSize。
+    if (Buffer.byteLength(part.fieldname, 'utf8') > budget.fieldNameBytes) throw new AuthError('JOIN_UPLOAD_TOO_LARGE')
+    if (part.type !== 'file') throw new AuthError('BAD_REQUEST')
+    if (part.fieldname !== 'application' && part.fieldname !== 'proofs') throw new AuthError('BAD_REQUEST')
+    const json = part.fieldname === 'application'
+    if (json && (seenApplication || part.mimetype !== 'application/json')) {
+      throw new AuthError(seenApplication ? 'BAD_REQUEST' : 'JOIN_UNSUPPORTED_MEDIA_TYPE')
+    }
+    if (json) seenApplication = true
+    if (!json && ++count > budget.proofs) throw new AuthError('JOIN_UPLOAD_TOO_LARGE')
+    // 附件同时受单文件上限与剩余总量上限约束。
+    const maxBytes = json ? budget.jsonBytes : Math.min(budget.fileBytes, budget.totalFileBytes - total)
+    const buffer = await scope.readFile(part.file, maxBytes)
+    if (json) {
+      try { application = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(buffer)) }
+      catch { throw new AuthError('BAD_REQUEST') }
+    } else {
+      total += buffer.length
+      if (total > budget.totalFileBytes) throw new AuthError('JOIN_UPLOAD_TOO_LARGE')
+      proofs.push({ originalName: part.filename, bytes: buffer })
+    }
+  }
+  if (!seenApplication) throw new AuthError('BAD_REQUEST')
+  // 归一化结果仍由 Contract validator 复核；此处只按既有信任边界转成 schema 形状。
+  const normalized = normalizeJoinApplicationPayload(application) as components['schemas']['JoinApplicationPayload']
+  return {
+    body: { application: normalized, proofs: proofs.map((_, i) => `join-proof-${i}`) },
+    value: { application: normalized, proofs },
+  }
 }
 
-async function parseUpload(request: FastifyRequest, limits: UploadLimits): Promise<void> {
-  const context = uploads.get(request)
-  if (context === undefined || context.counter === undefined) throw new AuthError('BAD_REQUEST')
-  if (context.failure !== undefined) throw context.failure
-  context.parsing = true
-  const raw = request.raw
-  const counter = context.counter
-  // multipart 10 uses raw directly, rather than Fastify's preParsing payload.
-  // Adapt only while consuming parts; retain the original connection for all lifecycle events.
-  Object.assign(counter, { headers: raw.headers })
-  request.raw = counter as unknown as IncomingMessage
-  let application: unknown, seenApplication = false, total = 0, count = 0
-  try {
-    for await (const part of request.parts({ preservePath: true, limits: {
-      parts: limits.parts, files: limits.parts, fields: limits.parts, fieldSize: limits.jsonBytes, fileSize: Math.max(limits.fileBytes, limits.jsonBytes),
-      fieldNameSize: limits.fieldNameBytes, headerPairs: limits.headerPairs, headerSize: limits.headerBytes,
-    } })) {
-      if (context.failure !== undefined) throw context.failure
-      if (Buffer.byteLength(part.fieldname) > limits.fieldNameBytes) throw new AuthError('JOIN_UPLOAD_TOO_LARGE')
-      if (part.type !== 'file') throw new AuthError('BAD_REQUEST')
-      if (part.fieldname !== 'application' && part.fieldname !== 'proofs') throw new AuthError('BAD_REQUEST')
-      const json = part.fieldname === 'application'
-      if (json && (seenApplication || part.mimetype !== 'application/json')) throw new AuthError(seenApplication ? 'BAD_REQUEST' : 'JOIN_UNSUPPORTED_MEDIA_TYPE')
-      if (json) seenApplication = true
-      if (!json && ++count > limits.proofs) throw new AuthError('JOIN_UPLOAD_TOO_LARGE')
-      const maxBytes = json ? limits.jsonBytes : limits.fileBytes
-      const chunks: Buffer[] = []
-      let bytes = 0
-      context.file = part.file
-      for await (const chunk of part.file) {
-        bytes += chunk.length
-        if (bytes > maxBytes) throw new AuthError('JOIN_UPLOAD_TOO_LARGE')
-        if (!json) { total += chunk.length; if (total > limits.totalFileBytes) throw new AuthError('JOIN_UPLOAD_TOO_LARGE') }
-        chunks.push(chunk)
-      }
-      context.file = undefined
-      if (part.file.truncated) throw new AuthError('JOIN_UPLOAD_TOO_LARGE')
-      const buffer = Buffer.concat(chunks, bytes)
-      if (json) {
-        try { application = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(buffer)) }
-        catch { throw new AuthError('BAD_REQUEST') }
-      } else context.proofs.push({ originalName: part.filename, bytes: buffer })
-    }
-    if (!seenApplication || context.failure !== undefined) throw context.failure ?? new AuthError('BAD_REQUEST')
-    request.body = { application: normalizeJoinApplicationPayload(application), proofs: context.proofs.map((_, i) => `join-proof-${i}`) }
-  } catch (error) {
-    destroyUpload(context)
-    if (context.failure !== undefined) throw context.failure
-    if (error instanceof AuthError) throw error
-    if (typeof error === 'object' && error !== null && 'statusCode' in error && error.statusCode === 413) throw new AuthError('JOIN_UPLOAD_TOO_LARGE')
-    throw new AuthError('BAD_REQUEST')
-  } finally { request.raw = raw }
+function classify(error: unknown): Error {
+  if (error instanceof AuthError) return error
+  if (typeof error === 'object' && error !== null && 'statusCode' in error && (error as { statusCode?: unknown }).statusCode === 413) {
+    return new AuthError('JOIN_UPLOAD_TOO_LARGE')
+  }
+  return new AuthError('BAD_REQUEST')
 }
 
 export function registerJoinTransport(app: FastifyInstance): void {
-  let activeUploads = 0, activeDownloads = 0
+  let activeDownloads = 0
+  // 每次注册建一个 controller：槽位属于这个 Fastify 实例，不与其他实例共享。
+  const joinUpload = joinUploads.create(app)
   app.addHook('onRoute', route => {
     const operationId = (route.schema as { operationId?: string } | undefined)?.operationId
     if (operationId === 'submitJoinApplication') {
-      const limits = config<UploadLimits>((route.config as { joinUpload?: unknown }).joinUpload,
+      const budget = config<UploadLimits>((route.config as { joinUpload?: unknown }).joinUpload,
         ['wireBytes','jsonBytes','fileBytes','totalFileBytes','proofs','parts','fieldNameBytes','headerPairs','headerBytes','slots','deadlineMs'])
-      if (limits.parts !== limits.proofs + 1 || limits.totalFileBytes > limits.proofs * limits.fileBytes || limits.jsonBytes > limits.wireBytes) throw new Error('Inconsistent join upload limits.')
-      route.bodyLimit = limits.wireBytes
-      appendHook(route, 'onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
-        void reply.header('Cache-Control', 'no-store')
-        request.server.invitationServices.limit(request.ip)
-        const boundary = multipartBoundary(request.headers['content-type'], JOIN_WIRE_ERRORS)
-        if (activeUploads >= limits.slots) throw new AuthError('JOIN_UPLOAD_BUSY', { retryAfterSeconds: 5 })
-        const length = request.headers['content-length']
-        if (length !== undefined && (!/^\d+$/.test(length) || Number(length) > limits.wireBytes)) throw new AuthError('JOIN_UPLOAD_TOO_LARGE')
-        activeUploads++
-        let released = false
-        const original = request.raw
-        const context: UploadContext = { proofs: [], release: () => {
-          if (released) return
-          released = true; clearTimeout(timer); activeUploads--; context.proofs.length = 0
-          original.removeListener('aborted', abort); reply.raw.removeListener('close', close)
-        } }
-        const abort = () => { destroyUpload(context); context.release() }
-        const close = () => { destroyUpload(context); context.release() }
-        const timer = setTimeout(() => {
-          context.failure = new AuthError('JOIN_UPLOAD_TIMEOUT')
-          // Reject any pending multipart iterator before releasing its buffers.
-          context.counter?.destroy(context.failure)
-          context.file?.destroy(context.failure)
-          if (!reply.sent) void reply.send(context.failure)
-          else reply.raw.destroy()
-          context.release()
-        }, limits.deadlineMs)
-        timer.unref()
-        original.once('aborted', abort); reply.raw.once('close', close)
-        uploads.set(request, context)
-        context.counter = new MultipartWireCounter(boundary, limits, JOIN_WIRE_ERRORS)
-        context.counter.on('error', error => {
-          context.failure ??= error instanceof AuthError ? error : new AuthError('BAD_REQUEST')
-          if (!context.parsing && !reply.sent) void reply.send(context.failure)
-        })
+      if (budget.parts !== budget.proofs + 1 || budget.totalFileBytes > budget.proofs * budget.fileBytes || budget.jsonBytes > budget.wireBytes) throw new Error('Inconsistent join upload limits.')
+      joinUpload.attach(route, {
+        // `budget` 是 route config 的活动对象：deadline 等限额在每请求读取，
+        // 测试对 route config 的覆盖仍然生效，注册时不冻结第二份常量。
+        limits: budget,
+        declaredStatuses: declaredResponseStatuses(route),
+        errors: JOIN_WIRE_ERRORS,
+        // 限流先于占位与任何请求体消费。
+        admit: request => { request.server.invitationServices.limit(request.ip) },
+        parse: (request, scope) => parseJoinUpload(request, scope, budget),
+        classify,
+        timedOut: () => new AuthError('JOIN_UPLOAD_TIMEOUT'),
+        busy: () => new AuthError('JOIN_UPLOAD_BUSY', { retryAfterSeconds: 5 }),
       })
-      appendHook(route, 'preParsing', async (request: FastifyRequest, _reply: FastifyReply, payload: Readable) => {
-        const context = uploads.get(request)!
-        context.source = payload
-        payload.on('error', error => context.counter?.destroy(error))
-        payload.pipe(context.counter!)
-        return context.counter!
-      })
-      appendHook(route, 'preValidation', async (request: FastifyRequest) => parseUpload(request, limits))
-      appendHook(route, 'onResponse', async (request: FastifyRequest) => { uploads.get(request)?.release(); uploads.delete(request) })
-      appendHook(route, 'onError', async (request: FastifyRequest, reply: FastifyReply) => {
-        const context = uploads.get(request)
-        if (context !== undefined) { destroyUpload(context); context.release() }
-        // Do not keep accepting the rest of an invalid body on a persistent socket.
-        void reply.header('Connection', 'close')
-      })
-      appendHook(route, 'onRequestAbort', async (request: FastifyRequest) => { const context = uploads.get(request); if (context) { destroyUpload(context); context.release() } })
     } else if (operationId === 'downloadJoinApplicationAttachment') {
       const limits = config<DownloadLimits>((route.config as { joinDownload?: unknown }).joinDownload, ['slots','deadlineMs'])
       const releases = new WeakMap<FastifyRequest, () => void>()
-      appendHook(route, 'onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
+      appendHook(route, 'onRequest', async (request: FastifyRequest, reply) => {
         void reply.header('Cache-Control', 'no-store')
         if (activeDownloads >= limits.slots) throw new AuthError('JOIN_DOWNLOAD_BUSY', { retryAfterSeconds: 5 })
         activeDownloads++
@@ -195,11 +158,11 @@ export function registerJoinTransport(app: FastifyInstance): void {
         const timer = setTimeout(() => { reply.raw.destroy(); release() }, limits.deadlineMs)
         timer.unref(); reply.raw.once('close', release); releases.set(request, release)
       })
-      appendHook(route, 'onResponse', async (request: FastifyRequest) => { releases.get(request)?.(); releases.delete(request) })
-      appendHook(route, 'onError', async (request: FastifyRequest) => { releases.get(request)?.(); releases.delete(request) })
-      appendHook(route, 'onRequestAbort', async (request: FastifyRequest) => { releases.get(request)?.(); releases.delete(request) })
+      appendHook(route, 'onResponse', async request => { releases.get(request)?.(); releases.delete(request) })
+      appendHook(route, 'onError', async request => { releases.get(request)?.(); releases.delete(request) })
+      appendHook(route, 'onRequestAbort', async request => { releases.get(request)?.(); releases.delete(request) })
     } else if (operationId === 'queryJoinApplicationResult') {
-      appendHook(route, 'onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
+      appendHook(route, 'onRequest', async (request, reply) => {
         void reply.header('Cache-Control', 'no-store'); request.server.invitationServices.limit(request.ip)
       })
     }

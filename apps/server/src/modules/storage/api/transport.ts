@@ -1,10 +1,13 @@
 import type { components } from '@workspace/api-client/types'
 import type { Medium } from '../service.js'
-import type { IncomingMessage } from 'node:http'
-import type { Readable, Transform } from 'node:stream'
 import type { FastifyInstance, FastifyReply, FastifyRequest, RouteOptions } from 'fastify'
 import { authenticateBearer } from '@server/src/modules/auth/api/security.js'
-import { MultipartWireCounter, multipartBoundary, type MultipartWireErrors } from '@server/src/http/shared/multipart-counter.js'
+import type { MultipartWireErrors } from '@server/src/http/shared/multipart-counter.js'
+import {
+  createMultipartUploadRegistry, declaredResponseStatuses,
+  type MultipartParseResult, type MultipartUploadLimits, type MultipartUploadScope,
+  type UploadFieldPart,
+} from '@server/src/http/shared/multipart-upload-lifecycle.js'
 import { StorageError, storageBusy } from '@server/src/modules/storage/errors.js'
 import { assertStorageKey } from '@server/src/modules/storage/key.js'
 import { FALLBACK_CONTENT_TYPE, assertContentType, resolveContentType, resolveMedium } from '@server/src/modules/storage/service.js'
@@ -14,21 +17,6 @@ interface UploadLimits {
   fieldNameBytes: number; headerPairs: number; headerBytes: number; slots: number; deadlineMs: number
 }
 interface DownloadLimits { deadlineMs: number }
-
-interface UploadContext {
-  key?: string
-  bytes?: Uint8Array
-  medium?: Medium
-  contentType?: string
-  source?: Readable
-  counter?: MultipartWireCounter
-  file?: Readable
-  failure?: StorageError
-  parsing?: boolean
-  release: () => void
-}
-
-const uploads = new WeakMap<FastifyRequest, UploadContext>()
 
 /**
  * 由解析器生成、写入 schema body 的 data 占位标识。
@@ -50,6 +38,15 @@ const STORAGE_WIRE_ERRORS: MultipartWireErrors = {
   unsupportedMediaType: () => new StorageError('STORAGE_UNSUPPORTED_MEDIA_TYPE'),
 }
 
+/**
+ * 存储上传的生命周期注册表。
+ *
+ * 连接时序（raw 适配、流接入、deadline、abort、buffer 与单次槽位释放）由共用 module 拥有；
+ * 这里只保留配置核验、前置 Bearer 认证、key/字段/介质规则、错误分类与可信 getter。
+ * controller 按 transport 注册创建：容量与加入申请彼此独立，也不与其他 Fastify 实例共享。
+ */
+const storageUploads = createMultipartUploadRegistry<ParsedStorageUpload>()
+
 function config<T extends object>(value: unknown, keys: readonly string[]): T {
   if (value === null || typeof value !== 'object') throw new Error('Missing storage transport limits in API contract.')
   const limits = value as Record<string, unknown>
@@ -61,22 +58,14 @@ function config<T extends object>(value: unknown, keys: readonly string[]): T {
   return value as T
 }
 
-function appendHook<K extends 'onRequest' | 'preParsing' | 'preValidation' | 'onResponse' | 'onError' | 'onRequestAbort'>(route: RouteOptions, key: K, hook: NonNullable<RouteOptions[K]>): void {
+function appendHook<K extends 'preValidation' | 'onRequest' | 'onResponse' | 'onError'>(route: RouteOptions, key: K, hook: NonNullable<RouteOptions[K]>): void {
   const previous = route[key]
   // Each stage keeps existing Glue/consumer hooks in their declared order.
   Object.assign(route, { [key]: [...(previous === undefined ? [] : Array.isArray(previous) ? previous : [previous]), hook] })
 }
 
-function destroyUpload(context: UploadContext): void {
-  context.source?.unpipe(context.counter)
-  context.file?.destroy()
-  context.counter?.destroy()
-  // Stop consuming input; close the rejected connection after sending its safe response.
-  context.source?.pause()
-}
-
 /** 文本字段：重复、未知、截断都明确失败。 */
-function readTextField(part: { value: unknown; fieldname: string; valueTruncated: boolean; fieldnameTruncated: boolean }, limits: UploadLimits): string {
+function readTextField(part: UploadFieldPart, limits: UploadLimits): string {
   if (part.fieldnameTruncated || part.valueTruncated) throw new StorageError('STORAGE_TOO_LARGE')
   if (typeof part.value !== 'string' || Buffer.byteLength(part.value, 'utf8') > limits.fieldBytes) {
     throw new StorageError('STORAGE_INVALID_INPUT')
@@ -84,109 +73,83 @@ function readTextField(part: { value: unknown; fieldname: string; valueTruncated
   return part.value
 }
 
-async function parseUpload(request: FastifyRequest, limits: UploadLimits, maxBytes: number): Promise<void> {
-  const context = uploads.get(request)
-  if (context === undefined || context.counter === undefined) throw new StorageError('STORAGE_INVALID_INPUT')
-  if (context.failure !== undefined) throw context.failure
-  context.parsing = true
-  const raw = request.raw
-  const counter = context.counter
-  // multipart 10 uses raw directly, rather than Fastify's preParsing payload.
-  // Adapt only while consuming parts; retain the original connection for all lifecycle events.
-  Object.assign(counter, { headers: raw.headers })
-  request.raw = counter as unknown as IncomingMessage
-
+/** `key/medium/contentType` 文本字段任意顺序，恰好一个 `data` 文件；未知/重复/多文件拒绝。 */
+async function parseStorageUpload(
+  _request: FastifyRequest, scope: MultipartUploadScope, budget: UploadLimits, maxBytes: number,
+): Promise<MultipartParseResult<ParsedStorageUpload>> {
   let key: string | undefined, medium: string | undefined, contentType: string | undefined
   let data: Uint8Array | undefined, dataMediaType: string | undefined, textParts = 0
-  try {
-    for await (const part of request.parts({ preservePath: true, limits: {
-      parts: limits.fields + limits.files + 1,
-      // busboy 的 files 限制会把第二个文件报成 413；这里让它多放行一个，
-      // 由下面的显式检查把「多文件」归到结构错误 400。总 part 数仍受 parts 上限约束。
-      files: limits.files + 1,
-      fields: limits.fields,
-      fieldSize: limits.fieldBytes,
-      fileSize: maxBytes,
-      fieldNameSize: limits.fieldNameBytes,
-      headerPairs: limits.headerPairs,
-      headerSize: limits.headerBytes,
-    } })) {
-      if (context.failure !== undefined) throw context.failure
-      if (Buffer.byteLength(part.fieldname) > limits.fieldNameBytes) throw new StorageError('STORAGE_TOO_LARGE')
+  for await (const part of scope.parts({
+    parts: budget.fields + budget.files + 1,
+    // busboy 的 files 限制会把第二个文件报成 413；这里让它多放行一个，
+    // 由下面的显式检查把「多文件」归到结构错误 400。总 part 数仍受 parts 上限约束。
+    files: budget.files + 1,
+    fields: budget.fields,
+    fieldSize: budget.fieldBytes,
+    fileSize: maxBytes,
+    fieldNameSize: budget.fieldNameBytes,
+    headerPairs: budget.headerPairs,
+    headerSize: budget.headerBytes,
+  })) {
+    // 字段名按 UTF-8 字节数显式复核，不能只信任 busboy 的 fieldNameSize。
+    if (Buffer.byteLength(part.fieldname, 'utf8') > budget.fieldNameBytes) throw new StorageError('STORAGE_TOO_LARGE')
 
-      if (part.type !== 'file') {
-        if (++textParts > limits.fields) throw new StorageError('STORAGE_INVALID_INPUT')
-        const value = readTextField(part, limits)
-        if (part.fieldname === 'key') {
-          if (key !== undefined) throw new StorageError('STORAGE_INVALID_INPUT')
-          key = value
-        } else if (part.fieldname === 'medium') {
-          if (medium !== undefined) throw new StorageError('STORAGE_INVALID_INPUT')
-          medium = value
-        } else if (part.fieldname === 'contentType') {
-          if (contentType !== undefined) throw new StorageError('STORAGE_INVALID_INPUT')
-          contentType = value
-        } else {
-          throw new StorageError('STORAGE_INVALID_INPUT')
-        }
-        continue
+    if (part.type !== 'file') {
+      if (++textParts > budget.fields) throw new StorageError('STORAGE_INVALID_INPUT')
+      const value = readTextField(part, budget)
+      if (part.fieldname === 'key') {
+        if (key !== undefined) throw new StorageError('STORAGE_INVALID_INPUT')
+        key = value
+      } else if (part.fieldname === 'medium') {
+        if (medium !== undefined) throw new StorageError('STORAGE_INVALID_INPUT')
+        medium = value
+      } else if (part.fieldname === 'contentType') {
+        if (contentType !== undefined) throw new StorageError('STORAGE_INVALID_INPUT')
+        contentType = value
+      } else {
+        throw new StorageError('STORAGE_INVALID_INPUT')
       }
-
-      if (part.fieldname !== 'data' || data !== undefined) throw new StorageError('STORAGE_INVALID_INPUT')
-      const chunks: Buffer[] = []
-      let bytes = 0
-      context.file = part.file
-      for await (const chunk of part.file) {
-        bytes += chunk.length
-        if (bytes > maxBytes) throw new StorageError('STORAGE_TOO_LARGE')
-        chunks.push(chunk)
-      }
-      context.file = undefined
-      // 截断标记同样视为超限：绝不保存部分文件。
-      if (part.file.truncated) throw new StorageError('STORAGE_TOO_LARGE')
-      data = new Uint8Array(Buffer.concat(chunks, bytes))
-      dataMediaType = part.mimetype
+      continue
     }
 
-    if (key === undefined || data === undefined) throw new StorageError('STORAGE_INVALID_INPUT')
-    const validatedKey = assertStorageKey(key)
-    const resolvedMedium = medium === undefined ? undefined : resolveMedium(medium, 'file')
-    // 显式 contentType 优先，其次 part MIME，最后回退。
-    const resolvedType = resolveContentType(contentType, dataMediaType)
+    if (part.fieldname !== 'data' || data !== undefined) throw new StorageError('STORAGE_INVALID_INPUT')
+    // readFile 同时处理截断标记：绝不保存部分文件。
+    data = new Uint8Array(await scope.readFile(part.file, maxBytes))
+    dataMediaType = part.mimetype
+  }
 
-    context.key = validatedKey
-    // 只在解析成功后挂上字节：失败路径不保留任何内容。
-    context.bytes = data
-    context.medium = resolvedMedium
-    context.contentType = resolvedType
-    request.body = {
+  if (key === undefined || data === undefined) throw new StorageError('STORAGE_INVALID_INPUT')
+  const validatedKey = assertStorageKey(key)
+  const resolvedMedium = medium === undefined ? undefined : resolveMedium(medium, 'file')
+  // 显式 contentType 优先，其次 part MIME，最后回退。
+  const resolvedType = resolveContentType(contentType, dataMediaType)
+  return {
+    body: {
       key: validatedKey,
       data: STORAGE_DATA_MARKER,
       ...(medium === undefined ? {} : { medium }),
       ...(resolvedType === FALLBACK_CONTENT_TYPE ? {} : { contentType: resolvedType }),
-    }
-  } catch (error) {
-    destroyUpload(context)
-    if (context.failure !== undefined) throw context.failure
-    if (error instanceof StorageError) throw error
-    if (typeof error === 'object' && error !== null && 'statusCode' in error && error.statusCode === 413) {
-      throw new StorageError('STORAGE_TOO_LARGE')
-    }
-    throw new StorageError('STORAGE_INVALID_INPUT')
-  } finally {
-    request.raw = raw
+    },
+    value: { key: validatedKey, bytes: data, medium: resolvedMedium, contentType: resolvedType },
   }
+}
+
+function classify(error: unknown): Error {
+  if (error instanceof StorageError) return error
+  if (typeof error === 'object' && error !== null && 'statusCode' in error && (error as { statusCode?: unknown }).statusCode === 413) {
+    return new StorageError('STORAGE_TOO_LARGE')
+  }
+  return new StorageError('STORAGE_INVALID_INPUT')
 }
 
 /** handler 侧读取：必须同时核对占位标识与可信解析上下文。 */
 export function getStorageUpload(request: FastifyRequest): ParsedStorageUpload {
   const body = request.body as { data?: unknown } | undefined
-  const context = uploads.get(request)
   if (body?.data !== STORAGE_DATA_MARKER) throw new StorageError('STORAGE_INVALID_INPUT')
-  if (context === undefined) throw new StorageError('STORAGE_INVALID_INPUT')
-  if (context.failure !== undefined) throw context.failure
-  if (context.key === undefined || context.bytes === undefined) throw new StorageError('STORAGE_INVALID_INPUT')
-  return { key: context.key, bytes: context.bytes, medium: context.medium, contentType: context.contentType }
+  const parsed = storageUploads.getParsed(request)
+  // 没有真实解析上下文（含直接 handler 调用）时一律拒绝。
+  if (parsed === undefined) throw new StorageError('STORAGE_INVALID_INPUT')
+  return parsed
 }
 
 /**
@@ -230,8 +193,8 @@ export interface RegisterStorageTransportOptions {
 }
 
 export function registerStorageTransport(app: FastifyInstance, options: RegisterStorageTransportOptions): void {
-  let activeUploads = 0
-
+  // 每次注册建一个 controller：槽位属于这个 Fastify 实例，不与其他实例共享。
+  const storageUpload = storageUploads.create(app)
   app.addHook('onRoute', route => {
     const operationId = (route.schema as { operationId?: string } | undefined)?.operationId
 
@@ -278,76 +241,30 @@ export function registerStorageTransport(app: FastifyInstance, options: Register
 
     if (operationId !== 'uploadStorageContent') return
 
-    const limits = config<UploadLimits>((route.config as { storageUpload?: unknown }).storageUpload,
+    const budget = config<UploadLimits>((route.config as { storageUpload?: unknown }).storageUpload,
       ['wireOverheadBytes', 'fieldBytes', 'fields', 'files', 'fieldNameBytes', 'headerPairs', 'headerBytes', 'slots', 'deadlineMs'])
     // wire 上限 = 文件上限 + 限定的 multipart 元数据开销；加法必须保持安全整数。
-    const wireBytes = options.maxBytes + limits.wireOverheadBytes
-    if (!Number.isSafeInteger(wireBytes)) throw new Error('Storage upload wire budget is not a safe integer.')
-    route.bodyLimit = wireBytes
-
-    appendHook(route, 'onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
-      void reply.header('Cache-Control', 'no-store')
+    if (!Number.isSafeInteger(options.maxBytes + budget.wireOverheadBytes)) {
+      throw new Error('Storage upload wire budget is not a safe integer.')
+    }
+    // wire 上限不写死在 Contract 里；deadline/slots 等仍在每请求读取，测试覆盖依然生效。
+    const limits: MultipartUploadLimits = {
+      get wireBytes() { return options.maxBytes + budget.wireOverheadBytes },
+      get headerBytes() { return budget.headerBytes },
+      get headerPairs() { return budget.headerPairs },
+      get slots() { return budget.slots },
+      get deadlineMs() { return budget.deadlineMs },
+    }
+    storageUpload.attach(route, {
+      limits,
+      declaredStatuses: declaredResponseStatuses(route),
+      errors: STORAGE_WIRE_ERRORS,
       // 认证前移：任何请求体内容被消费之前完成 Bearer 校验。
-      await authenticateBearer(request, request.server.authServices)
-      const boundary = multipartBoundary(request.headers['content-type'], STORAGE_WIRE_ERRORS)
-      if (activeUploads >= limits.slots) throw storageBusy()
-      const length = request.headers['content-length']
-      if (length !== undefined && (!/^\d+$/.test(length) || Number(length) > wireBytes)) {
-        throw new StorageError('STORAGE_TOO_LARGE')
-      }
-      activeUploads++
-      let released = false
-      const original = request.raw
-      const context: UploadContext = { release: () => {
-        if (released) return
-        released = true; clearTimeout(timer); activeUploads--
-        context.bytes = undefined
-        original.removeListener('aborted', abort); reply.raw.removeListener('close', close)
-      } }
-      const abort = () => { destroyUpload(context); context.release() }
-      const close = () => { destroyUpload(context); context.release() }
-      const timer = setTimeout(() => {
-        context.failure = new StorageError('STORAGE_TIMEOUT')
-        // Reject any pending multipart iterator before releasing its buffers.
-        context.counter?.destroy(context.failure)
-        context.file?.destroy(context.failure)
-        if (!reply.raw.headersSent) void reply.send(context.failure)
-        // 头已发出后只能终止连接，不能二次写入 JSON。
-        else reply.raw.destroy()
-        context.release()
-      }, limits.deadlineMs)
-      timer.unref()
-      original.once('aborted', abort); reply.raw.once('close', close)
-      uploads.set(request, context)
-      // wire 上限在注册时由运行时 maxBytes 加开销算出，不写死在 Contract 里。
-      context.counter = new MultipartWireCounter(boundary, {
-        wireBytes,
-        headerBytes: limits.headerBytes,
-        headerPairs: limits.headerPairs,
-      }, STORAGE_WIRE_ERRORS)
-      context.counter.on('error', error => {
-        context.failure ??= error instanceof StorageError ? error : new StorageError('STORAGE_INVALID_INPUT')
-        if (!context.parsing && !reply.raw.headersSent) void reply.send(context.failure)
-      })
-    })
-    appendHook(route, 'preParsing', async (request: FastifyRequest, _reply: FastifyReply, payload: Readable) => {
-      const context = uploads.get(request)!
-      context.source = payload
-      payload.on('error', error => context.counter?.destroy(error))
-      payload.pipe(context.counter!)
-      return context.counter! as unknown as Transform
-    })
-    appendHook(route, 'preValidation', async (request: FastifyRequest) => parseUpload(request, limits, options.maxBytes))
-    appendHook(route, 'onResponse', async (request: FastifyRequest) => { uploads.get(request)?.release(); uploads.delete(request) })
-    appendHook(route, 'onError', async (request: FastifyRequest, reply: FastifyReply) => {
-      const context = uploads.get(request)
-      if (context !== undefined) { destroyUpload(context); context.release() }
-      // Do not keep accepting the rest of an invalid body on a persistent socket.
-      void reply.header('Connection', 'close')
-    })
-    appendHook(route, 'onRequestAbort', async (request: FastifyRequest) => {
-      const context = uploads.get(request)
-      if (context !== undefined) { destroyUpload(context); context.release() }
+      admit: async request => { await authenticateBearer(request, request.server.authServices) },
+      parse: (request, scope) => parseStorageUpload(request, scope, budget, options.maxBytes),
+      classify,
+      timedOut: () => new StorageError('STORAGE_TIMEOUT'),
+      busy: () => storageBusy(),
     })
   })
 }

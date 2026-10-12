@@ -51,6 +51,23 @@ export class MultipartWireCounter extends Transform {
     } catch (error) { callback(error as Error) }
   }
 
+  /**
+   * 正常结束时解除边界扫描保留的 pending buffer。
+   *
+   * 这里只补资源清理，不改变扫描算法或 wire 预算；扫描已在最后一个 chunk 完成，
+   * `_flush` 之后没有任何路径再读 pending。
+   */
+  override _flush(callback: (error?: Error | null, data?: Buffer) => void): void {
+    this.pending = Buffer.alloc(0)
+    callback(null)
+  }
+
+  /** 销毁时同样解除 pending：`Transform.destroy` 本身不清该字段。 */
+  override _destroy(error: Error | null, callback: (error?: Error | null) => void): void {
+    this.pending = Buffer.alloc(0)
+    super._destroy(error, callback)
+  }
+
   private scan(chunk: Buffer): void {
     this.pending = Buffer.concat([this.pending, chunk])
     for (;;) {
