@@ -12,6 +12,8 @@ Glue 的 Bearer handler 等待异步会话验证后才把身份交给受保护 o
 
 `apps/server/src/http/foundation.ts` 归集应用级错误处理、CORS 与 multipart，在 `app.ts` 中先于 API 插件注册。`http/` 目录同时容纳基础能力与 API 接入，注册作用域由插件配置及装配位置决定：基础插件通过 `fastify-plugin` 在应用作用域生效，`apps/server/src/http/plugin.ts` 使用 `encapsulate: true` 隔离 API 专属 hook 与请求字段。
 
+两条上传 operation（加入申请、存储）的连接时序由 `apps/server/src/http/shared/multipart-upload-lifecycle.ts` 共同拥有：wire 计数流接入、`request.raw` 临时替换与还原、deadline、abort/close、buffer 引用解除与容量释放。各业务 transport 只保留配置核验、前置认证/限流、payload 规则、可信 getter 与错误分类。因为 Glue 在自己的封装作用域注册路由，会话按请求对象键控，不能用 `request.server` 反查 controller。陷阱、响应归属与容量证据见 `.ai/knowledge/server/multipart-lifecycle-traps.md`。
+
 ## 业务发现与注入
 
 `apps/server/src/business-plugins.ts` 从自身 ESM URL 定位同层 `modules`、`domains`，只发现直接子目录的 `plugin.ts`（源码）或 `plugin.js`（编译产物）。两种扩展同时存在时拒绝；不跨模式回退、不扫描 API、service、测试或子目录。无入口目录跳过，包括其包文件；扫描根目录本身有包文件、候选声明 CommonJS、链接根或候选目录均拒绝。新增入口需要重启，不保证新增文件的 watch 或运行中热插拔。
