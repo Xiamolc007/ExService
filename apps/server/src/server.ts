@@ -1,83 +1,160 @@
-import { createApp } from '@server/src/app.js'
-import { parseAuthCodeHmacKey } from '@server/src/modules/auth/crypto.js'
-import { assertAuthSchemaAvailable } from '@server/src/modules/auth/service.js'
-import { createAuthServices } from '@server/src/create-services.js'
-import { openDatabase } from '@server/src/db/client.js'
-import { assertDatabaseReady } from '@server/src/db/schema-check.js'
-import { assertCommunitySchemaAvailable } from '@server/src/domains/community/schema-check.js'
-import { ProfileService, avatarDirectory, publicAvatarBaseUrl } from '@server/src/modules/profile/service.js'
-import { assertProfileSchemaAvailable } from '@server/src/modules/profile/schema-check.js'
-import { assertJoinSchemaAvailable } from '@server/src/domains/join/applications/schema-check.js'
-import { createStorageModule } from '@server/src/modules/storage/factory.js'
-import { parseStorageConfig, StorageConfigError } from '@server/src/modules/storage/config.js'
-import { CorsConfigError, parseCorsAllowedOrigins } from '@server/src/http/cors.js'
-import { HttpHydraAdmin, OidcService } from '@server/src/modules/identity/oidc.js'
-import { configuredIdentityOutboxWorker, startIdentityOutboxWorker } from '@server/src/modules/identity/outbox.js'
-import { IdentityConfigError, parseIdentityConfig } from '@server/src/modules/identity/config.js'
-import { assertDeploymentBinding } from '@server/src/modules/identity/deployment-binding.js'
-import { createNotificationModule, deriveNotificationTokenKey } from '@server/src/modules/notifications/factory.js'
+import { createApp, type CreateAppOptions } from "@server/src/app.js";
+import { startApplication, APPLICATION_CLEANUP_FAILED } from "@server/src/start-application.js";
+import { BusinessPluginLoadError, formatBusinessPluginError } from "@server/src/business-plugin-errors.js";
+import { parseAuthCodeHmacKey } from "@server/src/modules/auth/crypto.js";
+import { assertAuthSchemaAvailable } from "@server/src/modules/auth/service.js";
+import { createAuthServices } from "@server/src/create-services.js";
+import { openDatabase } from "@server/src/db/client.js";
+import { assertDatabaseReady } from "@server/src/db/schema-check.js";
+import { assertCommunitySchemaAvailable } from "@server/src/domains/community/schema-check.js";
+import {
+  ProfileService,
+  avatarDirectory,
+  publicAvatarBaseUrl,
+} from "@server/src/modules/profile/service.js";
+import { assertProfileSchemaAvailable } from "@server/src/modules/profile/schema-check.js";
+import { assertJoinSchemaAvailable } from "@server/src/domains/join/applications/schema-check.js";
+import { createStorageModule } from "@server/src/modules/storage/factory.js";
+import {
+  parseStorageConfig,
+  StorageConfigError,
+} from "@server/src/modules/storage/config.js";
+import {
+  CorsConfigError,
+  parseCorsAllowedOrigins,
+} from "@server/src/http/cors.js";
+import {
+  HttpHydraAdmin,
+  OidcService,
+} from "@server/src/modules/identity/oidc.js";
+import {
+  configuredIdentityOutboxWorker,
+  startIdentityOutboxWorker,
+} from "@server/src/modules/identity/outbox.js";
+import {
+  IdentityConfigError,
+  parseIdentityConfig,
+} from "@server/src/modules/identity/config.js";
+import { assertDeploymentBinding } from "@server/src/modules/identity/deployment-binding.js";
+import {
+  createNotificationModule,
+  deriveNotificationTokenKey,
+  type NotificationModule,
+} from "@server/src/modules/notifications/factory.js";
 
-const PORT = Number(process.env.SERVER_PORT ?? '8080')
-const HOST = process.env.SERVER_HOST ?? '127.0.0.1'
+const PORT = Number(process.env.SERVER_PORT ?? "8080");
+const HOST = process.env.SERVER_HOST ?? "127.0.0.1";
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
-  throw new Error('SERVER_PORT 必须是有效端口。')
+  throw new Error("SERVER_PORT 必须是有效端口。");
 }
 
 try {
   // 配置在监听前解析为不可变对象；非法配置直接失败，不输出变量值或底层异常。
-  const identity = parseIdentityConfig()
-  assertDeploymentBinding(identity)
-  const storageConfig = parseStorageConfig()
-  const corsAllowedOrigins = parseCorsAllowedOrigins(process.env.SERVER_CORS_ALLOWED_ORIGINS)
-  const storageServices = createStorageModule({ config: storageConfig })
-  const db = await openDatabase()
+  const identity = parseIdentityConfig();
+  assertDeploymentBinding(identity);
+  const storageConfig = parseStorageConfig();
+  const corsAllowedOrigins = parseCorsAllowedOrigins(
+    process.env.SERVER_CORS_ALLOWED_ORIGINS,
+  );
+  const storageServices = createStorageModule({ config: storageConfig });
+  const db = await openDatabase();
+  let prepared: {
+    appOptions: CreateAppOptions;
+    notifications: NotificationModule;
+    outbox: ReturnType<typeof configuredIdentityOutboxWorker> | undefined;
+  };
   try {
-    await assertDatabaseReady(db)
-    await assertAuthSchemaAvailable(db)
-    await assertProfileSchemaAvailable(db)
-    await assertCommunitySchemaAvailable(db)
-    await assertJoinSchemaAvailable(db)
-    const { authServices, invitationServices, joinServices } = createAuthServices({
+    await assertDatabaseReady(db);
+    await assertAuthSchemaAvailable(db);
+    await assertProfileSchemaAvailable(db);
+    await assertCommunitySchemaAvailable(db);
+    await assertJoinSchemaAvailable(db);
+    const { authServices, invitationServices, joinServices } =
+      createAuthServices({
+        db,
+        codeHmacKey: parseAuthCodeHmacKey(process.env.AUTH_CODE_HMAC_KEY),
+        publicWebBaseUrl: identity.enabled
+          ? identity.publicOrigin
+          : process.env.SERVER_PUBLIC_WEB_BASE_URL,
+        publicAvatarBaseUrl: publicAvatarBaseUrl(
+          process.env.SERVER_PUBLIC_AVATAR_BASE_URL,
+        ),
+      });
+    const profileServices = new ProfileService(
       db,
-      codeHmacKey: parseAuthCodeHmacKey(process.env.AUTH_CODE_HMAC_KEY),
-      publicWebBaseUrl: identity.enabled ? identity.publicOrigin : process.env.SERVER_PUBLIC_WEB_BASE_URL,
-      publicAvatarBaseUrl: publicAvatarBaseUrl(process.env.SERVER_PUBLIC_AVATAR_BASE_URL),
-    })
-    const profileServices = new ProfileService(db, avatarDirectory(process.env.SERVER_AVATAR_DIRECTORY),
-      publicAvatarBaseUrl(process.env.SERVER_PUBLIC_AVATAR_BASE_URL))
-    const oidcServices = identity.enabled ? new OidcService({ db, authServices,
-      admin: new HttpHydraAdmin(identity.hydraAdminUrl),
-      issuer: identity.issuer,
-      flowKey: Buffer.from(identity.keys.flow, 'hex'),
-      clients: identity.approvedClients,
-    }) : undefined
-    const notifications = createNotificationModule({ db,
-      tokenKey: deriveNotificationTokenKey(process.env.SERVER_NOTIFICATION_TOKEN_KEY,
-        parseAuthCodeHmacKey(process.env.AUTH_CODE_HMAC_KEY)) })
-    await notifications.assertReady()
-    const app = createApp({ authServices, profileServices, joinServices, invitationServices, storageServices,
+      avatarDirectory(process.env.SERVER_AVATAR_DIRECTORY),
+      publicAvatarBaseUrl(process.env.SERVER_PUBLIC_AVATAR_BASE_URL),
+    );
+    const oidcServices = identity.enabled
+      ? new OidcService({
+          db,
+          authServices,
+          admin: new HttpHydraAdmin(identity.hydraAdminUrl),
+          issuer: identity.issuer,
+          flowKey: Buffer.from(identity.keys.flow, "hex"),
+          clients: identity.approvedClients,
+        })
+      : undefined;
+    const notifications = createNotificationModule({
+      db,
+      tokenKey: deriveNotificationTokenKey(
+        process.env.SERVER_NOTIFICATION_TOKEN_KEY,
+        parseAuthCodeHmacKey(process.env.AUTH_CODE_HMAC_KEY),
+      ),
+    });
+    await notifications.assertReady();
+    const appOptions: CreateAppOptions = {
+      authServices,
+      profileServices,
+      joinServices,
+      invitationServices,
+      storageServices,
       notifications,
-      identityKeys: identity.enabled ? { clients: { [identity.clientId]: identity.keys.outline }, bootstrapKey: identity.keys.bootstrap } : undefined,
-      oidcServices, logger: true, trustProxy: ['loopback'], corsAllowedOrigins })
-    const outbox = identity.enabled ? configuredIdentityOutboxWorker(db, identity) : undefined
-    let stopOutbox: (() => void) | undefined
-    // 单实例投影 worker：关闭时停止认领，未完成 lease 由后续运行恢复。
-    const stopProjection = notifications.startWorker()
-    app.addHook('onClose', async () => { stopOutbox?.(); stopProjection(); await db.close() })
-    await app.listen({ port: PORT, host: HOST })
-    if (outbox) stopOutbox = startIdentityOutboxWorker(outbox)
+      identityKeys: identity.enabled
+        ? {
+            clients: { [identity.clientId]: identity.keys.outline },
+            bootstrapKey: identity.keys.bootstrap,
+          }
+        : undefined,
+      oidcServices,
+      logger: true,
+      trustProxy: ["loopback"],
+      corsAllowedOrigins,
+    };
+    const outbox = identity.enabled
+      ? configuredIdentityOutboxWorker(db, identity)
+      : undefined;
+    prepared = { appOptions, notifications, outbox };
   } catch (error) {
-    await db.close()
-    throw error
+    try { await db.close(); } catch { console.error(APPLICATION_CLEANUP_FAILED); }
+    throw error;
   }
+  // 从调用开始移交所有权；worker 只在监听成功后启动。
+  await startApplication({
+    createApp: () => createApp(prepared.appOptions),
+    database: db,
+    listen: { port: PORT, host: HOST },
+    startProjection: () => prepared.notifications.startWorker(),
+    startOutbox: prepared.outbox ? () => startIdentityOutboxWorker(prepared.outbox!) : undefined,
+    reportCleanupFailure: message => console.error(message),
+  });
 } catch (error) {
   // 存储配置错误自带安全文案：只列出缺失或非法的变量名分类，不含变量值。
-  if (error instanceof IdentityConfigError) {
-    console.error(`[server] ${error.message}; 请核对集成模式配置并显式运行 integration:configure。`)
-  } else if (error instanceof StorageConfigError || error instanceof CorsConfigError) {
-    console.error(`[server] 启动失败：${error.message}`)
+  if (error instanceof BusinessPluginLoadError) {
+    console.error(formatBusinessPluginError(error));
+  } else if (error instanceof IdentityConfigError) {
+    console.error(
+      `[server] ${error.message}; 请核对集成模式配置并显式运行 integration:configure。`,
+    );
+  } else if (
+    error instanceof StorageConfigError ||
+    error instanceof CorsConfigError
+  ) {
+    console.error(`[server] 启动失败：${error.message}`);
   } else {
-    console.error('[server] 启动失败。请确认 DATABASE_URL 指向 exre，已显式运行 pnpm db:migrate，并配置 AUTH_CODE_HMAC_KEY。')
+    console.error(
+      "[server] 启动失败。请确认 DATABASE_URL 指向 exre，已显式运行 pnpm db:migrate，并配置 AUTH_CODE_HMAC_KEY。",
+    );
   }
-  process.exitCode = 1
+  process.exitCode = 1;
 }

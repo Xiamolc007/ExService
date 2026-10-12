@@ -2,11 +2,11 @@ import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import type { OidcService } from './oidc.js'
 
-export interface IdentityPluginOptions { services?: OidcService }
+export interface IdentityPluginOptions { oidcServices?: OidcService }
 
 const plugin: FastifyPluginAsync<IdentityPluginOptions> = async (app, options) => {
   app.getDecorator('authServices')
-  app.decorate('oidcServices', options.services)
+  app.decorate('oidcServices', options.oidcServices)
 }
 
 export default fp(plugin, {

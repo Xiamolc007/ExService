@@ -1,11 +1,13 @@
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import type { AuthService } from './service.js'
+import { requireBusinessServices } from '../../business-plugin-errors.js'
 
-export interface AuthPluginOptions { services: AuthService }
+export interface AuthPluginOptions { authServices: AuthService }
 
 const plugin: FastifyPluginAsync<AuthPluginOptions> = async (app, options) => {
-  app.decorate('authServices', options.services)
+  requireBusinessServices('business-auth', { authServices: options.authServices })
+  app.decorate('authServices', options.authServices)
 }
 
 export default fp(plugin, {

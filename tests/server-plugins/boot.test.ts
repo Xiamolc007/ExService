@@ -17,6 +17,7 @@ import authApi from '@server/src/modules/auth/api/plugin'
 import profileApi from '@server/src/modules/profile/api/plugin'
 import { mergeOperations } from '@server/src/http/service-handlers'
 import { readContract, listOperations, assertOperationCoverage } from '@server/src/contract/document'
+import { formatBusinessPluginError, BusinessPluginLoadError } from '@server/src/business-plugin-errors'
 
 const require = createRequire(new URL('../../apps/server/package.json', import.meta.url))
 const Fastify: () => ReturnType<typeof createApp> = require('fastify')
@@ -70,7 +71,7 @@ describe('explicit plugin dependencies', () => {
   it('rejects reversed business registration order', async () => {
     const app = Fastify(), services = fixture(); apps.push(app)
     app.register(identityPlugin, {})
-    app.register(authPlugin, { services: services.authServices })
+    app.register(authPlugin, { authServices: services.authServices })
     await expect(app.ready()).rejects.toThrow()
   })
 
@@ -83,16 +84,16 @@ describe('explicit plugin dependencies', () => {
 
   it('rejects API registration without the auth request field owner', async () => {
     const app = Fastify(), services = fixture(); apps.push(app)
-    app.register(authPlugin, { services: services.authServices })
-    app.register(profilePlugin, { services: services.profileServices })
+    app.register(authPlugin, { authServices: services.authServices })
+    app.register(profilePlugin, { profileServices: services.profileServices })
     app.register(profileApi)
     await expect(app.ready()).rejects.toThrow()
   })
 
   it('shares the auth request field with sibling API plugins in their scope', async () => {
     const app = Fastify(), services = fixture(); apps.push(app)
-    app.register(authPlugin, { services: services.authServices })
-    app.register(profilePlugin, { services: services.profileServices })
+    app.register(authPlugin, { authServices: services.authServices })
+    app.register(profilePlugin, { profileServices: services.profileServices })
     app.register(fp(async (scope: ReturnType<typeof createApp>) => {
       await scope.register(authApi)
       await scope.register(profileApi)
@@ -140,3 +141,15 @@ it('rejects duplicate, missing and surplus operation handlers before Glue boot',
   expect(() => assertOperationCoverage(contract, { ...serviceHandlers, extra: () => {} })).toThrow()
   expect(() => assertOperationCoverage(contract, serviceHandlers)).not.toThrow()
 })
+
+it.each(['authServices', 'profileServices', 'storageServices', 'notifications', 'joinServices', 'invitationServices'] as const)(
+  'rejects absent required %s with its safe diagnostic', async field => {
+    const services = fixture(), app = createApp({ ...services, [field]: undefined } as unknown as Parameters<typeof createApp>[0])
+    apps.push(app)
+    let error: unknown
+    try { await app.ready() } catch (failure) { error = failure }
+    expect(error).toBeInstanceOf(BusinessPluginLoadError)
+    expect(error).toMatchObject({ code: 'BUSINESS_PLUGIN_BOOT_FAILED', context: { missingServiceFields: [field] } })
+    expect(formatBusinessPluginError(error as BusinessPluginLoadError)).toContain(field)
+  },
+)

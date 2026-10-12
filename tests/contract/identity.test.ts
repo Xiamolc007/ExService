@@ -15,6 +15,7 @@ it('requires mapped internal keys and returns the exact linked-session contract'
   fixtures.push(fixture)
   const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices,
     authServices: fixture.authServices, profileServices: fixture.profileServices, storageServices: fixture.storageServices,
+    notifications: fixture.notifications,
     identityKeys: { clients: { 'ex-outline': 'outline-secret', other: 'other-secret' }, bootstrapKey: 'bootstrap-secret' } })
   apps.push(app)
   const userId = await fixture.seedUser({ email: 'identity@example.com', nickname: 'Identity', password: 'valid password' })

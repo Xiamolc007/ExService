@@ -28,6 +28,8 @@ export default defineConfig({
     ],
   },
   test: {
+    // Autoload's dynamic imports must use the same TS/alias module runner as preflight.
+    server: { deps: { inline: ['@fastify/autoload'] } },
     environment: 'node',
     testTimeout: 60_000,
     // Outline has its own test runner and disposable database workflow.
