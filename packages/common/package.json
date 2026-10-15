@@ -8,9 +8,20 @@
       "browser": null,
       "types": "./src/node/identity-config/index.d.mts",
       "node": "./src/node/identity-config/index.mjs"
+    },
+    "./feedback-content": {
+      "types": "./src/feedback-content/index.d.mts",
+      "default": "./src/feedback-content/index.mjs"
     }
   },
   "scripts": {
     "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "mdast-util-to-markdown": "2.1.2"
+  },
+  "devDependencies": {
+    "remark-parse": "11.0.0",
+    "unified": "11.0.5"
   }
 }

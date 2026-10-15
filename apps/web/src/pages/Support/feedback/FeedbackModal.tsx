@@ -30,7 +30,7 @@ import {
 import { ClickUpFieldInput, FileUploader } from "@workspace/components";
 import { ArrowLeft } from "lucide-react";
 import type { components } from "@workspace/api-client";
-import { FEEDBACK_LIMITS, FREQUENCIES } from "@workspace/feedback-content";
+import { FEEDBACK_LIMITS, FREQUENCIES } from "@workspace/common/feedback-content";
 import { readToken, subscribeSessionChanges } from "../../../auth/storage";
 import { feedbackPort, getFeedbackOptions } from "./api";
 import {

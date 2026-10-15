@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { analyzeRequest, composeBug, FEEDBACK_LIMITS, FREQUENCIES, utf8Bytes } from '@workspace/feedback-content'
+import { analyzeRequest, composeBug, FEEDBACK_LIMITS, FREQUENCIES, utf8Bytes } from '@workspace/common/feedback-content'
 import type { components } from '@workspace/api-client'
 import type { FeedbackForm } from './flow'
 

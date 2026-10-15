@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { Ajv } from 'ajv'
 import type { components } from '@workspace/api-client/types'
 import { readContract } from '../../contract/document.js'
-import { analyzeRequest, composeBug, normalizeMime, utf8Bytes, FEEDBACK_LIMITS } from '@workspace/feedback-content'
+import { analyzeRequest, composeBug, normalizeMime, utf8Bytes, FEEDBACK_LIMITS } from '@workspace/common/feedback-content'
 import { FeedbackError } from './errors.js'
 export type FeedbackPrepare = components['schemas']['FeedbackPrepare']
 export type FeedbackForm = components['schemas']['FeedbackForm']

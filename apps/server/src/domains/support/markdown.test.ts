@@ -1,33 +1,8 @@
 ﻿import { describe, expect, it } from 'vitest'
-import { analyzeRequest, composeBug, finalMarkdown, equivalentMarkdown, normalizeMime, validHttpsUrl } from './index.js'
-import { unified } from 'unified'
-import remarkParse from 'remark-parse'
+import { analyzeRequest } from '@workspace/common/feedback-content'
+import { finalMarkdown, equivalentMarkdown } from './markdown.js'
 
-describe('feedback plain text', () => {
-  it('keeps HTML, fences and Markdown as text and preserves line breaks', () => {
-    for (const text of ['中文\r\n下一行', '# 标题\n\n- 列表', '[文字](https://example.com)', '<script>alert(1)</script>', '```js\ncode\n```', '\\\\ * ** _', '**', '末尾\n']) {
-      const result = analyzeRequest(text)
-      expect(result.valid).toBe(true)
-      const ast = unified().use(remarkParse).parse(result.markdown)
-      const forbidden = JSON.stringify(ast).match(/"type":"(html|heading|link|list|code|emphasis|strong)"/)
-      expect(forbidden).toBeNull()
-      expect(equivalentMarkdown(result.markdown, result.markdown)).toBe(true)
-    }
-  })
-  it('checks raw and escaped byte bounds and whitespace', () => {
-    expect(analyzeRequest(' \n\t').valid).toBe(false)
-    expect(analyzeRequest('字'.repeat(21846)).valid).toBe(false)
-    expect(analyzeRequest('*'.repeat(65536)).valid).toBe(false)
-    expect(analyzeRequest('a'.repeat(65536)).valid).toBe(true)
-  })
-  it('composes only populated Bug sections in fixed order', () => {
-    const result = composeBug({ description: '<html>', reproductionSteps: '1. step', expectedResult: null, actualResult: 'bad', frequency: 'often' })
-    expect(result.valid).toBe(true)
-    expect(result.markdown.indexOf('问题描述')).toBeLessThan(result.markdown.indexOf('复现步骤'))
-    expect(result.markdown).not.toContain('预期结果')
-    expect(result.markdown).toContain('经常')
-    expect(composeBug({ description: 'a'.repeat(16385), reproductionSteps: null, expectedResult: null, actualResult: null, frequency: null }).valid).toBe(false)
-  })
+describe('support Markdown verification', () => {
   it('checks structure and exact submission marker in remote content', () => {
     const markdown = finalMarkdown(analyzeRequest('# text').markdown, '11111111-1111-4111-8111-111111111111')
     expect(markdown).toContain('ExWebsite 提交编号：11111111-1111-4111-8111-111111111111')
@@ -119,12 +94,5 @@ describe('feedback plain text', () => {
       const remote = finalMarkdown(formatted!, marker)
       expect(equivalentMarkdown(expected, remote), formatted).toBe(false)
     }
-  })
-  it('allows credential-free HTTPS and normalizes unsafe MIME', () => {
-    expect(validHttpsUrl('https://example.com/file')).toBe(true)
-    expect(validHttpsUrl('https://user:pw@example.com/file')).toBe(false)
-    expect(validHttpsUrl('http://example.com')).toBe(false)
-    expect(normalizeMime('text/plain')).toBe('text/plain')
-    expect(normalizeMime('bad\r\nheader')).toBe('application/octet-stream')
   })
 })

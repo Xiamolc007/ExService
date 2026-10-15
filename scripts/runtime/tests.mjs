@@ -52,9 +52,8 @@ export function isTestSourceChange(directory, path) {
 export async function watchTests(options = {}, execute = runTests) {
   const workspace = options.workspace ?? root, scope = signalScope(), watchers = []
   let pending = true, wake
-  const directories = ['api', 'tests', 'scripts', 'apps/web/src', 'apps/server/src', 'packages/api-client/src', 'packages/components/src', 'packages/sdk/src', 'packages/feedback-content/src',
-    'apps/web/content', 'apps/web/build', 'apps/web/source.config.ts',
-    'packages/common/src', 'packages/common/test']
+  const directories = ['api', 'tests', 'scripts', 'apps/web/src', 'apps/server/src', 'packages/api-client/src', 'packages/components/src', 'packages/sdk/src', 'packages/common/src', 'packages/common/test',
+    'apps/web/content', 'apps/web/build', 'apps/web/source.config.ts']
   try {
     for (const directory of directories) watchers.push(watch(join(workspace, directory), { recursive: true }, (_, path) => {
       if (isTestSourceChange(directory, path)) { pending = true; wake?.() }

@@ -1,6 +1,6 @@
 # 支持反馈提交与核对边界
 
-支持首页有「功能和需求」「投诉和建议」两个正式入口，复用一个按 area 配置的 Modal。development 提供 `bug`、`feature`、`asset`、`request`、`content`、`campaign`；community 提供 `suggestion`、`complaint`。正文和大文件补充信息使用普通多行文本，`packages/feedback-content/` 统一纯文本到 Markdown 的规则与结构核对；Tiptap 接入属于后续阶段。字段矩阵与交互规则见 `.notes/support-center/specs/2026-10-15-support-feedback-redesign-design.md` 与 `.notes/support-center/specs/2026-10-15-complaints-and-suggestions-design.md`。
+支持首页有「功能和需求」「投诉和建议」两个正式入口，复用一个按 area 配置的 Modal。development 提供 `bug`、`feature`、`asset`、`request`、`content`、`campaign`；community 提供 `suggestion`、`complaint`。正文和大文件补充信息使用普通多行文本，前后端通过 `@workspace/common/feedback-content` 共用纯文本转义、Bug 正文组合、大小限制与 MIME 规范化。提交编号追加和 ClickUp 正文回读结构核对位于 `apps/server/src/domains/support/markdown.ts`，不进入浏览器共享入口；Tiptap 接入属于后续阶段。字段矩阵与交互规则见 `.notes/support-center/specs/2026-10-15-support-feedback-redesign-design.md` 与 `.notes/support-center/specs/2026-10-15-complaints-and-suggestions-design.md`。
 
 ## 单元与依赖
 

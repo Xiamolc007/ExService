@@ -1,5 +1,5 @@
 import type { components } from '@workspace/api-client'
-import { normalizeMime } from '@workspace/feedback-content'
+import { normalizeMime } from '@workspace/common/feedback-content'
 
 export type FeedbackForm = components['schemas']['FeedbackForm']
 export type FeedbackSnapshot = components['schemas']['FeedbackSnapshot']

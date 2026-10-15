@@ -11,7 +11,7 @@ import { openDatabase, type AppDatabase } from '@server/src/db/client'
 import { runMigrations } from '@server/src/db/migration-runner'
 import { content, normalizePrepare, sha256 } from '@server/src/domains/support/validation'
 import { frozenTaskInput } from '@server/src/domains/support/metadata'
-import { finalMarkdown } from '../../packages/feedback-content/src/index'
+import { finalMarkdown } from '@server/src/domains/support/markdown'
 
 it('runs the current maintenance CLI source with safe inspect output and explicit cleanup confirmation in an isolated public database', async () => {
   const images = JSON.parse(readFileSync(new URL('../../infra/runtime/images.lock.json', import.meta.url), 'utf8')) as { postgres: string }
@@ -34,13 +34,12 @@ it('runs the current maintenance CLI source with safe inspect output and explici
   let container: StartedPostgreSqlContainer | undefined
   let db: AppDatabase | undefined
   try {
-    // tsx executes the current CLI/dependencies directly. An isolated paths map
-    // also bypasses feedback-content's package export to its potentially stale dist.
+    // tsx executes the current CLI/dependencies directly; Common exports its
+    // current source, so only the Server source alias needs a test mapping.
     writeFileSync(sourceConfig, JSON.stringify({
       extends: fileURLToPath(new URL('../../apps/server/tsconfig.json', import.meta.url)),
       compilerOptions: { paths: {
         '@server/*': [fileURLToPath(new URL('../../apps/server/*', import.meta.url))],
-        '@workspace/feedback-content': [fileURLToPath(new URL('../../packages/feedback-content/src/index.ts', import.meta.url))],
       } },
     }))
     // Fresh container/public is necessary: the real CLI deliberately owns public,

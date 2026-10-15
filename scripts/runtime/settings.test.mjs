@@ -694,14 +694,14 @@ test('compiled production server uses no tsx and no implicit migration', t => {
 test('offline Build excludes runtime secrets, needs no prepared database, and stops at the first failed stage', async t => {
   const f = fixture(t), corepack = join(f.workspace, 'corepack.js'); writeFileSync(corepack, '')
   const specs = buildSpecifications({ workspace: f.workspace, inherited: { INTEGRATION_COREPACK_JS: corepack, DATABASE_URL: 'private', AUTH_CODE_HMAC_KEY: 'private' } })
-  assert.equal(specs.length, 5)
+  assert.equal(specs.length, 4)
   assert.equal(specs[0].name, 'API Contract')
   assert.deepEqual(specs[0].args, [join(f.workspace, 'scripts/api/generate.mjs'), 'generate'])
   assert.ok(specs.every(spec => spec.environment.DATABASE_URL === undefined && spec.environment.AUTH_CODE_HMAC_KEY === undefined && spec.environment.NODE_ENV === 'production'))
   const executed = []
   await assert.rejects(build({ workspace: f.workspace, inherited: { INTEGRATION_COREPACK_JS: corepack } }, async spec => {
     executed.push(spec.name); if (executed.length === 2) throw new Error('compiler failure')
-  }), /RUNTIME_BUILD_FAILED:@workspace\/feedback-content/)
+  }), /RUNTIME_BUILD_FAILED:@workspace\/sdk/)
   assert.equal(executed.length, 2)
 })
 

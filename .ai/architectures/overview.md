@@ -28,14 +28,15 @@ api/openapi.yaml + api/paths/ + api/schemas/
 | `api/` | 唯一 HTTP Contract 的源文件与统一生成的 JSON。 |
 | `packages/api-client/` | 生成的类型和 `createApiClient({ baseUrl })`。 |
 | `packages/components/` | 基于 ExUI 的应用级共享 UI。 |
+| `packages/common/` | 按模块子入口提供共享纯逻辑，包含反馈内容与 Node 身份配置、绑定投影；消费规则见 `.agents/rules/package-common.md`。 |
 | `apps/web/` | Vite/React 前端、路由、主题和 Client 接入。 |
 | `apps/server/` | `modules/` 公共能力、`domains/` 具体流程、统一 HTTP/Glue 入口与受控 PostgreSQL 访问。 |
-| `packages/common/` | runtime 与 Server 经 `@workspace/common/node/identity-config` 共用纯客户端配置验证与部署绑定投影；消费规则见 `.agents/rules/package-common.md`。 |
 | `tests/contract/` | 对真实 Fastify app 的 HTTP 行为与原始 handler 输出做验证。 |
 
 ## 依赖与构建
 
 - `packages/api-client` 和 `packages/components` 以源码导出，供消费方打包器编译。
+- Common 的公开子入口直接导出 `.mjs` 实现与 `.d.mts` 类型，无独立构建或 `dist` 前置依赖；反馈内容的前后端接线见 `.ai/architectures/support-center/feedback-lifecycle.md`。
 - TypeScript 别名由 `tsconfig.base.json` 声明；Vite 与 Vitest 分别配置解析。Server 构建由 `scripts/rewrite-server-imports.mjs` 把别名改写为产物内相对引用。
 - 根命令位于 `package.json`；Server 运行时依赖属于 `apps/server/package.json`。
 

@@ -74,9 +74,6 @@ importers:
       '@workspace/common':
         specifier: workspace:*
         version: link:../../packages/common
-      '@workspace/feedback-content':
-        specifier: workspace:*
-        version: link:../../packages/feedback-content
       ajv:
         specifier: 8.20.0
         version: 8.20.0
@@ -101,9 +98,15 @@ importers:
       qcloud-cos-sts:
         specifier: ^3.1.3
         version: 3.1.3
+      remark-parse:
+        specifier: 11.0.0
+        version: 11.0.0
       sharp:
         specifier: ^0.35.4
         version: 0.35.4(@types/node@22.20.3)
+      unified:
+        specifier: 11.0.5
+        version: 11.0.5
       yaml:
         specifier: 2.9.1
         version: 2.9.1
@@ -138,12 +141,12 @@ importers:
       '@workspace/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
+      '@workspace/common':
+        specifier: workspace:*
+        version: link:../../packages/common
       '@workspace/components':
         specifier: workspace:*
         version: link:../../packages/components
-      '@workspace/feedback-content':
-        specifier: workspace:*
-        version: link:../../packages/feedback-content
       '@workspace/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
@@ -236,7 +239,18 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
-  packages/common: {}
+  packages/common:
+    dependencies:
+      mdast-util-to-markdown:
+        specifier: 2.1.2
+        version: 2.1.2
+    devDependencies:
+      remark-parse:
+        specifier: 11.0.0
+        version: 11.0.0
+      unified:
+        specifier: 11.0.5
+        version: 11.0.5
 
   packages/components:
     dependencies:
@@ -349,25 +363,6 @@ importers:
       react-router:
         specifier: ^8.4.0
         version: 8.4.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-
-  packages/feedback-content:
-    dependencies:
-      mdast-util-to-markdown:
-        specifier: 2.1.2
-        version: 2.1.2
-      remark-parse:
-        specifier: 11.0.0
-        version: 11.0.0
-      unified:
-        specifier: 11.0.5
-        version: 11.0.5
-    devDependencies:
-      '@types/mdast':
-        specifier: 4.0.4
-        version: 4.0.4
       typescript:
         specifier: ^5.9.3
         version: 5.9.3

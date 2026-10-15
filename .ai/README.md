@@ -11,6 +11,7 @@ _最后更新：2026-10-15_
 | API Contract | `api/openapi.yaml`、`api/paths/`、`api/schemas/`、`api/generated/openapi.json` | `.ai/architectures/api/contract-layout.md` |
 | 生成式 Client | `packages/api-client/` | `.ai/decisions/api-client/01-generated-types-committed-and-read-only.md` |
 | 共享组件 | `packages/components/` | `.ai/knowledge/components/ex-message-host-lifecycle.md`、`.ai/knowledge/components/error-panel.md`、`.ai/knowledge/components/tiptap-content-boundaries.md` |
+| 共享纯逻辑 | `packages/common/` | `.agents/rules/common.md`；反馈内容接线见 `.ai/architectures/support-center/feedback-lifecycle.md` |
 | Web | `apps/web/` | `.ai/architectures/web/authentication-flow.md`、`.ai/knowledge/web/invitation-error-handoff.md` |
 | 通用内容与 About | `apps/web/build/content/`、`apps/web/build/about/`、`apps/web/src/content/`、`apps/web/src/pages/AboutUs/` | `.ai/architectures/web/content-rendering.md`、`.ai/knowledge/web/content-authoring.md` |
 | Server | `apps/server/src/modules/`、`apps/server/src/domains/`、`apps/server/src/http/` | `.ai/architectures/server/request-lifecycle.md`、`.ai/architectures/server/authentication-lifecycle.md`、`.ai/knowledge/server/multipart-lifecycle-traps.md` |

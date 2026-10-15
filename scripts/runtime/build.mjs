@@ -18,7 +18,7 @@ export function buildSpecifications({ workspace = root, inherited = process.env 
   return [
     { name: 'API Contract', command: node, cwd: workspace,
       args: [join(workspace, 'scripts/api/generate.mjs'), 'generate'], environment: publicEnv },
-    ...['@workspace/feedback-content', '@workspace/sdk', '@workspace/web', '@workspace/server'].map(name => ({ name, command: node, cwd: workspace,
+    ...['@workspace/sdk', '@workspace/web', '@workspace/server'].map(name => ({ name, command: node, cwd: workspace,
       args: [corepack, 'pnpm', '--filter', name, 'build'], environment: publicEnv })),
   ]
 }

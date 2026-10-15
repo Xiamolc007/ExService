@@ -1,5 +1,6 @@
 import type { ClickUpServices, ClickUpField, ClickUpCreateTask, ClickUpTask } from '../../modules/clickup/service.js'
-import { equivalentMarkdown, FEEDBACK_LIMITS } from '@workspace/feedback-content'
+import { FEEDBACK_LIMITS } from '@workspace/common/feedback-content'
+import { equivalentMarkdown } from './markdown.js'
 import { FeedbackError } from './errors.js'
 import { FIELD_IDS, loadFieldDefinitions, type FieldDefinition } from './field-config.js'
 import type { FeedbackForm, FeedbackOptions } from './validation.js'

@@ -3,7 +3,7 @@ import type { SqlExecutor } from '../../db/client.js'
 import { safeInteger } from '../../db/client.js'
 import { FeedbackError } from './errors.js'
 import { normalizeStoredPrepare, sha256, content, type FeedbackForm, type FeedbackSnapshot } from './validation.js'
-import { finalMarkdown } from '@workspace/feedback-content'
+import { finalMarkdown } from './markdown.js'
 import { TARGET, COMMUNITY_TARGET, type FrozenTaskPayload } from './metadata.js'
 export interface Submission extends QueryResultRow {
   id: string; user_id: string; submission_key: string; nickname_snapshot: string; form_kind: string; form_version: number; content_rule_version: number; form_json: string; user_markdown: string; final_markdown: string; payload_sha256: string; task_payload_json: string; task_payload_sha256: string; revision: number; status: FeedbackSnapshot['status']; attachment_count: number; total_attachment_bytes: number; created_at: number; receive_expires_at: number; updated_at: number; clickup_task_id: string | null; target_list_id: string; attempt_id: string | null; attempt_kind: 'create_task' | 'upload_attachment' | null; attempt_attachment_id: string | null; attempt_started_at: number | null; attempt_expires_at: number | null; attempt_owner_boot_id: string | null; failure_code: NonNullable<FeedbackSnapshot['failure']>['code'] | null; failure_phase: 'create_task' | 'upload_attachment' | null; failure_attachment_id: string | null; retry_not_before: number | null; maintenance_resolution_json: string | null

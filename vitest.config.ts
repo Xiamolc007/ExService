@@ -10,7 +10,6 @@ export default defineConfig({
     // 共享包与应用必须使用同一个 React 和 ExUI 实例。
     dedupe: ['react', 'react-dom', '@exre/exui'],
     alias: [
-      { find: /^@workspace\/feedback-content$/, replacement: resolve(repositoryRoot, 'packages/feedback-content/src/index.ts') },
       { find: '@web', replacement: resolve(repositoryRoot, 'apps/web') },
       { find: '@server', replacement: resolve(repositoryRoot, 'apps/server') },
       { find: '@api-client', replacement: resolve(repositoryRoot, 'packages/api-client') },
@@ -40,7 +39,7 @@ export default defineConfig({
       'packages/api-client/src/**/*.test.{ts,tsx}',
       'packages/components/src/**/*.test.{ts,tsx}',
       'packages/sdk/src/**/*.test.{ts,tsx}',
-      'packages/feedback-content/src/**/*.test.{ts,tsx}',
+      'packages/common/src/**/*.test.{ts,tsx}',
     ],
     exclude: [...configDefaults.exclude, '**/dist/**', 'vendor/**', 'output/**'],
   },
