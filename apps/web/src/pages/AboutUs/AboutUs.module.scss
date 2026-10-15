@@ -1,5 +1,5 @@
 .about { width: min(calc(100% - 3rem), 72rem); margin-inline: auto; color: var(--exui-text-primary); }
-.home { width: min(calc(100% - 4rem), 70rem); margin-inline: auto; color: var(--exui-text-primary); }
+.home { width: 100%; color: var(--exui-text-primary); }
 .about :is(h1, h2, h3, h4, h5, h6), .home :is(h1, h2, h3, h4, h5, h6), .body :is(h2, h3, h4, h5, h6) { font-weight: var(--exui-font-weight-bold); }
 .homeMain { min-width: 0; padding-bottom: 5rem; }
 .navigation { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 3.5rem; box-sizing: border-box; padding-block: 0.75rem; border-bottom: 1px solid var(--exui-border-default); }
@@ -58,6 +58,5 @@
   .main { padding-top: 2rem; } .pageHeader { margin-block: 2rem; }
   .cards { grid-template-columns: 1fr; }
 }
-@media (max-width: 39.99rem) { .home { width: calc(100% - 2.5rem); } }
 @media (max-width: 24rem) { .about { width: calc(100% - 2rem); } }
 @media (prefers-reduced-motion: reduce) { .entry, .member, .desktopNavigation a, .directory nav a { transition: none; } }

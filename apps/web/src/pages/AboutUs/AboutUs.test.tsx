@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { ThemeProvider } from '@exre/exui'
-import { createContentStore } from '../../content/store'
+import { createContentStore, type ContentModule } from '../../content/store'
+import { aboutStore } from '../../content/about/registry'
 import { AboutUs } from './AboutUs'
 import { AboutBody } from './AboutBody'
 
@@ -26,6 +27,7 @@ vi.mock('../../content/about/registry', () => {
 })
 vi.mock('@paper-design/shaders-react', () => ({ MeshGradient: () => <div /> }))
 beforeEach(() => {
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
   vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
   vi.stubGlobal('scrollTo', vi.fn())
 })
@@ -37,15 +39,29 @@ it('shows an introduction and all six section links from the home', async () => 
   await screen.findByText('正文 index.mdx')
   expect(screen.getAllByRole('link').some(link => link.getAttribute('href') === '/aboutus/media')).toBe(true)
 })
-it('shows one text hero, seven ordered modules and six section targets without the old home navigation', async () => {
+it('keeps an early hero scroll when the home body finishes loading', async () => {
+  vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(window.innerHeight * 3)
+  let finish!: (module: ContentModule) => void
+  const pending = new Promise<ContentModule>(resolve => { finish = resolve })
+  vi.spyOn(aboutStore, 'load').mockReturnValueOnce(pending)
+  show('/aboutus')
+  expect(within(screen.getByRole('article', { name: '我们的理念' })).getByRole('status')).toBeTruthy()
+  const stories = document.getElementById('about-content')!
+  Object.defineProperty(stories, 'scrollIntoView', { configurable: true, value: vi.fn() })
+  vi.mocked(window.scrollTo).mockClear()
+  fireEvent.click(screen.getByRole('link', { name: '向下滚动，了解 Exre' }))
+  await act(async () => { finish({ default: () => <p>Delayed home body</p> }) })
+  expect(screen.getByText('Delayed home body')).toBeTruthy()
+  expect(window.scrollTo).not.toHaveBeenCalled()
+  expect(document.activeElement).toBe(stories)
+})
+it('shows one hero, seven ordered modules and six section targets without the old home navigation', async () => {
   show('/aboutus')
   await screen.findByText('正文 index.mdx')
   expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
   expect(screen.queryByRole('region', { name: 'Exre 品牌' })).toBeNull()
   expect(screen.queryByRole('navigation', { name: 'About 栏目' })).toBeNull()
   expect(screen.queryByRole('navigation', { name: 'About 面包屑' })).toBeNull()
-  expect(screen.queryByRole('link', { name: /向下滚动|认识 Exre|探索我们的社区/ })).toBeNull()
-  expect(document.querySelector('canvas')).toBeNull()
   const grid = document.getElementById('about-content')!
   expect([...grid.children].map(child => child.getAttribute('aria-label'))).toEqual(['社区', '项目', '我们的理念', '团队', 'Media', '历程', '捐赠'])
   expect(within(grid).getAllByRole('link').map(link => link.getAttribute('href'))).toEqual(['/aboutus/communities', '/aboutus/projects', '/aboutus/team', '/aboutus/media', '/aboutus/story', '/aboutus/donations'])

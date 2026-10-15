@@ -1,10 +1,5 @@
-.hero { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 4rem; align-items: end; padding-block: 5rem 4.5rem; }
-.heroLabel { font-size: .8125rem; font-weight: var(--exui-font-weight-medium); margin: 0 0 1.5rem; }
-.hero h1 { font-size: clamp(3.5rem, 6.3vw, 5.5rem); font-weight: var(--exui-font-weight-bold); letter-spacing: -.065em; line-height: 1.1; margin: 0; white-space: pre-line; overflow-wrap: anywhere; }
-.heroSummary { max-width: 22rem; padding-bottom: .25rem; justify-self: end; min-width: 0; }
-.lead { font-size: 1.5rem; font-weight: var(--exui-font-weight-bold); line-height: 1.5; letter-spacing: -.035em; margin: 0 0 1rem; white-space: pre-line; }
-.summary { margin: 0; color: var(--exui-text-secondary); font-size: .9375rem; line-height: 1.85; }
-.stories { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 2rem; row-gap: 5.5rem; scroll-margin-top: calc(var(--site-header-height, 4rem) + 1rem); }
+.stories { width: min(calc(100% - 4rem), 70rem); margin-inline: auto; padding-top: 4.5rem; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 2rem; row-gap: 5.5rem; scroll-margin-top: calc(var(--site-header-height, 4rem) + 1rem); }
+.stories:focus { outline: none; }
 .story, .belief { min-width: 0; overflow-wrap: anywhere; }
 .visual { position: relative; display: flex; align-items: flex-end; min-width: 0; aspect-ratio: 4 / 3; border-radius: 1.75rem; background: var(--exui-surface-secondary); overflow: hidden; }
 .placeholder { margin: 1.5rem; color: var(--exui-text-secondary); font-size: .75rem; line-height: 1.6; }
@@ -19,7 +14,7 @@
 .captionLink:hover .entry { border-color: currentColor; }
 .captionLink:focus-visible { outline: 2px solid var(--exui-border-focused); outline-offset: 5px; }
 .communities { grid-column: 1 / -1; }
-.communities .visual { aspect-ratio: 2.65; }
+.communities .caption { padding: 0; }
 .communities .captionLink { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 4rem; }
 .communities .captionDescription { max-width: 22rem; justify-self: end; }
 .communities .description { margin-top: 0; }
@@ -37,24 +32,14 @@
 .team .description, .donations .description { max-width: 21rem; }
 .media .visual { background: var(--exui-surface-tertiary); }
 @media (max-width: 63.99rem) {
-  .hero { gap: 2rem; padding-block: 4rem 3rem; }
-  .hero h1 { font-size: 4rem; }
-  .lead { font-size: 1.25rem; }
   .stories { gap: 4rem 1.5rem; }
   .communities .captionLink, .team, .donations { gap: 2rem; }
   .belief { padding: 2rem; }
   .visual { border-radius: 1.5rem; }
 }
 @media (max-width: 39.99rem) {
-  .hero { grid-template-columns: 1fr; gap: 1.75rem; padding-block: 2.75rem 2.75rem; }
-  .heroLabel { font-size: .75rem; margin-bottom: 1.25rem; }
-  .hero h1 { font-size: clamp(2.75rem, 12.5vw, 3.25rem); line-height: 1.12; }
-  .heroSummary { justify-self: start; max-width: none; }
-  .lead { font-size: 1.25rem; margin-bottom: .75rem; white-space: normal; }
-  .summary { font-size: .875rem; }
-  .stories { grid-template-columns: 1fr; row-gap: 3.5rem; }
+  .stories { width: calc(100% - 2.5rem); padding-top: 3rem; grid-template-columns: 1fr; row-gap: 3.5rem; }
   .visual { border-radius: 1.25rem; }
-  .communities .visual { aspect-ratio: 4 / 3; }
   .communities .captionLink { grid-template-columns: 1fr; gap: 0; }
   .communities .captionDescription { justify-self: start; }
   .communities .description { margin-top: .875rem; }

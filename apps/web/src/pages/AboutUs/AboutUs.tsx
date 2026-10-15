@@ -33,7 +33,7 @@ function AboutPageView({ page }: { page: AboutPage }) {
   useEffect(() => { setSelected(null) }, [location.pathname])
   const components = useMemo(() => aboutMdxComponents(openMember), [openMember])
   const state = useContent(aboutStore, page.id)
-  const main = useReadingPosition(state.status !== 'loading', page.title, page.description)
+  const main = useReadingPosition(page.kind === 'home' || state.status !== 'loading', page.title, page.description)
   const home = page.kind === 'home'
   return <div className={home ? styles.home : styles.about}>
     {!home && <AboutNavigation page={page} />}
