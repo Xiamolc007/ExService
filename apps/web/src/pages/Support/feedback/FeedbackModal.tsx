@@ -49,7 +49,8 @@ import {
 } from "./schema";
 import styles from "./FeedbackModal.module.scss";
 import { useFeedback } from "./FeedbackProvider";
-import { developmentChoices, communityChoices, actions, classificationCopy, fieldGuidance } from "./feedbackFormConfig";
+import { actions, fieldGuidance } from "./feedbackFormConfig";
+import { kindsForArea, ruleForKind } from "./kind-rules";
 
 type Options = components["schemas"]["FeedbackOptions"];
 const emptyOptions: Pick<Options, "fields" | "actions"> = {
@@ -61,7 +62,7 @@ function FeedbackSkeleton({
   choices,
 }: {
   form?: boolean;
-  choices: typeof developmentChoices;
+  choices: ReturnType<typeof kindsForArea>;
 }) {
   return (
     <div role="status" aria-label="正在读取反馈选项" aria-busy="true">
@@ -128,7 +129,7 @@ export function FeedbackModal({ area, open, onOpenChange: setOpen, returnFocus }
   returnFocus?: HTMLElement;
 }) {
   const { claimSubmission } = useFeedback();
-  const choices = area === "community" ? communityChoices : developmentChoices;
+  const choices = kindsForArea(area);
   const [confirmation, setConfirmation] = useState(false),
     [options, setOptions] = useState<Options | null>(null);
   const [kind, setKind] = useState<FeedbackKind | null>(null),
@@ -373,12 +374,7 @@ export function FeedbackModal({ area, open, onOpenChange: setOpen, returnFocus }
       ]
         .filter(Boolean)
         .join(" ") || undefined;
-    const placeholder =
-      name === "contentText" && kind === "complaint"
-        ? "请描述事情经过、发生时间，以及希望我们如何处理。"
-        : name === "contentText" && kind === "suggestion"
-          ? "描述你的体验、遇到的问题，以及建议如何改进。"
-          : guidance.placeholder;
+    const placeholder = name === "contentText" ? currentRule?.contentPlaceholder ?? guidance.placeholder : guidance.placeholder;
     const common = {
       id: `${id}-${name}`,
       disabled: locked,
@@ -512,13 +508,8 @@ export function FeedbackModal({ area, open, onOpenChange: setOpen, returnFocus }
       />
     );
   }
-  const classification =
-    kind === "bug" ||
-    kind === "feature" ||
-    kind === "asset" ||
-    kind === "request"
-      ? classificationCopy[kind]
-      : null;
+  const currentRule = kind ? ruleForKind(kind) : null;
+  const classification = currentRule?.classification;
   const pointer = flow.pointer();
   const recheck = () =>
     process(async () => {
@@ -569,7 +560,7 @@ export function FeedbackModal({ area, open, onOpenChange: setOpen, returnFocus }
     </>
   ) : (
     <>
-      {kind === "complaint" && (
+      {currentRule?.anonymous && (
         <Controller
           name="anonymous"
           control={form.control}
@@ -609,7 +600,7 @@ export function FeedbackModal({ area, open, onOpenChange: setOpen, returnFocus }
           confirmation
             ? "放弃未提交内容？"
             : kind
-              ? choices.find((choice) => choice.kind === kind)!.label
+              ? currentRule!.label
               : area === "community"
                 ? "投诉和建议"
                 : "功能和需求"
@@ -617,7 +608,7 @@ export function FeedbackModal({ area, open, onOpenChange: setOpen, returnFocus }
         description={
           confirmation
             ? undefined
-            : kind === "bug"
+            : currentRule?.body === "bug"
               ? "标题、问题分类和问题描述为必填，其余内容可按实际情况补充。"
               : kind
                 ? "标题和内容为必填，标注「选填」的内容可留空。"
@@ -737,16 +728,16 @@ export function FeedbackModal({ area, open, onOpenChange: setOpen, returnFocus }
                     {options && classification && (
                       <div
                         className={
-                          kind === "feature" ? styles.columns : undefined
+                          currentRule?.department ? styles.columns : undefined
                         }
                       >
                         {clickup(
                           "typeOptionId",
                           classification.label,
                           "4c3befc0-5146-43a2-8610-86efe4e8124a",
-                          { ...classification, required: kind === "bug" },
+                          { ...classification, required: currentRule?.typeField === "required" },
                         )}
-                        {kind === "feature" &&
+                        {currentRule?.department &&
                           clickup(
                             "departmentOptionId",
                             "部门",
@@ -754,7 +745,7 @@ export function FeedbackModal({ area, open, onOpenChange: setOpen, returnFocus }
                           )}
                       </div>
                     )}
-                    {(kind === "asset" || kind === "content") &&
+                    {currentRule?.action &&
                       selection(
                         "action",
                         "操作",
@@ -766,7 +757,7 @@ export function FeedbackModal({ area, open, onOpenChange: setOpen, returnFocus }
                           )?.available,
                         })),
                       )}
-                    {kind === "bug" ? (
+                    {currentRule?.body === "bug" ? (
                       <>
                         {field("description", "问题描述", true)}
                         {field("reproductionSteps", "复现步骤", true)}

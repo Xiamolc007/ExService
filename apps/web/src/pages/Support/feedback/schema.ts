@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { analyzeRequest, composeBug, FEEDBACK_LIMITS, FREQUENCIES, utf8Bytes } from '@workspace/common/feedback-content'
 import type { components } from '@workspace/api-client'
 import type { FeedbackForm } from './flow'
+import { ruleForKind } from './kind-rules'
 
 const control = /[\u0000-\u001f\u007f-\u009f]/
 export type FeedbackKind = FeedbackForm['kind']
@@ -36,13 +37,14 @@ export function draftFromForm(form: FeedbackForm): FeedbackDraft {
   }
 }
 export function feedbackSchema(kind: FeedbackKind, options: Pick<components['schemas']['FeedbackOptions'], 'fields' | 'actions'>) {
+  const rule = ruleForKind(kind)
   const fieldOptions = (id: string) => options.fields.find(field => field.id === id)?.type_config.options ?? []
   const selection = (items: { id: string }[]) => z.string().refine(value => !value || items.some(item => item.id === value), '选项已不可用，请重新选择')
   return z.object({
     title: z.string().refine(value => Boolean(value.trim()) && Array.from(value.trim()).length <= FEEDBACK_LIMITS.titleCodePoints && !control.test(value), '标题须为 1–200 字且不含换行'),
-    typeOptionId: selection(fieldOptions('4c3befc0-5146-43a2-8610-86efe4e8124a')).refine(value => kind !== 'bug' || Boolean(value), '请选择问题分类'),
+    typeOptionId: selection(fieldOptions('4c3befc0-5146-43a2-8610-86efe4e8124a')).refine(value => rule.typeField !== 'required' || Boolean(value), '请选择问题分类'),
     departmentOptionId: selection(fieldOptions('9b3d2027-2162-42e2-81b9-d907592cdb5b')),
-    action: z.string().refine(value => !['asset', 'content'].includes(kind) || options.actions.some(action => action.action === value && action.available), '请选择可用的操作'),
+    action: z.string().refine(value => !rule.action || options.actions.some(action => action.action === value && action.available), '请选择可用的操作'),
     largeFileInfoEnabled: z.boolean(), largeFileInfo: z.string(),
     contentText: z.string(), description: z.string(), reproductionSteps: z.string(), expectedResult: z.string(), actualResult: z.string(),
     frequency: z.string().refine(value => !value || Object.hasOwn(FREQUENCIES, value), '请选择有效的发生频率'),
@@ -51,8 +53,8 @@ export function feedbackSchema(kind: FeedbackKind, options: Pick<components['sch
   }).superRefine((draft, ctx) => {
     const form = toFeedbackForm(kind, draft)
     const analysis = form.kind === 'bug' ? composeBug(form.details) : analyzeRequest(form.contentText)
-    if (!analysis.valid) ctx.addIssue({ code: 'custom', path: [kind === 'bug' ? 'description' : 'contentText'], message: analysis.reason === 'empty' ? '请填写正文' : '正文超出大小限制，请缩短内容' })
-    if (kind === 'bug') for (const field of ['description', 'reproductionSteps', 'expectedResult', 'actualResult'] as const) if (utf8Bytes(draft[field]) > 16384) ctx.addIssue({ code: 'custom', path: [field], message: '此项最多 16 KiB，请缩短内容' })
+    if (!analysis.valid) ctx.addIssue({ code: 'custom', path: [rule.body === 'bug' ? 'description' : 'contentText'], message: analysis.reason === 'empty' ? '请填写正文' : '正文超出大小限制，请缩短内容' })
+    if (rule.body === 'bug') for (const field of ['description', 'reproductionSteps', 'expectedResult', 'actualResult'] as const) if (utf8Bytes(draft[field]) > 16384) ctx.addIssue({ code: 'custom', path: [field], message: '此项最多 16 KiB，请缩短内容' })
     if (draft.largeFileInfoEnabled && utf8Bytes(draft.largeFileInfo) > 16384) ctx.addIssue({ code: 'custom', path: ['largeFileInfo'], message: '补充信息最多 16 KiB' })
     if (draft.files.some(file => file.size < 1 || file.size > FEEDBACK_LIMITS.fileBytes || Array.from(file.name).length < 1 || Array.from(file.name).length > 255 || control.test(file.name)) || draft.files.reduce((sum, file) => sum + file.size, 0) > FEEDBACK_LIMITS.totalFileBytes) ctx.addIssue({ code: 'custom', path: ['files'], message: '附件须为 1 字节至 20 MiB，文件名不超过 255 字，总计不超过 100 MiB' })
   })

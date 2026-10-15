@@ -1,5 +1,6 @@
 import type { components } from '@workspace/api-client'
 import { normalizeMime } from '@workspace/common/feedback-content'
+import { belongsToArea } from './kind-rules'
 
 export type FeedbackForm = components['schemas']['FeedbackForm']
 export type FeedbackSnapshot = components['schemas']['FeedbackSnapshot']
@@ -16,7 +17,6 @@ export interface FeedbackPort {
 type Pointer = { submissionKey: string; submissionId?: string }
 type StoragePort = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
-const belongsToArea = (kind: FeedbackForm['kind'], area: FeedbackArea): boolean => area === 'community' ? kind === 'suggestion' || kind === 'complaint' : kind !== 'suggestion' && kind !== 'complaint'
 export async function fileDigest(file: File): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer())
   return Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2,'0')).join('')
