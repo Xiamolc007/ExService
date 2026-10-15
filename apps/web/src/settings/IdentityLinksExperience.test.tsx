@@ -66,3 +66,70 @@ it.each(['response lost','conflict'])('reconciles the persisted link after %s an
   else expect(await screen.findByText(/Cfx 身份已有其他关联/)).toBeTruthy()
   expect(api.GET.mock.calls.filter(([path])=>path==='/auth/me/identity-links')).toHaveLength(2)
 })
+
+it('matches a linked provider from shuffled input and reconciles a lost unlink response', async () => {
+  const Component=await component(),user=userEvent.setup();let removed=false
+  api.GET.mockImplementation(path=>Promise.resolve(path==='/auth/me/identity-links'
+    ? {providers:[response.providers[2],response.providers[1],{...response.providers[0],link:removed?null:link}]}
+    : {items:[{communityId:'history-community',membership:{joinedAt:1},requiredProviders:['cfx']}],total:1,offset:0,limit:50}))
+  api.DELETE.mockImplementation(()=>{removed=true;return Promise.reject(new Error('response lost'))})
+  render(<Component token={'a'.repeat(43)}/>)
+  expect(await screen.findByText('Cfx ID：123')).toBeTruthy()
+  await user.click(screen.getByRole('button',{name:'解除 Cfx 关联'}))
+  expect(screen.getByText(/history-community/)).toBeTruthy()
+  await user.click(screen.getByRole('button',{name:'确认解除关联'}))
+  await waitFor(()=>expect(screen.queryByText('Cfx ID：123')).toBeNull())
+  expect(api.GET.mock.calls.filter(([path])=>path==='/auth/me/identity-links')).toHaveLength(2)
+  expect(api.DELETE).toHaveBeenCalledOnce()
+})
+
+it('keeps unlink locked and the old link visible until the readback settles', async () => {
+  const Component=await component(),user=userEvent.setup();let confirmRead!:(value:unknown)=>void
+  let reads=0
+  api.GET.mockImplementation(path=>path==='/auth/me/identity-links'
+    ? ++reads===1?Promise.resolve(response):new Promise(resolve=>{confirmRead=resolve})
+    : Promise.resolve({items:[],total:0,offset:0,limit:50}))
+  render(<Component token={'a'.repeat(43)}/>)
+  await user.click(await screen.findByRole('button',{name:'解除 Cfx 关联'}))
+  await user.click(screen.getByRole('button',{name:'确认解除关联'}))
+  await waitFor(()=>expect(reads).toBe(2))
+  expect(screen.getByText('Cfx ID：123')).toBeTruthy()
+  expect((screen.getByRole('button',{name:'确认解除关联'}) as HTMLButtonElement).disabled).toBe(true)
+  confirmRead({providers:response.providers.map(item=>item.provider==='cfx'?{...item,link:null}:item)})
+  await waitFor(()=>expect(screen.queryByText('Cfx ID：123')).toBeNull())
+})
+
+it('does not read back or display a former owner after an in-flight unlink and account switch', async () => {
+  const Component=await component(),user=userEvent.setup();let finishDelete!:(value:unknown)=>void
+  api.GET.mockImplementation((path,options)=>Promise.resolve(path==='/auth/me/identity-links'
+    ? options.headers.Authorization===`Bearer ${'a'.repeat(43)}`?response:{providers:response.providers.map(item=>({...item,link:null}))}
+    : {items:[],total:0,offset:0,limit:50}))
+  api.DELETE.mockImplementation(()=>new Promise(resolve=>{finishDelete=resolve}))
+  const view=render(<Component token={'a'.repeat(43)}/>)
+  await user.click(await screen.findByRole('button',{name:'解除 Cfx 关联'}))
+  await user.click(screen.getByRole('button',{name:'确认解除关联'}))
+  await waitFor(()=>expect(finishDelete).toBeDefined())
+  view.rerender(<Component token={'b'.repeat(43)}/>)
+  await waitFor(()=>expect(screen.queryByText('Cfx ID：123')).toBeNull())
+  finishDelete({status:'unlinked'})
+  await waitFor(()=>expect(api.GET.mock.calls.filter(([path])=>path==='/auth/me/identity-links')).toHaveLength(2))
+  expect(screen.queryByText('Cfx ID：123')).toBeNull()
+})
+
+it('blocks another unlink while the first result is unknown until an explicit read succeeds', async () => {
+  const Component=await component(),user=userEvent.setup();let reads=0
+  api.GET.mockImplementation(path=>path==='/auth/me/identity-links'
+    ? ++reads===2?Promise.reject(new Error('offline')):Promise.resolve(response)
+    : Promise.resolve({items:[],total:0,offset:0,limit:50}))
+  api.DELETE.mockRejectedValue(new Error('response lost'))
+  render(<Component token={'a'.repeat(43)}/>)
+  await user.click(await screen.findByRole('button',{name:'解除 Cfx 关联'}))
+  await user.click(screen.getByRole('button',{name:'确认解除关联'}))
+  expect(await screen.findByText('关联结果暂时无法确认，请重新读取关联账户')).toBeTruthy()
+  expect((screen.getByRole('button',{name:'确认解除关联'}) as HTMLButtonElement).disabled).toBe(true)
+  expect(api.DELETE).toHaveBeenCalledOnce()
+  await user.click(screen.getByRole('button',{name:'重新读取关联账户'}))
+  await waitFor(()=>expect(reads).toBe(3))
+  expect((await screen.findByRole('button',{name:'解除 Cfx 关联'}) as HTMLButtonElement).disabled).toBe(false)
+  expect(api.DELETE).toHaveBeenCalledOnce()
+})
