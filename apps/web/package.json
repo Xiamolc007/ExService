@@ -16,6 +16,7 @@
     "@paper-design/shaders-react": "^0.0.81",
     "@workspace/api-client": "workspace:*",
     "@workspace/components": "workspace:*",
+    "@workspace/feedback-content": "workspace:*",
     "@workspace/sdk": "workspace:*",
     "framer-motion": "^13.3.0",
     "lucide-react": "1.47.0",

@@ -9,6 +9,7 @@ import * as schemaTables from '@server/src/db/schema.js'
 
 const SAFE_IDENTIFIER = /^[a-z_][a-z0-9_]*$/
 const DROP_ORDER = [
+  'support_feedback_attachments', 'support_feedback_submissions',
   'notification_clear_batch_items', 'notification_clear_batches', 'notification_mutations',
   'notification_preferences', 'notification_receipts', 'notification_user_streams',
   'notification_event_recipients', 'notification_events', 'notification_contents',
@@ -31,6 +32,7 @@ const BASELINE_NOT_NULL_COLUMNS = new Set([
   schemaTables.notificationReceipts, schemaTables.notificationPreferences,
   schemaTables.notificationMutations, schemaTables.notificationClearBatches,
   schemaTables.notificationClearBatchItems,
+  schemaTables.supportFeedbackSubmissions, schemaTables.supportFeedbackAttachments,
 ].map(getTableConfig).flatMap(table => table.columns.filter(column => column.notNull)
   .map(column => `${table.name}.${column.name}`)))
 

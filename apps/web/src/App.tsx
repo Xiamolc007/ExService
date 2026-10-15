@@ -17,6 +17,7 @@ import { DocsPage } from '@web/src/pages/DocsPage'
 import { SignedOutPage } from '@web/src/pages/IdentityPage/SignedOutPage'
 import { OidcPage } from '@web/src/pages/IdentityPage/OidcPage'
 import { SupportAccess } from './routes/SupportAccess'
+import { FeedbackProvider } from './pages/Support/feedback/FeedbackProvider'
 const AboutUs = lazy(() => import('./pages/AboutUs/AboutUs').then(module => ({ default: module.AboutUs })))
 const SupportRoutes = lazy(() => import('./pages/Support/SupportRoutes').then(module => ({ default: module.SupportRoutes })))
 
@@ -27,6 +28,7 @@ const SupportRoutes = lazy(() => import('./pages/Support/SupportRoutes').then(mo
 export function App() {
   return (
     <AuthProvider>
+      <FeedbackProvider>
       <Routes>
         <Route path="/login" element={<AuthPage mode="login" />} />
         <Route path="/register" element={<InvitationRegistrationPage />} />
@@ -53,6 +55,7 @@ export function App() {
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
+      </FeedbackProvider>
     </AuthProvider>
   )
 }

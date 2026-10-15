@@ -1,4 +1,4 @@
-﻿import { readdirSync, unlinkSync, writeFileSync } from 'node:fs'
+import { readdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createApp, serviceHandlers } from '@workspace/server'
@@ -21,7 +21,7 @@ afterEach(async () => {
 async function setup(createUserId?: () => string) {
   const fixture = await createTestAuth(createUserId ? { createUserId } : {})
   fixtures.push(fixture)
-  const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices, authServices: fixture.authServices, profileServices: fixture.profileServices, storageServices: fixture.storageServices, notifications: fixture.notifications })
+  const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices, authServices: fixture.authServices, profileServices: fixture.profileServices, storageServices: fixture.storageServices, notifications: fixture.notifications, clickupServices: fixture.clickupServices, supportServices: fixture.supportServices })
   apps.push(app)
   return { fixture, app }
 }
@@ -300,7 +300,7 @@ describe('profile contract operations', () => {
     const blockedPath = `${fixture.avatarDirectory}/blocked`
     writeFileSync(blockedPath, 'not a directory')
     const profileServices = new ProfileService(fixture.db, blockedPath)
-    const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices, authServices: fixture.authServices, profileServices, storageServices: fixture.storageServices, notifications: fixture.notifications })
+    const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices, authServices: fixture.authServices, profileServices, storageServices: fixture.storageServices, notifications: fixture.notifications, clickupServices: fixture.clickupServices, supportServices: fixture.supportServices })
     apps.push(app)
     const response = await app.inject({ method: 'POST', url: '/api/auth/me/avatar',
       headers: { authorization }, payload: { mediaType: 'image/png', imageBase64: PNG } })

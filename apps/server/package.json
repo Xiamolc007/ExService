@@ -8,9 +8,10 @@
     ".": "./src/app.ts"
   },
   "scripts": {
+    "support-feedback": "node ../../scripts/runtime/server.mjs support-feedback",
     "dev": "node ../../scripts/runtime/server.mjs dev",
     "start": "node ../../scripts/runtime/server.mjs start",
-    "build": "node ../../scripts/api/generate.mjs generate && node ../../scripts/clean-server-build.mjs && tsc -p tsconfig.json && node ../../scripts/rewrite-server-imports.mjs",
+    "build": "node ../../scripts/api/generate.mjs generate && node ../../scripts/clean-server-build.mjs && tsc -p tsconfig.json && node ../../scripts/rewrite-server-imports.mjs && node ../../scripts/copy-support-fields.mjs",
     "typecheck": "node ../../scripts/api/generate.mjs check && tsc --noEmit -p tsconfig.json",
     "db:migrate": "node ../../scripts/runtime/server.mjs db:migrate",
     "db:reset": "node ../../scripts/runtime/server.mjs db:reset",
@@ -26,6 +27,7 @@
     "@fastify/multipart": "10.1.2",
     "@workspace/api-client": "workspace:*",
     "@workspace/common": "workspace:*",
+    "@workspace/feedback-content": "workspace:*",
     "ajv": "8.20.0",
     "cos-nodejs-sdk-v5": "^3.0.0",
     "drizzle-orm": "^0.45.2",

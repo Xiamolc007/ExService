@@ -1,0 +1,110 @@
+{
+  "id": "4c3befc0-5146-43a2-8610-86efe4e8124a",
+  "name": "Type",
+  "type": "drop_down",
+  "type_config": {
+    "sorting": "manual",
+    "new_drop_down": true,
+    "options": [
+      {
+        "id": "8ed0b993-3b6d-4d2a-b6e1-676df0541b4b",
+        "name": "功能",
+        "color": "#0091ff",
+        "orderindex": 0
+      },
+      {
+        "id": "b800da63-6f45-4988-b9cd-cb7559451ed6",
+        "name": "界面",
+        "color": "#30a46c",
+        "orderindex": 1
+      },
+      {
+        "id": "bf6d946f-4408-4496-8df7-b10bcd667485",
+        "name": "车辆",
+        "color": "#6647f0",
+        "orderindex": 2
+      },
+      {
+        "id": "c9d23f2f-a294-48e0-a8b6-4cbe2ad03acb",
+        "name": "角色",
+        "color": "#e5484d",
+        "orderindex": 3
+      },
+      {
+        "id": "08151e74-052d-4b0f-91a5-70c793c09aae",
+        "name": "衣服",
+        "color": "#e5484d",
+        "orderindex": 4
+      },
+      {
+        "id": "6e630a6c-4645-4633-8497-41c890a48b85",
+        "name": "武器",
+        "color": "#f76808",
+        "orderindex": 5
+      },
+      {
+        "id": "a4d0e97b-fea0-4517-9d2f-496e0842e141",
+        "name": "性能",
+        "color": "#ffc53d",
+        "orderindex": 6
+      },
+      {
+        "id": "1b6597bb-cdbf-48fc-a4c9-f8847d117fad",
+        "name": "动画",
+        "color": "#a18072",
+        "orderindex": 7
+      },
+      {
+        "id": "51916402-9a5b-4cab-b159-772296935716",
+        "name": "用户体验",
+        "color": "#e93d82",
+        "orderindex": 8
+      },
+      {
+        "id": "4f86c837-0e1f-43bd-88a0-51c52d2c74b5",
+        "name": "文档",
+        "color": "#d1b9b0",
+        "orderindex": 9
+      },
+      {
+        "id": "0c5e67d2-67d7-4c90-bb5a-3b2b6bf90cb0",
+        "name": "支持",
+        "color": "#92ceac",
+        "orderindex": 10
+      },
+      {
+        "id": "0d35613f-a12c-479e-9f76-20fa79507b41",
+        "name": "其他",
+        "color": "#8d8d8d",
+        "orderindex": 11
+      }
+    ]
+  },
+  "required": false,
+  "applied_objects": [
+    {
+      "object_type": 19,
+      "object_id": 0
+    },
+    {
+      "object_type": 19,
+      "object_id": 1001
+    },
+    {
+      "object_type": 19,
+      "object_id": 1005
+    },
+    {
+      "object_type": 19,
+      "object_id": 1006
+    },
+    {
+      "object_type": 19,
+      "object_id": 1007
+    },
+    {
+      "object_type": 19,
+      "object_id": 1009
+    }
+  ]
+}

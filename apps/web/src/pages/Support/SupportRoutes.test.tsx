@@ -7,8 +7,10 @@ import userEvent from '@testing-library/user-event'
 import type { ContentLoader, ContentModule } from '../../content/store'
 import type { SupportRegistry } from '../../content/support/types'
 import { SupportRoutes } from './SupportRoutes'
+import { FeedbackProvider } from './feedback/FeedbackProvider'
 
 const fixture = vi.hoisted(() => ({ registry: { errors: [], featured: [], contacts: [], categories: [], clickup: null } as SupportRegistry, loaders: {} as Record<string, ContentLoader> }))
+vi.mock('./feedback/api', () => ({ getFeedbackOptions: async()=>({available:false,reason:'not_configured',fields:[],kinds:[],actions:[],limits:{titleCodePoints:200,userContentBytes:65536,fileBytes:20971520,files:5,totalFileBytes:104857600,largeFileInfoBytes:16384}}), feedbackPort: {} }))
 vi.mock('../../content/support/registry', async () => {
   const { createContentStore } = await import('../../content/store')
   return { supportRegistry: fixture.registry, supportStore: createContentStore(new Proxy({}, { get: (_, id) => fixture.loaders[String(id)], getOwnPropertyDescriptor: (_, id) => Object.hasOwn(fixture.loaders, id) ? { configurable: true, enumerable: true, value: fixture.loaders[String(id)] } : undefined })), supportImage: (image: unknown) => image }
@@ -16,7 +18,7 @@ vi.mock('../../content/support/registry', async () => {
 import { supportStore } from '../../content/support/registry'
 
 function Location() { const location = useLocation(); return <div aria-label="当前地址">{location.pathname + location.search + location.hash}</div> }
-function show(path = '/support') { return render(<ThemeProvider><ExMessageContext /><MemoryRouter initialEntries={[path]}><Routes><Route path="/support/*" element={<SupportRoutes />} /></Routes><Location /></MemoryRouter></ThemeProvider>) }
+function show(path = '/support') { return render(<ThemeProvider><ExMessageContext /><MemoryRouter initialEntries={[path]}><FeedbackProvider><Routes><Route path="/support/*" element={<SupportRoutes />} /></Routes><Location /></FeedbackProvider></MemoryRouter></ThemeProvider>) }
 function addErrors() {
   fixture.registry.categories.push({ id: 'general', label: '常规排查', order: 0 })
   fixture.registry.errors.push(
@@ -28,6 +30,7 @@ function addErrors() {
   fixture.loaders['errors/second.mdx'] = async () => ({ default: () => <p>没有标题的正文</p> })
 }
 beforeEach(() => {
+  sessionStorage.clear(); localStorage.setItem('exwebsite.auth.token','b'.repeat(43))
   fixture.registry.errors.length = 0; fixture.registry.featured.length = 0; fixture.registry.contacts.length = 0; fixture.registry.categories.length = 0; fixture.registry.clickup = null
   Object.keys(fixture.loaders).forEach(id => delete fixture.loaders[id]); supportStore.clear()
   vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
@@ -35,24 +38,25 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
-it('opens an empty titled modal from each feedback card and displays real empty states without an iframe', async () => {
+it('opens both feedback entry modals, preserving focus and empty content states', async () => {
   const user = userEvent.setup()
   show()
   expect(screen.queryByText('即将开放')).toBeNull()
   const cards = within(screen.getByRole('region', { name: '反馈与建议' })).getAllByRole('article')
-  expect(cards).toHaveLength(3)
+  expect(cards).toHaveLength(2)
   for (const card of cards) {
     const title = within(card).getByRole('heading', { level: 3 }).textContent!
     expect(within(card).queryByRole('link')).toBeNull()
     const trigger = within(card).getByRole('button', { name: title })
     await user.click(trigger)
-    const modal = screen.getByRole('dialog', { name: title })
-    expect(modal.textContent).toBe(`${title}关闭`)
-    await user.click(within(modal).getByRole('button', { name: '关闭' }))
+    const modal = await screen.findByRole('dialog', { name: title })
+    expect(within(modal).queryByLabelText('标题')).toBeNull()
+    expect(await within(modal).findByText('反馈提交暂未配置，请稍后再试。')).toBeTruthy()
+    await user.click(within(modal).getByRole('button', { name: '关闭反馈表单' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(document.activeElement).toBe(trigger)
     await user.keyboard('{Enter}')
-    expect(screen.getByRole('dialog', { name: title })).toBeTruthy()
+    expect(await screen.findByRole('dialog', { name: title })).toBeTruthy()
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   }

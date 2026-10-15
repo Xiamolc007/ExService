@@ -27,7 +27,7 @@ export interface CreateAppOptions extends BusinessServices {
 
 /** Create synchronously; service decorators and API routes become available after Fastify boot. */
 export function createApp({
-  authServices, profileServices, joinServices, invitationServices, storageServices, notifications,
+  authServices, profileServices, joinServices, invitationServices, storageServices, notifications, clickupServices, supportServices,
   identityKeys, oidcServices, logger = false, trustProxy = false, corsAllowedOrigins = new Set(), genReqId,
 }: CreateAppOptions): FastifyInstance {
   const app = Fastify({
@@ -35,7 +35,7 @@ export function createApp({
     ajv: { customOptions: { coerceTypes: false, removeAdditional: false } },
   })
   app.register(businessPlugins, Object.freeze({
-    authServices, profileServices, joinServices, invitationServices, storageServices, notifications, oidcServices,
+    authServices, profileServices, joinServices, invitationServices, storageServices, notifications, oidcServices, clickupServices, supportServices,
   }))
   app.register(httpFoundation, { origins: corsAllowedOrigins })
   app.register(websiteApi, { identityKeys })

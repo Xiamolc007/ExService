@@ -18,6 +18,7 @@ import profileApi from '@server/src/modules/profile/api/plugin'
 import { mergeOperations } from '@server/src/http/service-handlers'
 import { readContract, listOperations, assertOperationCoverage } from '@server/src/contract/document'
 import { formatBusinessPluginError, BusinessPluginLoadError } from '@server/src/business-plugin-errors'
+import { unavailableSupport } from '@tests/helpers/support'
 
 const require = createRequire(new URL('../../apps/server/package.json', import.meta.url))
 const Fastify: () => ReturnType<typeof createApp> = require('fastify')
@@ -38,6 +39,7 @@ function fixture() {
     profileServices: new ProfileService(database, directory, 'http://localhost:8080/api/avatars'),
     storageServices: createStorageModule({ config: parseStorageConfig({}, { dataRoot: directory }) }),
     notifications: createNotificationModule({ db: database, tokenKey: Buffer.alloc(32, 3) }),
+    ...unavailableSupport(database, new ProfileService(database, directory, 'http://localhost:8080/api/avatars')),
   }
 }
 

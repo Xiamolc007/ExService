@@ -754,6 +754,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/support/feedback/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** getSupportFeedbackOptions */
+        get: operations["getSupportFeedbackOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/feedback/submissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** prepareSupportFeedback */
+        post: operations["prepareSupportFeedback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/feedback/submissions/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** lookupSupportFeedback */
+        get: operations["lookupSupportFeedback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/feedback/submissions/{submissionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** getSupportFeedback */
+        get: operations["getSupportFeedback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/feedback/submissions/{submissionId}/attachments/{attachmentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** uploadSupportFeedbackAttachment */
+        put: operations["uploadSupportFeedbackAttachment"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/feedback/submissions/{submissionId}/advance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** advanceSupportFeedback */
+        post: operations["advanceSupportFeedback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1430,6 +1532,196 @@ export interface components {
                 message: string;
                 requestId: string;
             };
+        };
+        FeedbackRequestForm: {
+            /** @constant */
+            kind: "request";
+            title: string;
+            typeOptionId: components["schemas"]["NullableUuid"];
+            largeFileInfo: null | string;
+            contentText: string;
+        };
+        /** @enum {string} */
+        FeedbackArea: "development" | "community";
+        FeedbackBugDetails: {
+            description: string;
+            reproductionSteps: null | string;
+            expectedResult: null | string;
+            actualResult: null | string;
+            frequency: null | ("always" | "often" | "sometimes" | "once");
+        };
+        FeedbackBugForm: {
+            /** @constant */
+            kind: "bug";
+            title: string;
+            typeOptionId: components["schemas"]["NullableUuid"];
+            largeFileInfo: null | string;
+            details: components["schemas"]["FeedbackBugDetails"];
+        };
+        FeedbackFeatureForm: {
+            /** @constant */
+            kind: "feature";
+            title: string;
+            typeOptionId: components["schemas"]["NullableUuid"];
+            departmentOptionId: components["schemas"]["NullableUuid"];
+            largeFileInfo: null | string;
+            contentText: string;
+        };
+        FeedbackAssetForm: {
+            /** @constant */
+            kind: "asset";
+            title: string;
+            typeOptionId: components["schemas"]["NullableUuid"];
+            /** @enum {string} */
+            action: "add" | "modify" | "delete" | "other";
+            largeFileInfo: null | string;
+            contentText: string;
+        };
+        FeedbackContentForm: {
+            /** @constant */
+            kind: "content";
+            title: string;
+            /** @enum {string} */
+            action: "add" | "modify" | "delete" | "other";
+            largeFileInfo: null | string;
+            contentText: string;
+        };
+        FeedbackCampaignForm: {
+            /** @constant */
+            kind: "campaign";
+            title: string;
+            largeFileInfo: null | string;
+            contentText: string;
+        };
+        FeedbackSuggestionForm: {
+            /** @constant */
+            kind: "suggestion";
+            title: string;
+            contentText: string;
+            largeFileInfo: null | string;
+        };
+        FeedbackComplaintForm: {
+            /** @constant */
+            kind: "complaint";
+            title: string;
+            contentText: string;
+            largeFileInfo: null | string;
+            anonymous: boolean;
+        };
+        FeedbackForm: components["schemas"]["FeedbackRequestForm"] | components["schemas"]["FeedbackBugForm"] | components["schemas"]["FeedbackFeatureForm"] | components["schemas"]["FeedbackAssetForm"] | components["schemas"]["FeedbackContentForm"] | components["schemas"]["FeedbackCampaignForm"] | components["schemas"]["FeedbackSuggestionForm"] | components["schemas"]["FeedbackComplaintForm"];
+        /** @description 新建 Bug 反馈必须选择问题分类。 */
+        FeedbackBugSubmissionForm: components["schemas"]["FeedbackBugForm"] & {
+            typeOptionId: components["schemas"]["Uuid"];
+        };
+        FeedbackSubmissionForm: components["schemas"]["FeedbackRequestForm"] | components["schemas"]["FeedbackBugSubmissionForm"] | components["schemas"]["FeedbackFeatureForm"] | components["schemas"]["FeedbackAssetForm"] | components["schemas"]["FeedbackContentForm"] | components["schemas"]["FeedbackCampaignForm"] | components["schemas"]["FeedbackSuggestionForm"] | components["schemas"]["FeedbackComplaintForm"];
+        FeedbackAttachmentDeclaration: {
+            id: components["schemas"]["Uuid"];
+            originalName: string;
+            contentType: string;
+            byteLength: number;
+            sha256: string;
+        };
+        FeedbackPrepare: {
+            submissionKey: components["schemas"]["Uuid"];
+            /** @description 新建 Bug 反馈必须选择问题分类；其他类型的分类仍可留空。已接收记录的表单快照按 FeedbackForm 读取。 */
+            form: components["schemas"]["FeedbackSubmissionForm"];
+            attachments: components["schemas"]["FeedbackAttachmentDeclaration"][];
+        };
+        FeedbackAdvance: {
+            expectedRevision: number;
+            /** @enum {string} */
+            intent: "continue" | "retry";
+        };
+        FeedbackUpload: {
+            /** Format: binary */
+            file: string;
+        };
+        FeedbackFieldOption: {
+            id: components["schemas"]["Uuid"];
+            name: string;
+            color: string | null;
+            orderindex: number;
+        };
+        FeedbackFieldDefinition: {
+            id: components["schemas"]["Uuid"];
+            name: string;
+            /** @enum {string} */
+            type: "drop_down" | "short_text" | "text";
+            required: boolean;
+            type_config: {
+                options: components["schemas"]["FeedbackFieldOption"][];
+            };
+        };
+        FeedbackKindAvailability: {
+            /** @enum {string} */
+            kind: "bug" | "feature" | "asset" | "request" | "content" | "campaign" | "suggestion" | "complaint";
+            available: boolean;
+            /** @enum {string|null} */
+            reason: "not_configured" | "configuration_invalid" | "upstream_unavailable" | null;
+        };
+        FeedbackActionAvailability: {
+            /** @enum {string} */
+            action: "add" | "modify" | "delete" | "other";
+            available: boolean;
+            /** @enum {string|null} */
+            reason: "tag_missing" | null;
+        };
+        FeedbackLimits: {
+            /** @constant */
+            titleCodePoints: 200;
+            /** @constant */
+            userContentBytes: 65536;
+            /** @constant */
+            fileBytes: 20971520;
+            /** @constant */
+            files: 5;
+            /** @constant */
+            totalFileBytes: 104857600;
+            /** @constant */
+            largeFileInfoBytes: 16384;
+        };
+        FeedbackOptions: {
+            available: boolean;
+            reason: null | ("not_configured" | "configuration_invalid" | "upstream_unavailable");
+            fields: components["schemas"]["FeedbackFieldDefinition"][];
+            kinds: components["schemas"]["FeedbackKindAvailability"][];
+            actions: components["schemas"]["FeedbackActionAvailability"][];
+            limits: components["schemas"]["FeedbackLimits"];
+        };
+        FeedbackFailure: {
+            /** @enum {string} */
+            code: "UPSTREAM_REJECTED" | "UPSTREAM_RATE_LIMITED" | "UPSTREAM_CONFIGURATION" | "UPSTREAM_UNKNOWN";
+            /** @enum {string} */
+            phase: "create_task" | "upload_attachment";
+            attachmentId: components["schemas"]["NullableUuid"];
+            retryAfterSeconds: null | number;
+        };
+        FeedbackAttachment: {
+            id: components["schemas"]["Uuid"];
+            ordinal: number;
+            originalName: string;
+            contentType: string;
+            byteLength: number;
+            sha256: string;
+            /** @enum {string} */
+            status: "expected" | "received" | "uploading" | "failed" | "verification_required" | "uploaded";
+            remoteAttachmentId: null | string;
+        };
+        FeedbackSnapshot: {
+            id: components["schemas"]["Uuid"];
+            submissionKey: components["schemas"]["Uuid"];
+            revision: number;
+            form: components["schemas"]["FeedbackForm"];
+            createdAt: components["schemas"]["SafeTimestamp"];
+            receiveExpiresAt: components["schemas"]["SafeTimestamp"];
+            /** @enum {string} */
+            status: "receiving" | "ready" | "creating" | "uploading" | "failed" | "verification_required" | "completed";
+            /** @enum {string} */
+            nextAction: "upload" | "continue" | "wait" | "retry" | "verify" | "done" | "restart";
+            taskId: null | string;
+            taskUrl: null | string;
+            failure: null | components["schemas"]["FeedbackFailure"];
+            attachments: components["schemas"]["FeedbackAttachment"][];
         };
     };
     responses: {
@@ -2754,6 +3046,249 @@ export interface operations {
             400: components["responses"]["ErrorResponse"];
             401: components["responses"]["ErrorResponse"];
             409: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    getSupportFeedbackOptions: {
+        parameters: {
+            query?: {
+                area?: components["schemas"]["FeedbackArea"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前安全进度；只有 completed 才表示全部完成。 */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackOptions"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            408: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            413: components["responses"]["ErrorResponse"];
+            415: components["responses"]["ErrorResponse"];
+            429: components["responses"]["ErrorResponse"];
+            500: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    prepareSupportFeedback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackPrepare"];
+            };
+        };
+        responses: {
+            /** @description 当前安全进度；只有 completed 才表示全部完成。 */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackSnapshot"];
+                };
+            };
+            /** @description 当前安全进度；只有 completed 才表示全部完成。 */
+            201: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackSnapshot"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            408: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            413: components["responses"]["ErrorResponse"];
+            415: components["responses"]["ErrorResponse"];
+            429: components["responses"]["ErrorResponse"];
+            500: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    lookupSupportFeedback: {
+        parameters: {
+            query: {
+                submissionKey: components["schemas"]["Uuid"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前安全进度；只有 completed 才表示全部完成。 */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackSnapshot"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            408: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            413: components["responses"]["ErrorResponse"];
+            415: components["responses"]["ErrorResponse"];
+            429: components["responses"]["ErrorResponse"];
+            500: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    getSupportFeedback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submissionId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前安全进度；只有 completed 才表示全部完成。 */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackSnapshot"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            408: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            413: components["responses"]["ErrorResponse"];
+            415: components["responses"]["ErrorResponse"];
+            429: components["responses"]["ErrorResponse"];
+            500: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    uploadSupportFeedbackAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submissionId: components["schemas"]["Uuid"];
+                attachmentId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["FeedbackUpload"];
+            };
+        };
+        responses: {
+            /** @description 当前安全进度；只有 completed 才表示全部完成。 */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackSnapshot"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            408: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            413: components["responses"]["ErrorResponse"];
+            415: components["responses"]["ErrorResponse"];
+            429: components["responses"]["ErrorResponse"];
+            500: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    advanceSupportFeedback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submissionId: components["schemas"]["Uuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackAdvance"];
+            };
+        };
+        responses: {
+            /** @description 当前安全进度；只有 completed 才表示全部完成。 */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackSnapshot"];
+                };
+            };
+            /** @description 当前安全进度；只有 completed 才表示全部完成。 */
+            202: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["CacheControl"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackSnapshot"];
+                };
+            };
+            400: components["responses"]["ErrorResponse"];
+            401: components["responses"]["ErrorResponse"];
+            404: components["responses"]["ErrorResponse"];
+            408: components["responses"]["ErrorResponse"];
+            409: components["responses"]["ErrorResponse"];
+            413: components["responses"]["ErrorResponse"];
+            415: components["responses"]["ErrorResponse"];
+            429: components["responses"]["ErrorResponse"];
+            500: components["responses"]["ErrorResponse"];
+            503: components["responses"]["ErrorResponse"];
             default: components["responses"]["ErrorResponse"];
         };
     };

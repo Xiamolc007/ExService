@@ -1,0 +1,5 @@
+.root { display: grid; gap: 1.25rem; }
+.optional { color: var(--exui-text-secondary); font-size: .75rem; font-weight: 400; }
+.help { margin: .4rem 0 0; font-size: .8125rem; color: var(--exui-text-secondary); }
+.file { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .5rem .75rem; background: var(--exui-surface-secondary); border-radius: .625rem; overflow-wrap: anywhere; }
+.switchRow { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }

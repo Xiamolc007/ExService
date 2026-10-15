@@ -104,6 +104,23 @@ function fixture(t, profile = 'local') {
   return { workspace, values, save, read: inherited => readRuntimeConfiguration({ workspace, inherited: inherited ?? {} }) }
 }
 
+test('ClickUp token overrides root config only in server and is redacted in retained logs', t => {
+  const f = fixture(t)
+  f.values.CLICKUP_TOKEN = 'root-private'
+  f.save()
+  const state = f.read({ CLICKUP_TOKEN: 'p@%' })
+  assert.equal(state.environments.server.CLICKUP_TOKEN, 'p@%')
+  for (const [name, environment] of Object.entries(state.environments)) if (name !== 'server') assert.equal(environment.CLICKUP_TOKEN, undefined)
+  const file = join(f.workspace, 'logs/clickup.jsonl')
+  const log = logWriter(file, { maxBytes: 1024, retain: 2, environment: state.environments.server })
+  for (let i=0; i<30; i++) log('server', `p@% ${encodeURIComponent('p@%')} ${'x'.repeat(150)}`)
+  for (const name of readdirSync(join(f.workspace, 'logs'))) {
+    const retained = readFileSync(join(f.workspace, 'logs', name), 'utf8')
+    assert.equal(retained.includes('p@%'), false)
+    assert.equal(retained.includes(encodeURIComponent('p@%')), false)
+  }
+})
+
 test('Docker status failures explain engine availability without exposing command output', t => {
   const state = fixture(t).read(); state.workspace = root
   const cases = [
@@ -677,14 +694,14 @@ test('compiled production server uses no tsx and no implicit migration', t => {
 test('offline Build excludes runtime secrets, needs no prepared database, and stops at the first failed stage', async t => {
   const f = fixture(t), corepack = join(f.workspace, 'corepack.js'); writeFileSync(corepack, '')
   const specs = buildSpecifications({ workspace: f.workspace, inherited: { INTEGRATION_COREPACK_JS: corepack, DATABASE_URL: 'private', AUTH_CODE_HMAC_KEY: 'private' } })
-  assert.equal(specs.length, 4)
+  assert.equal(specs.length, 5)
   assert.equal(specs[0].name, 'API Contract')
   assert.deepEqual(specs[0].args, [join(f.workspace, 'scripts/api/generate.mjs'), 'generate'])
   assert.ok(specs.every(spec => spec.environment.DATABASE_URL === undefined && spec.environment.AUTH_CODE_HMAC_KEY === undefined && spec.environment.NODE_ENV === 'production'))
   const executed = []
   await assert.rejects(build({ workspace: f.workspace, inherited: { INTEGRATION_COREPACK_JS: corepack } }, async spec => {
     executed.push(spec.name); if (executed.length === 2) throw new Error('compiler failure')
-  }), /RUNTIME_BUILD_FAILED:@workspace\/sdk/)
+  }), /RUNTIME_BUILD_FAILED:@workspace\/feedback-content/)
   assert.equal(executed.length, 2)
 })
 

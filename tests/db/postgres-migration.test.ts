@@ -26,7 +26,7 @@ async function installMigrationPrefix(isolated: Awaited<ReturnType<typeof isolat
   })
 }
 
-it.each([1, 2])('upgrades the complete %i-migration historical schema without replacing data', async count => {
+it.each([1, 2, 3])('upgrades the complete %i-migration historical schema without replacing data', async count => {
   const isolated = await isolatedPostgres({ migrate: false })
   resources.push(isolated)
   await installMigrationPrefix(isolated, count)
@@ -35,7 +35,9 @@ it.each([1, 2])('upgrades the complete %i-migration historical schema without re
   await runMigrations({ connectionString: isolated.connectionString, searchPath: isolated.schema, migrationsSchema: isolated.schema })
   expect((await isolated.db.query('SELECT id,email,nickname,password_hash,created_at FROM auth_users')).rows).toEqual(before)
   expect((await isolated.db.query('SELECT count(*)::integer AS n FROM notification_receipts')).rows).toEqual([{ n: 0 }])
-  expect((await isolated.db.query('SELECT count(*)::integer AS n FROM __drizzle_migrations')).rows).toEqual([{ n: 3 }])
+  const migrationCount = JSON.parse(readFileSync(new URL('../../apps/server/drizzle/meta/_journal.json', import.meta.url), 'utf8')).entries.length as number
+  expect((await isolated.db.query('SELECT count(*)::integer AS n FROM __drizzle_migrations')).rows).toEqual([{ n: migrationCount }])
+  expect((await isolated.db.query('SELECT count(*)::integer AS n FROM support_feedback_submissions')).rows).toEqual([{ n: 0 }])
 })
 
 it('refuses a historical schema with a substituted table before applying pending migrations', async () => {

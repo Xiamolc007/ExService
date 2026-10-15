@@ -79,7 +79,7 @@ beforeEach(async () => {
   fixtures.push(fixture)
   app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices,
     authServices: fixture.authServices, profileServices: fixture.profileServices,
-    storageServices: fixture.storageServices, notifications: fixture.notifications })
+    storageServices: fixture.storageServices, notifications: fixture.notifications, clickupServices: fixture.clickupServices, supportServices: fixture.supportServices })
   await app.ready()
   apps.push(app)
 

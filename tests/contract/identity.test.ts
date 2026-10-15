@@ -15,7 +15,7 @@ it('requires mapped internal keys and returns the exact linked-session contract'
   fixtures.push(fixture)
   const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices,
     authServices: fixture.authServices, profileServices: fixture.profileServices, storageServices: fixture.storageServices,
-    notifications: fixture.notifications,
+    notifications: fixture.notifications, clickupServices: fixture.clickupServices, supportServices: fixture.supportServices,
     identityKeys: { clients: { 'another-app': 'app-secret', other: 'other-secret' }, bootstrapKey: 'bootstrap-secret' } })
   apps.push(app)
   const userId = await fixture.seedUser({ email: 'identity@example.com', nickname: 'Identity', password: 'valid password' })
@@ -87,7 +87,7 @@ it('routes the OIDC browser operations through the generated contract shape', as
     clients: { 'another-app': { name: 'Test App', redirectUri: client.redirect_uris[0]!, scopes: ['openid'] } } })
   const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices,
     authServices: fixture.authServices, profileServices: fixture.profileServices, storageServices: fixture.storageServices,
-    notifications: fixture.notifications,
+    notifications: fixture.notifications, clickupServices: fixture.clickupServices, supportServices: fixture.supportServices,
     oidcServices })
   apps.push(app)
   const inspect = await app.inject({ method: 'POST', url: '/api/auth/oidc/inspect', payload: { phase: 'login', challenge: 'a' } })

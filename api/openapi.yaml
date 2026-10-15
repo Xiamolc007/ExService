@@ -21,6 +21,8 @@ tags:
     description: 通用内容存储的上传、直传确认与本地公开读取。
   - name: notifications
     description: 站内持久通知的收件箱、已读、不可恢复清理与通知偏好。
+  - name: support
+    description: 登录用户的反馈提交与恢复。
 paths:
   /health:
     $ref: ./paths/system.yaml#/~1health
@@ -104,6 +106,18 @@ paths:
     $ref: ./paths/notifications.yaml#/~1notifications~1clear-all
   /notification-preferences:
     $ref: ./paths/notifications.yaml#/~1notification-preferences
+  /support/feedback/options:
+    $ref: ./paths/support.yaml#/~1support~1feedback~1options
+  /support/feedback/submissions:
+    $ref: ./paths/support.yaml#/~1support~1feedback~1submissions
+  /support/feedback/submissions/lookup:
+    $ref: ./paths/support.yaml#/~1support~1feedback~1submissions~1lookup
+  /support/feedback/submissions/{submissionId}:
+    $ref: ./paths/support.yaml#/~1support~1feedback~1submissions~1{submissionId}
+  /support/feedback/submissions/{submissionId}/attachments/{attachmentId}:
+    $ref: ./paths/support.yaml#/~1support~1feedback~1submissions~1{submissionId}~1attachments~1{attachmentId}
+  /support/feedback/submissions/{submissionId}/advance:
+    $ref: ./paths/support.yaml#/~1support~1feedback~1submissions~1{submissionId}~1advance
 components:
   securitySchemes:
     bearerAuth:
@@ -385,3 +399,58 @@ components:
       $ref: ./schemas/storage.yaml#/StorageUploadResult
     ErrorEnvelope:
       $ref: ./schemas/common.yaml#/ErrorEnvelope
+
+
+    FeedbackRequestForm:
+      $ref: ./schemas/support.yaml#/FeedbackRequestForm
+    FeedbackArea:
+      type: string
+      enum: [development, community]
+    FeedbackBugDetails:
+      $ref: ./schemas/support.yaml#/FeedbackBugDetails
+    FeedbackBugForm:
+      $ref: ./schemas/support.yaml#/FeedbackBugForm
+    FeedbackFeatureForm:
+      $ref: ./schemas/support.yaml#/FeedbackFeatureForm
+    FeedbackAssetForm:
+      $ref: ./schemas/support.yaml#/FeedbackAssetForm
+    FeedbackContentForm:
+      $ref: ./schemas/support.yaml#/FeedbackContentForm
+    FeedbackCampaignForm:
+      $ref: ./schemas/support.yaml#/FeedbackCampaignForm
+    FeedbackSuggestionForm:
+      $ref: ./schemas/support.yaml#/FeedbackSuggestionForm
+    FeedbackComplaintForm:
+      $ref: ./schemas/support.yaml#/FeedbackComplaintForm
+    FeedbackForm:
+      $ref: ./schemas/support.yaml#/FeedbackForm
+    FeedbackBugSubmissionForm:
+      $ref: ./schemas/support.yaml#/FeedbackBugSubmissionForm
+    FeedbackSubmissionForm:
+      $ref: ./schemas/support.yaml#/FeedbackSubmissionForm
+    FeedbackAttachmentDeclaration:
+      $ref: ./schemas/support.yaml#/FeedbackAttachmentDeclaration
+    FeedbackPrepare:
+      $ref: ./schemas/support.yaml#/FeedbackPrepare
+    FeedbackAdvance:
+      $ref: ./schemas/support.yaml#/FeedbackAdvance
+    FeedbackUpload:
+      $ref: ./schemas/support.yaml#/FeedbackUpload
+    FeedbackFieldOption:
+      $ref: ./schemas/support.yaml#/FeedbackFieldOption
+    FeedbackFieldDefinition:
+      $ref: ./schemas/support.yaml#/FeedbackFieldDefinition
+    FeedbackKindAvailability:
+      $ref: ./schemas/support.yaml#/FeedbackKindAvailability
+    FeedbackActionAvailability:
+      $ref: ./schemas/support.yaml#/FeedbackActionAvailability
+    FeedbackLimits:
+      $ref: ./schemas/support.yaml#/FeedbackLimits
+    FeedbackOptions:
+      $ref: ./schemas/support.yaml#/FeedbackOptions
+    FeedbackFailure:
+      $ref: ./schemas/support.yaml#/FeedbackFailure
+    FeedbackAttachment:
+      $ref: ./schemas/support.yaml#/FeedbackAttachment
+    FeedbackSnapshot:
+      $ref: ./schemas/support.yaml#/FeedbackSnapshot

@@ -31,6 +31,10 @@
     {
       "name": "notifications",
       "description": "站内持久通知的收件箱、已读、不可恢复清理与通知偏好。"
+    },
+    {
+      "name": "support",
+      "description": "登录用户的反馈提交与恢复。"
     }
   ],
   "paths": {
@@ -2501,6 +2505,551 @@
             "$ref": "#/components/responses/ErrorResponse"
           },
           "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/support/feedback/options": {
+      "get": {
+        "operationId": "getSupportFeedbackOptions",
+        "summary": "getSupportFeedbackOptions",
+        "tags": [
+          "support"
+        ],
+        "parameters": [
+          {
+            "name": "area",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/FeedbackArea"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "当前安全进度；只有 completed 才表示全部完成。",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackOptions"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "408": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "413": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "415": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/support/feedback/submissions": {
+      "post": {
+        "operationId": "prepareSupportFeedback",
+        "summary": "prepareSupportFeedback",
+        "tags": [
+          "support"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-fastify-config": {
+          "bodyLimit": 196608
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackPrepare"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "当前安全进度；只有 completed 才表示全部完成。",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackSnapshot"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "当前安全进度；只有 completed 才表示全部完成。",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackSnapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "408": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "413": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "415": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/support/feedback/submissions/lookup": {
+      "get": {
+        "operationId": "lookupSupportFeedback",
+        "summary": "lookupSupportFeedback",
+        "tags": [
+          "support"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "submissionKey",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "当前安全进度；只有 completed 才表示全部完成。",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackSnapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "408": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "413": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "415": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/support/feedback/submissions/{submissionId}": {
+      "get": {
+        "operationId": "getSupportFeedback",
+        "summary": "getSupportFeedback",
+        "tags": [
+          "support"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "submissionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "当前安全进度；只有 completed 才表示全部完成。",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackSnapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "408": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "413": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "415": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/support/feedback/submissions/{submissionId}/attachments/{attachmentId}": {
+      "put": {
+        "operationId": "uploadSupportFeedbackAttachment",
+        "summary": "uploadSupportFeedbackAttachment",
+        "tags": [
+          "support"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "submissionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          },
+          {
+            "name": "attachmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "x-fastify-config": {
+          "supportUpload": {
+            "wireBytes": 21037056,
+            "fileBytes": 20971520,
+            "files": 1,
+            "fields": 0,
+            "fieldNameBytes": 64,
+            "headerPairs": 32,
+            "headerBytes": 16384,
+            "slots": 2,
+            "deadlineMs": 120000
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackUpload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "当前安全进度；只有 completed 才表示全部完成。",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackSnapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "408": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "413": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "415": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "default": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/support/feedback/submissions/{submissionId}/advance": {
+      "post": {
+        "operationId": "advanceSupportFeedback",
+        "summary": "advanceSupportFeedback",
+        "tags": [
+          "support"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "submissionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "x-fastify-config": {
+          "bodyLimit": 4096
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackAdvance"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "当前安全进度；只有 completed 才表示全部完成。",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackSnapshot"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "当前安全进度；只有 completed 才表示全部完成。",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackSnapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "408": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "413": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "415": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
             "$ref": "#/components/responses/ErrorResponse"
           },
           "default": {
@@ -5501,6 +6050,1065 @@
               "requestId": {
                 "type": "string"
               }
+            }
+          }
+        }
+      },
+      "FeedbackRequestForm": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "title",
+          "typeOptionId",
+          "largeFileInfo",
+          "contentText"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "request"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+          },
+          "typeOptionId": {
+            "$ref": "#/components/schemas/NullableUuid"
+          },
+          "largeFileInfo": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "maxLength": 16384
+              }
+            ]
+          },
+          "contentText": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          }
+        }
+      },
+      "FeedbackArea": {
+        "type": "string",
+        "enum": [
+          "development",
+          "community"
+        ]
+      },
+      "FeedbackBugDetails": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "description",
+          "reproductionSteps",
+          "expectedResult",
+          "actualResult",
+          "frequency"
+        ],
+        "properties": {
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16384
+          },
+          "reproductionSteps": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 0,
+                "maxLength": 16384
+              }
+            ]
+          },
+          "expectedResult": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 0,
+                "maxLength": 16384
+              }
+            ]
+          },
+          "actualResult": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 0,
+                "maxLength": 16384
+              }
+            ]
+          },
+          "frequency": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "always",
+                  "often",
+                  "sometimes",
+                  "once"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "FeedbackBugForm": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "title",
+          "typeOptionId",
+          "largeFileInfo",
+          "details"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "bug"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+          },
+          "typeOptionId": {
+            "$ref": "#/components/schemas/NullableUuid"
+          },
+          "largeFileInfo": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "maxLength": 16384
+              }
+            ]
+          },
+          "details": {
+            "$ref": "#/components/schemas/FeedbackBugDetails"
+          }
+        }
+      },
+      "FeedbackFeatureForm": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "title",
+          "typeOptionId",
+          "departmentOptionId",
+          "largeFileInfo",
+          "contentText"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "feature"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+          },
+          "typeOptionId": {
+            "$ref": "#/components/schemas/NullableUuid"
+          },
+          "departmentOptionId": {
+            "$ref": "#/components/schemas/NullableUuid"
+          },
+          "largeFileInfo": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "maxLength": 16384
+              }
+            ]
+          },
+          "contentText": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          }
+        }
+      },
+      "FeedbackAssetForm": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "title",
+          "typeOptionId",
+          "action",
+          "largeFileInfo",
+          "contentText"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "asset"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+          },
+          "typeOptionId": {
+            "$ref": "#/components/schemas/NullableUuid"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "add",
+              "modify",
+              "delete",
+              "other"
+            ]
+          },
+          "largeFileInfo": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "maxLength": 16384
+              }
+            ]
+          },
+          "contentText": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          }
+        }
+      },
+      "FeedbackContentForm": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "title",
+          "action",
+          "largeFileInfo",
+          "contentText"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "content"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "add",
+              "modify",
+              "delete",
+              "other"
+            ]
+          },
+          "largeFileInfo": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "maxLength": 16384
+              }
+            ]
+          },
+          "contentText": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          }
+        }
+      },
+      "FeedbackCampaignForm": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "title",
+          "largeFileInfo",
+          "contentText"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "campaign"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+          },
+          "largeFileInfo": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "maxLength": 16384
+              }
+            ]
+          },
+          "contentText": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          }
+        }
+      },
+      "FeedbackSuggestionForm": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "title",
+          "contentText",
+          "largeFileInfo"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "suggestion"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+          },
+          "contentText": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "largeFileInfo": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "maxLength": 16384
+              }
+            ]
+          }
+        }
+      },
+      "FeedbackComplaintForm": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "title",
+          "contentText",
+          "largeFileInfo",
+          "anonymous"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "complaint"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+          },
+          "contentText": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "largeFileInfo": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "maxLength": 16384
+              }
+            ]
+          },
+          "anonymous": {
+            "type": "boolean"
+          }
+        }
+      },
+      "FeedbackForm": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/FeedbackRequestForm"
+          },
+          {
+            "$ref": "#/components/schemas/FeedbackBugForm"
+          },
+          {
+            "$ref": "#/components/schemas/FeedbackFeatureForm"
+          },
+          {
+            "$ref": "#/components/schemas/FeedbackAssetForm"
+          },
+          {
+            "$ref": "#/components/schemas/FeedbackContentForm"
+          },
+          {
+            "$ref": "#/components/schemas/FeedbackCampaignForm"
+          },
+          {
+            "$ref": "#/components/schemas/FeedbackSuggestionForm"
+          },
+          {
+            "$ref": "#/components/schemas/FeedbackComplaintForm"
+          }
+        ]
+      },
+      "FeedbackBugSubmissionForm": {
+        "description": "新建 Bug 反馈必须选择问题分类。",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FeedbackBugForm"
+          },
+          {
+            "type": "object",
+            "required": [
+              "typeOptionId"
+            ],
+            "properties": {
+              "typeOptionId": {
+                "$ref": "#/components/schemas/Uuid"
+              }
+            }
+          }
+        ]
+      },
+      "FeedbackSubmissionForm": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/FeedbackRequestForm"
+          },
+          {
+            "$ref": "#/components/schemas/FeedbackBugSubmissionForm"
+          },
+          {
+            "$ref": "#/components/schemas/FeedbackFeatureForm"
+          },
+          {
+            "$ref": "#/components/schemas/FeedbackAssetForm"
+          },
+          {
+            "$ref": "#/components/schemas/FeedbackContentForm"
+          },
+          {
+            "$ref": "#/components/schemas/FeedbackCampaignForm"
+          },
+          {
+            "$ref": "#/components/schemas/FeedbackSuggestionForm"
+          },
+          {
+            "$ref": "#/components/schemas/FeedbackComplaintForm"
+          }
+        ]
+      },
+      "FeedbackAttachmentDeclaration": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "originalName",
+          "contentType",
+          "byteLength",
+          "sha256"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "originalName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 510,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+          },
+          "contentType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 127,
+            "pattern": "^[\\x20-\\x7e]+$"
+          },
+          "byteLength": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20971520
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      },
+      "FeedbackPrepare": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "submissionKey",
+          "form",
+          "attachments"
+        ],
+        "properties": {
+          "submissionKey": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "form": {
+            "description": "新建 Bug 反馈必须选择问题分类；其他类型的分类仍可留空。已接收记录的表单快照按 FeedbackForm 读取。",
+            "$ref": "#/components/schemas/FeedbackSubmissionForm"
+          },
+          "attachments": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "$ref": "#/components/schemas/FeedbackAttachmentDeclaration"
+            }
+          }
+        }
+      },
+      "FeedbackAdvance": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedRevision",
+          "intent"
+        ],
+        "properties": {
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "intent": {
+            "type": "string",
+            "enum": [
+              "continue",
+              "retry"
+            ]
+          }
+        }
+      },
+      "FeedbackUpload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "file"
+        ],
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary"
+          }
+        }
+      },
+      "FeedbackFieldOption": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "color",
+          "orderindex"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 32
+          },
+          "orderindex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 500
+          }
+        }
+      },
+      "FeedbackFieldDefinition": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "type",
+          "required",
+          "type_config"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "drop_down",
+              "short_text",
+              "text"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "type_config": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "options"
+            ],
+            "properties": {
+              "options": {
+                "type": "array",
+                "maxItems": 500,
+                "items": {
+                  "$ref": "#/components/schemas/FeedbackFieldOption"
+                }
+              }
+            }
+          }
+        }
+      },
+      "FeedbackKindAvailability": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "available",
+          "reason"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "bug",
+              "feature",
+              "asset",
+              "request",
+              "content",
+              "campaign",
+              "suggestion",
+              "complaint"
+            ]
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "not_configured",
+              "configuration_invalid",
+              "upstream_unavailable",
+              null
+            ]
+          }
+        }
+      },
+      "FeedbackActionAvailability": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "action",
+          "available",
+          "reason"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "add",
+              "modify",
+              "delete",
+              "other"
+            ]
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "tag_missing",
+              null
+            ]
+          }
+        }
+      },
+      "FeedbackLimits": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "titleCodePoints",
+          "userContentBytes",
+          "fileBytes",
+          "files",
+          "totalFileBytes",
+          "largeFileInfoBytes"
+        ],
+        "properties": {
+          "titleCodePoints": {
+            "type": "integer",
+            "const": 200
+          },
+          "userContentBytes": {
+            "type": "integer",
+            "const": 65536
+          },
+          "fileBytes": {
+            "type": "integer",
+            "const": 20971520
+          },
+          "files": {
+            "type": "integer",
+            "const": 5
+          },
+          "totalFileBytes": {
+            "type": "integer",
+            "const": 104857600
+          },
+          "largeFileInfoBytes": {
+            "type": "integer",
+            "const": 16384
+          }
+        }
+      },
+      "FeedbackOptions": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "available",
+          "reason",
+          "fields",
+          "kinds",
+          "actions",
+          "limits"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "not_configured",
+                  "configuration_invalid",
+                  "upstream_unavailable"
+                ]
+              }
+            ]
+          },
+          "fields": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "$ref": "#/components/schemas/FeedbackFieldDefinition"
+            }
+          },
+          "kinds": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 6,
+            "items": {
+              "$ref": "#/components/schemas/FeedbackKindAvailability"
+            }
+          },
+          "actions": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 4,
+            "items": {
+              "$ref": "#/components/schemas/FeedbackActionAvailability"
+            }
+          },
+          "limits": {
+            "$ref": "#/components/schemas/FeedbackLimits"
+          }
+        }
+      },
+      "FeedbackFailure": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "phase",
+          "attachmentId",
+          "retryAfterSeconds"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "UPSTREAM_REJECTED",
+              "UPSTREAM_RATE_LIMITED",
+              "UPSTREAM_CONFIGURATION",
+              "UPSTREAM_UNKNOWN"
+            ]
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "create_task",
+              "upload_attachment"
+            ]
+          },
+          "attachmentId": {
+            "$ref": "#/components/schemas/NullableUuid"
+          },
+          "retryAfterSeconds": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            ]
+          }
+        }
+      },
+      "FeedbackAttachment": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "ordinal",
+          "originalName",
+          "contentType",
+          "byteLength",
+          "sha256",
+          "status",
+          "remoteAttachmentId"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "ordinal": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4
+          },
+          "originalName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 510
+          },
+          "contentType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 127
+          },
+          "byteLength": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20971520
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "expected",
+              "received",
+              "uploading",
+              "failed",
+              "verification_required",
+              "uploaded"
+            ]
+          },
+          "remoteAttachmentId": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              }
+            ]
+          }
+        }
+      },
+      "FeedbackSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "submissionKey",
+          "revision",
+          "form",
+          "createdAt",
+          "receiveExpiresAt",
+          "status",
+          "nextAction",
+          "taskId",
+          "taskUrl",
+          "failure",
+          "attachments"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "submissionKey": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "form": {
+            "$ref": "#/components/schemas/FeedbackForm"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/SafeTimestamp"
+          },
+          "receiveExpiresAt": {
+            "$ref": "#/components/schemas/SafeTimestamp"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "receiving",
+              "ready",
+              "creating",
+              "uploading",
+              "failed",
+              "verification_required",
+              "completed"
+            ]
+          },
+          "nextAction": {
+            "type": "string",
+            "enum": [
+              "upload",
+              "continue",
+              "wait",
+              "retry",
+              "verify",
+              "done",
+              "restart"
+            ]
+          },
+          "taskId": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              }
+            ]
+          },
+          "taskUrl": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "pattern": "^https://app\\.clickup\\.com/t/[A-Za-z0-9_-]+$"
+              }
+            ]
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FeedbackFailure"
+              }
+            ]
+          },
+          "attachments": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "$ref": "#/components/schemas/FeedbackAttachment"
             }
           }
         }

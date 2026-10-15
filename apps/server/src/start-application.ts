@@ -7,6 +7,10 @@ interface ApplicationStartOptions {
   listen: FastifyListenOptions
   startProjection: () => () => void
   startOutbox?: () => () => void
+  /** Refuse new support advances and await current claims before database close. */
+  drainSupport?: () => Promise<void>
+  /** Boot fencing after readiness and before listening. */
+  recoverSupport?: () => Promise<void>
   reportCleanupFailure?: (message: string) => void
 }
 
@@ -25,6 +29,7 @@ export async function startApplication(options: ApplicationStartOptions): Promis
       for (const stop of stops.reverse()) {
         try { stop() } catch { report() }
       }
+      try { await options.drainSupport?.() } catch { report() }
       try { await options.database.close() } catch { report() }
     })
     return cleanupPromise
@@ -33,6 +38,7 @@ export async function startApplication(options: ApplicationStartOptions): Promis
     app = options.createApp()
     app.addHook('onClose', cleanup)
     await app.ready()
+    await options.recoverSupport?.()
     await app.listen(options.listen)
     stops.push(options.startProjection())
     if (options.startOutbox) stops.push(options.startOutbox())

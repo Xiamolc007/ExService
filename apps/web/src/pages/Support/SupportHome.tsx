@@ -3,7 +3,6 @@ import { Link } from "react-router";
 import {
   Button,
   ExMessage,
-  Modal,
   Tabs,
   TabsList,
   TabsTrigger,
@@ -18,25 +17,24 @@ import type {
 } from "../../content/support/types";
 import { useSupportFocus } from "./useSupportFocus";
 import styles from "./Support.module.scss";
+import { useFeedback } from './feedback/FeedbackProvider';
 
 const feedback = [
   {
     title: "功能和需求",
-    description: "分享你的想法，帮助我们把产品做得更好。",
+    description: "报告问题，提出功能、资源、文档或活动需求。",
     icon: "Discovery",
-  },
-  {
-    title: "Bug 反馈",
-    description: "记录遇到的问题与复现过程，帮助我们定位和修复。",
-    icon: "Discount",
+    area: "development" as const,
   },
   {
     title: "投诉和建议",
     description: "反馈你遇到的不当行为或不满意的体验。",
     icon: "Message",
+    area: "community" as const,
   },
 ];
 export function FeedbackEntries() {
+  const { openFeedback } = useFeedback();
   return (
     <section className={styles.section} aria-labelledby="feedback-title">
       <div className={styles.sectionHeading}>
@@ -58,21 +56,7 @@ export function FeedbackEntries() {
               <ArrowRight className={styles.feedbackArrow} aria-hidden="true" />
             </h3>
             <p id={`feedback-${item.icon}-description`}>{item.description}</p>
-            <Modal
-              title={item.title}
-              closeLabel="关闭"
-              height="24rem"
-              trigger={
-                <button
-                  type="button"
-                  className={styles.feedbackTrigger}
-                  aria-labelledby={`feedback-${item.icon}-title`}
-                  aria-describedby={`feedback-${item.icon}-description`}
-                />
-              }
-            >
-              {null}
-            </Modal>
+            <button type="button" className={styles.feedbackTrigger} aria-labelledby={`feedback-${item.icon}-title`} aria-describedby={`feedback-${item.icon}-description`} onClick={event => openFeedback(item.area, event.currentTarget)} />
           </article>
         ))}
       </div>

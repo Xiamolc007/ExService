@@ -1,6 +1,7 @@
 import type { SqlExecutor } from '@server/src/db/client.js'
 import { getTableConfig } from 'drizzle-orm/pg-core'
 import * as schemaTables from '@server/src/db/schema.js'
+import { SUPPORT_CONSTRAINT_DEFINITIONS, SUPPORT_INDEX_SIGNATURES } from './support-signatures.js'
 
 const tableDefinitions = [
   schemaTables.authUsers, schemaTables.authSessions, schemaTables.authSsoRequests,
@@ -14,6 +15,7 @@ const tableDefinitions = [
   schemaTables.notificationReceipts, schemaTables.notificationPreferences,
   schemaTables.notificationMutations, schemaTables.notificationClearBatches,
   schemaTables.notificationClearBatchItems,
+  schemaTables.supportFeedbackSubmissions, schemaTables.supportFeedbackAttachments,
 ].map(getTableConfig)
 
 // PostgreSQL's stock NAMEDATALEN allows 63 bytes per identifier. Generated
@@ -29,6 +31,7 @@ export const APPLICATION_TABLES = [
   'notification_contents', 'notification_events', 'notification_event_recipients',
   'notification_user_streams', 'notification_receipts', 'notification_preferences',
   'notification_mutations', 'notification_clear_batches', 'notification_clear_batch_items',
+  'support_feedback_submissions', 'support_feedback_attachments',
 ] as const
 
 export const BASELINE_APPLICATION_TABLES = APPLICATION_TABLES.slice(0, 12)
@@ -128,6 +131,7 @@ export const BASELINE_INDEX_SIGNATURES = new Map<string, string>([
 ])
 
 export const APPLICATION_CONSTRAINT_DEFINITIONS = new Map<string, string>([
+  ...SUPPORT_CONSTRAINT_DEFINITIONS,
   ...BASELINE_CONSTRAINT_DEFINITIONS,
   ['auth_identity_outbox.auth_identity_outbox_pkey', 'PRIMARY KEY (event_id)'],
   ['auth_identity_outbox.auth_identity_outbox_kind_check', "CHECK (kind = ANY (ARRAY['session'::text, 'user'::text]))"],
@@ -202,6 +206,7 @@ export const APPLICATION_CONSTRAINT_DEFINITIONS = new Map<string, string>([
 ])
 
 export const APPLICATION_INDEX_SIGNATURES = new Map<string, string>([
+  ...SUPPORT_INDEX_SIGNATURES,
   ...BASELINE_INDEX_SIGNATURES,
   ['auth_identity_outbox.auth_identity_outbox_pkey', 'UNIQUE btree (event_id)'],
   ['auth_identity_outbox.auth_identity_outbox_due_idx', 'btree (completed_at, next_attempt_at)'],
