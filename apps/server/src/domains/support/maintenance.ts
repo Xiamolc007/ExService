@@ -2,32 +2,36 @@ import type { AppDatabase,SqlExecutor } from '../../db/client.js'
 import type { ClickUpServices } from '../../modules/clickup/service.js'
 import { assertClickUpTaskId } from '../../modules/clickup/errors.js'
 import { FeedbackError } from './errors.js'
-import { readRecord,markUnknown,clearAttempt,clearFailure,type RecordSet } from './records.js'
-import { matchesTask } from './metadata.js'
+import { readRecord,type RecordSet } from './records.js'
+import { persistOutcome } from './lifecycle.js'
+import { matchesFrozenTask } from './frozen-payload.js'
+import { activeCommunityProfile } from './frozen-payload.js'
+import type { CommunityTarget } from './metadata.js'
 import { sha256 } from './validation.js'
 export interface NotWrittenEvidence { evidenceKind:'explicit_rejection'|'provider_confirmation'; providerReference:string; observedAt:number; confirmedNotExecuted:true }
-export interface MaintenanceDependencies {db:AppDatabase;clickup:ClickUpServices;now?:()=>number;secrets?:readonly string[]}
+export interface MaintenanceDependencies {db:AppDatabase;clickup:ClickUpServices;now?:()=>number;secrets?:readonly string[];communityTarget?:CommunityTarget}
 export function validateEvidence(value:unknown,secrets:readonly string[]=[]):NotWrittenEvidence {
   if(!value||typeof value!=='object'||Array.isArray(value))throw new FeedbackError('FEEDBACK_INVALID_INPUT')
   const v=value as Record<string,unknown>,serialized=JSON.stringify(value)
   if(Buffer.byteLength(serialized)>4096 || Object.keys(v).sort().join(',')!=='confirmedNotExecuted,evidenceKind,observedAt,providerReference' || !['explicit_rejection','provider_confirmation'].includes(v.evidenceKind as string) || v.confirmedNotExecuted!==true || typeof v.providerReference!=='string'||!v.providerReference||v.providerReference.length>256||/[\x00-\x1f\x7f]/.test(v.providerReference)||typeof v.observedAt!=='number'||!Number.isSafeInteger(v.observedAt)||v.observedAt<0||secrets.some(secret=>secret && (serialized.includes(secret)||(v.providerReference as string).includes(secret)||serialized.includes(encodeURIComponent(secret)))))throw new FeedbackError('FEEDBACK_INVALID_INPUT')
   return v as unknown as NotWrittenEvidence
 }
-export function createSupportMaintenance({db,clickup,now=Date.now,secrets=[]}:MaintenanceDependencies) {
-  const local=async(id:string)=>db.transaction(tx=>readRecord(tx,id), 'repeatable-read-read-only')
+export function createSupportMaintenance({db,clickup,now=Date.now,secrets=[],communityTarget}:MaintenanceDependencies) {
+  const read=(tx:SqlExecutor,id:string,userId?:string,lock=false)=>readRecord(tx,id,userId,lock,activeCommunityProfile(communityTarget))
+  const local=async(id:string)=>db.transaction(tx=>read(tx,id), 'repeatable-read-read-only')
   const verifyTask=async(r:RecordSet,id:string)=>{
     assertClickUpTaskId(id)
     if(r.row.clickup_task_id!==null&&r.row.clickup_task_id!==id)throw new FeedbackError('FEEDBACK_STATE_CONFLICT')
     const remote=await clickup.getTask(id)
-    if(!matchesTask(remote,r.taskPayload,id))throw new FeedbackError('FEEDBACK_STATE_CONFLICT')
+    if(!matchesFrozenTask(remote,r.taskPayload,id))throw new FeedbackError('FEEDBACK_STATE_CONFLICT')
     return remote
   }
   async function pending(tx:SqlExecutor,id:string,attempt:string,revision?:number):Promise<RecordSet> {
-    let r=await readRecord(tx,id,undefined,true)
+    let r=await read(tx,id,undefined,true)
     if(r.row.attempt_id!==attempt || (revision!==undefined&&r.row.revision!==revision))throw new FeedbackError('FEEDBACK_STATE_CONFLICT')
     if(r.row.status!=='verification_required') {
       if(r.row.attempt_expires_at===null||r.row.attempt_expires_at>now())throw new FeedbackError('FEEDBACK_STATE_CONFLICT')
-      await markUnknown(tx,r,now());r=await readRecord(tx,id)
+      await persistOutcome(tx,r,{source:'reconcile',attemptId:attempt,reason:'expired',currentTime:now()},{kind:'unknown'},now());r=await read(tx,id)
     }
     return r
   }
@@ -47,7 +51,7 @@ export function createSupportMaintenance({db,clickup,now=Date.now,secrets=[]}:Ma
       await db.transaction(async tx=>{
         const r=await pending(tx,id,attempt,initial.row.revision)
         if(r.row.attempt_kind!=='create_task'||(r.row.clickup_task_id!==null&&r.row.clickup_task_id!==remoteTaskId))throw new FeedbackError('FEEDBACK_STATE_CONFLICT')
-        await tx.query(`UPDATE support_feedback_submissions SET clickup_task_id=$2,status=$3,${clearAttempt},${clearFailure},maintenance_resolution_json=$4,revision=revision+1,updated_at=$5 WHERE id=$1`,[id,remoteTaskId,r.attachments.length?'uploading':'completed',JSON.stringify({action:'resolve_task',attemptId:attempt,taskId:remoteTaskId,resolvedAt:now()}),now()])
+        await persistOutcome(tx,r,{source:'maintenance',attemptId:attempt,expectedRevision:initial.row.revision},{kind:'task_confirmed',taskId:remoteTaskId,resolution:{action:'resolve_task',attemptId:attempt,taskId:remoteTaskId,resolvedAt:now()}},now())
       })
       return this.inspect(id)
     },
@@ -61,9 +65,7 @@ export function createSupportMaintenance({db,clickup,now=Date.now,secrets=[]}:Ma
       await db.transaction(async tx=>{
         const r=await pending(tx,id,attempt,initial.row.revision)
         if(r.row.attempt_attachment_id!==attachmentId || r.row.clickup_task_id!==initial.row.clickup_task_id)throw new FeedbackError('FEEDBACK_STATE_CONFLICT')
-        await tx.query("UPDATE support_feedback_attachments SET status='uploaded',remote_attachment_id=$3,bytes=NULL,updated_at=$4 WHERE submission_id=$1 AND id=$2",[id,attachmentId,remoteAttachmentId,now()])
-        const done=r.attachments.every(a=>a.id===attachmentId||a.status==='uploaded')
-        await tx.query(`UPDATE support_feedback_submissions SET status=$2,${clearAttempt},${clearFailure},maintenance_resolution_json=$3,revision=revision+1,updated_at=$4 WHERE id=$1`,[id,done?'completed':'uploading',JSON.stringify({action:'resolve_attachment',attemptId:attempt,attachmentId,remoteAttachmentId,resolvedAt:now()}),now()])
+        await persistOutcome(tx,r,{source:'maintenance',attemptId:attempt,expectedRevision:initial.row.revision},{kind:'attachment_uploaded',attachmentId,remoteId:remoteAttachmentId,resolution:{action:'resolve_attachment',attemptId:attempt,attachmentId,remoteAttachmentId,resolvedAt:now()}},now())
       })
       return this.inspect(id)
     },
@@ -75,8 +77,7 @@ export function createSupportMaintenance({db,clickup,now=Date.now,secrets=[]}:Ma
       await db.transaction(async tx=>{
         const r=await pending(tx,id,attempt,initial.row.revision)
         if((r.row.attempt_kind==='create_task'&&r.row.clickup_task_id)||r.attachments.some(a=>a.id===r.row.attempt_attachment_id&&a.remote_attachment_id))throw new FeedbackError('FEEDBACK_STATE_CONFLICT')
-        if(r.row.attempt_attachment_id)await tx.query("UPDATE support_feedback_attachments SET status='failed',updated_at=$3 WHERE submission_id=$1 AND id=$2",[id,r.row.attempt_attachment_id,now()])
-        await tx.query(`UPDATE support_feedback_submissions SET status='failed',failure_code='UPSTREAM_REJECTED',failure_phase=attempt_kind,failure_attachment_id=attempt_attachment_id,retry_not_before=NULL,${clearAttempt},maintenance_resolution_json=$2,revision=revision+1,updated_at=$3 WHERE id=$1`,[id,JSON.stringify({action:'confirm_not_written',attemptId:attempt,evidence,resolvedAt:now()}),now()])
+        await persistOutcome(tx,r,{source:'maintenance',attemptId:attempt,expectedRevision:initial.row.revision},{kind:'confirmed_not_written',evidence,resolution:{action:'confirm_not_written',attemptId:attempt,evidence,resolvedAt:now()}},now())
       })
       return this.inspect(id)
     },
@@ -86,7 +87,7 @@ export function createSupportMaintenance({db,clickup,now=Date.now,secrets=[]}:Ma
         const rows=await tx.query<{id:string;revision:string|number}>(`SELECT id,revision FROM support_feedback_submissions WHERE status='receiving' AND receive_expires_at<=$1 AND clickup_task_id IS NULL AND attempt_id IS NULL ORDER BY id${apply?' FOR UPDATE':''}`,[before])
         if(apply)for(const r of rows.rows) {
           // Parent locks serialize against concurrent upload/claim. No unrelated status is eligible.
-          await readRecord(tx,r.id)
+          await read(tx,r.id)
           await tx.query('DELETE FROM support_feedback_attachments WHERE submission_id=$1',[r.id])
           await tx.query("DELETE FROM support_feedback_submissions WHERE id=$1 AND status='receiving' AND attempt_id IS NULL AND clickup_task_id IS NULL AND receive_expires_at<=$2",[r.id,before])
         }

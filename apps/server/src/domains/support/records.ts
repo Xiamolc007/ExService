@@ -4,17 +4,17 @@ import { safeInteger } from '../../db/client.js'
 import { FeedbackError } from './errors.js'
 import { normalizeStoredPrepare, sha256, content, type FeedbackForm, type FeedbackSnapshot } from './validation.js'
 import { finalMarkdown } from './markdown.js'
-import { TARGET, COMMUNITY_TARGET, type FrozenTaskPayload } from './metadata.js'
+import { activeCommunityProfile, validateStoredTask, type CommunityProfile, type ValidatedFrozenTask } from './frozen-payload.js'
 export interface Submission extends QueryResultRow {
   id: string; user_id: string; submission_key: string; nickname_snapshot: string; form_kind: string; form_version: number; content_rule_version: number; form_json: string; user_markdown: string; final_markdown: string; payload_sha256: string; task_payload_json: string; task_payload_sha256: string; revision: number; status: FeedbackSnapshot['status']; attachment_count: number; total_attachment_bytes: number; created_at: number; receive_expires_at: number; updated_at: number; clickup_task_id: string | null; target_list_id: string; attempt_id: string | null; attempt_kind: 'create_task' | 'upload_attachment' | null; attempt_attachment_id: string | null; attempt_started_at: number | null; attempt_expires_at: number | null; attempt_owner_boot_id: string | null; failure_code: NonNullable<FeedbackSnapshot['failure']>['code'] | null; failure_phase: 'create_task' | 'upload_attachment' | null; failure_attachment_id: string | null; retry_not_before: number | null; maintenance_resolution_json: string | null
 }
 export interface Attachment extends QueryResultRow {
   id: string; submission_id: string; ordinal: number; original_name: string; content_type: string; byte_length: number; sha256: string; status: FeedbackSnapshot['attachments'][number]['status']; remote_attachment_id: string | null; bytes_length: number | null
 }
-export interface RecordSet { row: Submission; attachments: Attachment[]; form: FeedbackForm; taskPayload: FrozenTaskPayload }
+export interface RecordSet { row: Submission; attachments: Attachment[]; form: FeedbackForm; taskPayload: ValidatedFrozenTask }
 const millis = ['revision','total_attachment_bytes','created_at','receive_expires_at','updated_at','attempt_started_at','attempt_expires_at','retry_not_before'] as const
 function corrupt(): never { throw new Error('Support record invariant failed') }
-export async function readRecord(tx: SqlExecutor, id: string, userId?: string, lock = false): Promise<RecordSet> {
+export async function readRecord(tx: SqlExecutor, id: string, userId?: string, lock = false, activeProfile: CommunityProfile = activeCommunityProfile()): Promise<RecordSet> {
   const result = await tx.query<Submission>(`SELECT * FROM support_feedback_submissions WHERE id=$1${userId === undefined ? '' : ' AND user_id=$2'}${lock ? ' FOR UPDATE' : ''}`, userId === undefined ? [id] : [id,userId])
   const row = result.rows[0]
   if (!row) throw new FeedbackError('NOT_FOUND')
@@ -23,23 +23,11 @@ export async function readRecord(tx: SqlExecutor, id: string, userId?: string, l
   const attachments = children.rows
   let form: FeedbackForm
   try { form = JSON.parse(row.form_json) as FeedbackForm } catch { corrupt() }
-  let frozen: FrozenTaskPayload
-  try { frozen = JSON.parse(row.task_payload_json) as FrozenTaskPayload } catch { corrupt() }
-  const taskPayload = frozen?.task
   const declarations = attachments.map(a => ({ id: a.id, originalName: a.original_name, contentType: a.content_type, byteLength: a.byte_length, sha256: a.sha256 }))
   let input
   try { input = normalizeStoredPrepare({ submissionKey: row.submission_key, form, attachments: declarations }) } catch { corrupt() }
-  const community = form.kind === 'suggestion' || form.kind === 'complaint'
-  const anonymous = form.kind === 'complaint' && form.anonymous
-  if (row.form_kind !== form.kind || row.form_version !== (community ? 3 : 2) || row.content_rule_version !== 1 || (anonymous ? row.nickname_snapshot !== '' : !row.nickname_snapshot) || JSON.stringify(input.form) !== row.form_json || row.attachment_count !== attachments.length || row.total_attachment_bytes !== attachments.reduce((n,a) => n+a.byte_length,0) || row.payload_sha256 !== sha256(JSON.stringify(input)) || row.user_markdown !== content(form) || row.final_markdown !== finalMarkdown(row.user_markdown,row.id) || row.revision < 0) corrupt()
-  const expectedFields: Array<{id:string;value:string;type:FrozenTaskPayload['fieldTypes'][number]}> = anonymous ? [] : [{id:TARGET.user,value:`${row.nickname_snapshot} (${row.user_id})`,type:'short_text'}]
-  if ('typeOptionId' in form && form.typeOptionId !== null) expectedFields.push({id:TARGET.type,value:form.typeOptionId,type:'drop_down'})
-  if (form.kind === 'feature' && form.departmentOptionId !== null) expectedFields.push({id:TARGET.department,value:form.departmentOptionId,type:'drop_down'})
-  if (form.largeFileInfo !== null) expectedFields.push({id:TARGET.largeFile,value:form.largeFileInfo,type:'text'})
-  const types = expectedFields.map(field=>field.type)
-  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-  const requiredTag = form.kind === 'suggestion' ? '反馈' : form.kind === 'complaint' ? '投诉' : null
-  if (row.task_payload_sha256 !== sha256(row.task_payload_json) || !frozen || Object.keys(frozen).sort().join(',') !== 'fieldTypes,listId,task' || frozen.listId !== row.target_list_id || !/^\d{1,20}$/.test(frozen.listId) || (community && frozen.listId !== COMMUNITY_TARGET.list) || !taskPayload || Object.keys(taskPayload).sort().join(',') !== 'custom_fields,custom_item_id,markdown_content,name,status,tags' || taskPayload.name !== form.title || taskPayload.markdown_content !== row.final_markdown || !Number.isSafeInteger(taskPayload.custom_item_id) || taskPayload.custom_item_id < 0 || (community && (taskPayload.custom_item_id !== COMMUNITY_TARGET.taskType || taskPayload.status !== COMMUNITY_TARGET.status)) || typeof taskPayload.status !== 'string' || !taskPayload.status || taskPayload.status.length > 255 || !Array.isArray(taskPayload.custom_fields) || !Array.isArray(taskPayload.tags) || !Array.isArray(frozen.fieldTypes) || JSON.stringify(frozen.fieldTypes) !== JSON.stringify(types) || taskPayload.custom_fields.length !== expectedFields.length || taskPayload.custom_fields.some((field,index) => !field || Object.keys(field).sort().join(',') !== 'id,value' || typeof field.id !== 'string' || !uuid.test(field.id) || (community && field.id !== expectedFields[index]?.id) || field.value !== expectedFields[index]?.value) || new Set(taskPayload.custom_fields.map(field=>field.id)).size !== expectedFields.length || taskPayload.tags.length !== (community ? 1 : 'action' in form && form.action !== 'other' ? 1 : 0) || (requiredTag !== null && taskPayload.tags[0] !== requiredTag) || taskPayload.tags.some(tag => typeof tag !== 'string' || !tag || tag.length > 255 || /[\x00-\x1f\x7f]/.test(tag))) corrupt()
+  if (row.form_kind !== form.kind || row.content_rule_version !== 1 || JSON.stringify(input.form) !== row.form_json || row.attachment_count !== attachments.length || row.total_attachment_bytes !== attachments.reduce((n,a) => n+a.byte_length,0) || row.payload_sha256 !== sha256(JSON.stringify(input)) || row.user_markdown !== content(form) || row.final_markdown !== finalMarkdown(row.user_markdown,row.id) || row.revision < 0) corrupt()
+  const frozen = validateStoredTask(row,form,activeProfile)
   for (const [index,a] of attachments.entries()) {
     if (a.ordinal !== index || (a.status === 'expected' && (a.bytes_length !== null || a.remote_attachment_id !== null)) || (a.status === 'uploaded' && (a.bytes_length !== null || !a.remote_attachment_id)) || (!['expected','uploaded'].includes(a.status) && (a.bytes_length !== a.byte_length || a.remote_attachment_id !== null))) corrupt()
   }
@@ -65,12 +53,4 @@ export function snapshot(record: RecordSet, now: number): FeedbackSnapshot {
   const expired = active && r.attempt_expires_at! <= now
   const nextAction: FeedbackSnapshot['nextAction'] = r.status === 'completed' ? 'done' : r.status === 'receiving' ? r.receive_expires_at <= now ? 'restart' : 'upload' : r.status === 'verification_required' || expired ? 'verify' : active ? 'wait' : r.status === 'failed' ? 'retry' : 'continue'
   return { id:r.id, submissionKey:r.submission_key, revision:r.revision, form, createdAt:r.created_at, receiveExpiresAt:r.receive_expires_at, status:r.status, nextAction, taskId:r.clickup_task_id, taskUrl:r.clickup_task_id === null ? null : `https://app.clickup.com/t/${encodeURIComponent(r.clickup_task_id)}`, failure:r.failure_code === null ? null : { code:r.failure_code, phase:r.failure_phase!, attachmentId:r.failure_attachment_id, retryAfterSeconds:r.retry_not_before !== null && r.retry_not_before > now ? Math.ceil((r.retry_not_before-now)/1000) : null }, attachments:attachments.map(a => ({ id:a.id, ordinal:a.ordinal, originalName:a.original_name, contentType:a.content_type, byteLength:a.byte_length, sha256:a.sha256, status:a.status, remoteAttachmentId:a.remote_attachment_id })) }
-}
-export const clearAttempt = 'attempt_id=NULL,attempt_kind=NULL,attempt_attachment_id=NULL,attempt_started_at=NULL,attempt_expires_at=NULL,attempt_owner_boot_id=NULL'
-export const clearFailure = 'failure_code=NULL,failure_phase=NULL,failure_attachment_id=NULL,retry_not_before=NULL'
-export async function markUnknown(tx: SqlExecutor, record: RecordSet, now: number): Promise<void> {
-  const r=record.row
-  if (!r.attempt_id) return
-  if (r.attempt_attachment_id) await tx.query("UPDATE support_feedback_attachments SET status='verification_required',updated_at=$3 WHERE submission_id=$1 AND id=$2",[r.id,r.attempt_attachment_id,now])
-  await tx.query("UPDATE support_feedback_submissions SET status='verification_required',failure_code='UPSTREAM_UNKNOWN',failure_phase=attempt_kind,failure_attachment_id=attempt_attachment_id,retry_not_before=NULL,revision=revision+1,updated_at=$2 WHERE id=$1",[r.id,now])
 }

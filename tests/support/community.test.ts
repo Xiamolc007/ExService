@@ -3,14 +3,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createTestAuth, type TestAuth } from '@tests/helpers/auth'
 import { fakeClickUp, requestInput } from '@tests/helpers/support-clickup'
 import { createSupportServices } from '@server/src/domains/support/service'
-import { createMetadata, frozenTaskInput, matchesTask, TARGET, COMMUNITY_TARGET } from '@server/src/domains/support/metadata'
+import { createSupportMaintenance } from '@server/src/domains/support/maintenance'
+import { createMetadata, frozenTaskInput, TARGET, COMMUNITY_TARGET } from '@server/src/domains/support/metadata'
+import { matchesFrozenTask, validateStoredTask, type FrozenTaskPayload, type FrozenTaskColumns, type CommunityProfile } from '@server/src/domains/support/frozen-payload'
 import { normalizePrepare, sha256 } from '@server/src/domains/support/validation'
 import { createEnabledClickUpServices, type ClickUpTask } from '@server/src/modules/clickup/service'
+import { ClickUpError } from '@server/src/modules/clickup/errors'
+import { loadFieldDefinitions } from '@server/src/domains/support/field-config'
 
 const fixtures: TestAuth[] = []
 afterEach(async () => { await Promise.all(fixtures.splice(0).map(f => f.close())) })
 const suggestion = () => ({ kind: 'suggestion' as const, title: '社区建议', contentText: '请改进服务', largeFileInfo: null })
 const complaint = (anonymous: boolean) => ({ kind: 'complaint' as const, title: '社区投诉', contentText: '这里是投诉内容', largeFileInfo: null, anonymous })
+const matchesTask = (task: ClickUpTask, payload: FrozenTaskPayload, id: string, formVersion: 2 | 3 = 2) => matchesFrozenTask(task,{payload,formVersion,userFieldIds:new Set([TARGET.user])},id)
 async function setup() {
   const f = await createTestAuth(); fixtures.push(f)
   const userId = await f.seedUser({ email: 'community@example.com', nickname: '实名用户', password: 'valid password' })
@@ -63,7 +68,7 @@ describe('community support feedback', () => {
     expect(fake.service.uploadAttachment).toHaveBeenCalledTimes(1)
     const task = fake.tasks.get(completed.snapshot.taskId!)!
     task.custom_fields.push({ id: TARGET.user, name: '用户', type: 'short_text', type_config: {}, value: 'injected user' })
-    expect(matchesTask(task, JSON.parse(row.task_payload_json), task.id)).toBe(false)
+    expect(matchesTask(task, JSON.parse(row.task_payload_json), task.id, 3)).toBe(false)
     const named = await support.prepare(userId, { submissionKey: randomUUID(), form: complaint(false), attachments: [] })
     expect(JSON.parse((await f.db.query<{ task_payload_json: string }>('SELECT task_payload_json FROM support_feedback_submissions WHERE id=$1', [named.snapshot.id])).rows[0]!.task_payload_json).task.custom_fields[0].value).toContain(userId)
     const suggested = await support.prepare(userId, { submissionKey: randomUUID(), form: suggestion(), attachments: [] })
@@ -85,6 +90,81 @@ describe('community support feedback', () => {
     const oldTask = await fake.service.getTask(taskId)
     oldTask.tags.push('投诉')
     expect(matchesTask(oldTask, v2, taskId)).toBe(true)
+  })
+  it('rejects a recomputed anonymous payload moved to an unregistered community target', async () => {
+    const { f, userId, support } = await setup()
+    const prepared = await support.prepare(userId, { submissionKey: randomUUID(), form: complaint(true), attachments: [] })
+    const frozen = JSON.parse((await f.db.query<{ task_payload_json: string }>('SELECT task_payload_json FROM support_feedback_submissions WHERE id=$1', [prepared.snapshot.id])).rows[0]!.task_payload_json)
+    frozen.listId = '1100500000009999'
+    const json = JSON.stringify(frozen)
+    await f.db.query('UPDATE support_feedback_submissions SET target_list_id=$2,task_payload_json=$3,task_payload_sha256=$4 WHERE id=$1', [prepared.snapshot.id, frozen.listId, json, sha256(json)])
+    await expect(support.get(userId, prepared.snapshot.id)).rejects.toThrow('Support record invariant failed')
+  })
+  it('keeps an old anonymous target readable after the active target changes and rejects identity in either generation', async () => {
+    const { f, userId, fake, support } = await setup()
+    const prepared = await support.prepare(userId, { submissionKey: randomUUID(), form: complaint(true), attachments: [] })
+    const row = (await f.db.query<FrozenTaskColumns>('SELECT * FROM support_feedback_submissions WHERE id=$1', [prepared.snapshot.id])).rows[0]!
+    const next: CommunityProfile = { listId: '1100500000009999', taskType: 1004, status: '待核对', userFieldId: randomUUID(), largeFileFieldId: randomUUID() }
+    const validated = validateStoredTask(row, prepared.snapshot.form, next)
+    expect(validated.payload.listId).toBe(COMMUNITY_TARGET.list)
+    expect((await support.get(userId, prepared.snapshot.id)).form.kind).toBe('complaint')
+    const taskId = (await fake.service.createTask(validated.payload.listId, validated.payload.task)).id
+    const remote = await fake.service.getTask(taskId)
+    remote.custom_fields.push({ id: next.userFieldId, name: 'new identity', type: 'short_text', type_config: {}, value: null, hasUnsupportedValue: true })
+    expect(matchesFrozenTask(remote, validated, taskId)).toBe(false)
+    remote.custom_fields[0]!.id = TARGET.user
+    expect(matchesFrozenTask(remote, validated, taskId)).toBe(false)
+    const newPayload = structuredClone(validated.payload)
+    newPayload.listId = next.listId
+    newPayload.task.custom_item_id = next.taskType
+    newPayload.task.status = next.status
+    const task_payload_json = JSON.stringify(newPayload)
+    const nextFrozen = validateStoredTask({ ...row, target_list_id: next.listId, task_payload_json, task_payload_sha256: sha256(task_payload_json) }, prepared.snapshot.form, next)
+    const newTaskId = (await fake.service.createTask(nextFrozen.payload.listId, nextFrozen.payload.task)).id
+    expect(matchesFrozenTask(await fake.service.getTask(newTaskId), nextFrozen, newTaskId)).toBe(true)
+  })
+  it('requires named identity and large-file fields to belong to one registered v3 profile', async () => {
+    const { f, userId, support } = await setup()
+    const form = { ...complaint(false), largeFileInfo: 'https://example.invalid/proof' }
+    const prepared = await support.prepare(userId, { submissionKey: randomUUID(), form, attachments: [] })
+    const row = (await f.db.query<FrozenTaskColumns>('SELECT * FROM support_feedback_submissions WHERE id=$1', [prepared.snapshot.id])).rows[0]!
+    const next: CommunityProfile = { listId: COMMUNITY_TARGET.list, taskType: COMMUNITY_TARGET.taskType, status: COMMUNITY_TARGET.status, userFieldId: randomUUID(), largeFileFieldId: randomUUID() }
+    const frozen = JSON.parse(row.task_payload_json)
+    frozen.task.custom_fields.at(-1).id = next.largeFileFieldId
+    const task_payload_json = JSON.stringify(frozen)
+    expect(() => validateStoredTask({ ...row, task_payload_json, task_payload_sha256: sha256(task_payload_json) }, form, next)).toThrow('Support record invariant failed')
+  })
+  it('reads and advances old and new frozen targets after active configuration changes, then reconciles an old attempt', async () => {
+    const { f, userId, fake, support } = await setup()
+    const old=(await support.prepare(userId,{submissionKey:randomUUID(),form:complaint(true),attachments:[]})).snapshot
+    const next={workspace:TARGET.workspace,list:'1100500000009999',space:'90186006984',taskType:1004,status:'待核对',user:randomUUID(),largeFile:randomUUID()}
+    const originalGetList=vi.mocked(fake.service.getList).getMockImplementation()!,originalGetTypes=vi.mocked(fake.service.getTaskTypes).getMockImplementation()!,originalTags=vi.mocked(fake.service.getSpaceTags).getMockImplementation()!
+    vi.mocked(fake.service.getList).mockImplementation(async list=>list===next.list?{id:next.list,name:'next community',space:{id:next.space},statuses:[{status:next.status}]}:originalGetList(list))
+    vi.mocked(fake.service.getTaskTypes).mockImplementation(async workspace=>[...await originalGetTypes(workspace),{id:next.taskType,name:'Next Feedback'}])
+    vi.mocked(fake.service.getSpaceTags).mockImplementation(async space=>space===next.space?['反馈','投诉']:originalTags(space))
+    fake.fields.push({...fake.fields.find(field=>field.id===TARGET.user)!,id:next.user})
+    fake.fields.push({...fake.fields.find(field=>field.id===TARGET.largeFile)!,id:next.largeFile})
+    const definitions=[...loadFieldDefinitions(),{...loadFieldDefinitions().find(field=>field.id===TARGET.largeFile)!,id:next.largeFile}]
+    const switched=createSupportServices({db:f.db,clickup:fake.service,profile:f.profileServices,now:f.now,communityTarget:next,fieldDefinitions:definitions})
+    const newer=(await switched.prepare(userId,{submissionKey:randomUUID(),form:complaint(true),attachments:[]})).snapshot
+    expect((await switched.get(userId,old.id)).form.kind).toBe('complaint')
+    expect((await switched.get(userId,newer.id)).form.kind).toBe('complaint')
+    expect((await switched.advance(userId,old.id,{expectedRevision:old.revision,intent:'continue'})).snapshot.status).toBe('completed')
+    expect((await switched.advance(userId,newer.id,{expectedRevision:newer.revision,intent:'continue'})).snapshot.status).toBe('completed')
+    const named=(await switched.prepare(userId,{submissionKey:randomUUID(),form:{...complaint(false),largeFileInfo:'https://example.invalid/proof'},attachments:[]})).snapshot
+    const namedPayload=JSON.parse((await f.db.query<FrozenTaskColumns>('SELECT * FROM support_feedback_submissions WHERE id=$1',[named.id])).rows[0]!.task_payload_json)
+    expect(namedPayload.task.custom_fields.map((field:{id:string})=>field.id)).toEqual([next.user,next.largeFile])
+    expect((await switched.advance(userId,named.id,{expectedRevision:named.revision,intent:'continue'})).snapshot.status).toBe('completed')
+    expect(fake.createTask.mock.calls.map(call=>call[0])).toEqual([COMMUNITY_TARGET.list,next.list,next.list])
+    const pending=(await support.prepare(userId,{submissionKey:randomUUID(),form:complaint(true),attachments:[]})).snapshot
+    fake.createTask.mockRejectedValueOnce(new ClickUpError('unknown','UPSTREAM_UNKNOWN'))
+    expect((await switched.advance(userId,pending.id,{expectedRevision:pending.revision,intent:'continue'})).snapshot.status).toBe('verification_required')
+    const frozen=JSON.parse((await f.db.query<FrozenTaskColumns>('SELECT * FROM support_feedback_submissions WHERE id=$1',[pending.id])).rows[0]!.task_payload_json)
+    const remote=(await fake.service.createTask(frozen.listId,frozen.task)).id
+    const maintenance=createSupportMaintenance({db:f.db,clickup:fake.service,now:f.now,communityTarget:next})
+    const attempt=(await maintenance.inspect(pending.id)).attempt!.id
+    await maintenance.resolveTask(pending.id,attempt,remote,true)
+    expect((await switched.get(userId,pending.id)).status).toBe('completed')
   })
   it('does not read a profile and treats parsed complex remote identity as verification required', async () => {
     const { f, userId, fake } = await setup()

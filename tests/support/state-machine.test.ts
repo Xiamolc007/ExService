@@ -223,6 +223,21 @@ describe('persistent support state machine',()=>{
     f.advance(30000)
     expect((await support.advance(userId,s.id,{expectedRevision:s.revision,intent:'retry'})).snapshot.status).toBe('completed')
   })
+  it('keeps attachment bytes after a definite upload rejection and retries only on explicit intent',async()=>{
+    const {f,userId,fake,support}=await setup(),bytes=Buffer.from('retryable attachment'),attachmentId=randomUUID()
+    const input={...requestInput(),attachments:[{id:attachmentId,originalName:'retry.txt',contentType:'text/plain',byteLength:bytes.length,sha256:sha256(bytes)}]}
+    let snapshot=(await support.prepare(userId,input)).snapshot
+    snapshot=await support.upload(userId,snapshot.id,attachmentId,{bytes,filename:'retry.txt',contentType:'text/plain'})
+    snapshot=(await support.advance(userId,snapshot.id,{expectedRevision:snapshot.revision,intent:'continue'})).snapshot
+    vi.mocked(fake.service.uploadAttachment).mockRejectedValueOnce(new ClickUpError('rejected','UPSTREAM_REJECTED'))
+    snapshot=(await support.advance(userId,snapshot.id,{expectedRevision:snapshot.revision,intent:'continue'})).snapshot
+    expect(snapshot).toMatchObject({status:'failed',nextAction:'retry',failure:{phase:'upload_attachment',attachmentId}})
+    expect((await f.db.query('SELECT bytes,remote_attachment_id FROM support_feedback_attachments WHERE submission_id=$1 AND id=$2',[snapshot.id,attachmentId])).rows[0]).toEqual({bytes,remote_attachment_id:null})
+    await expect(support.advance(userId,snapshot.id,{expectedRevision:snapshot.revision,intent:'continue'})).rejects.toMatchObject({code:'FEEDBACK_STATE_CONFLICT'})
+    snapshot=(await support.advance(userId,snapshot.id,{expectedRevision:snapshot.revision,intent:'retry'})).snapshot
+    expect(snapshot.status).toBe('completed')
+    expect(fake.service.uploadAttachment).toHaveBeenCalledTimes(2)
+  })
   it('boot recovery fences a late create response and GET never mutates expired attempts',async()=>{
     const {f,userId,fake,support}=await setup()
     let release!:(value:{id:string})=>void
@@ -237,6 +252,26 @@ describe('persistent support state machine',()=>{
     await newBoot.recover()
     release({id:'late-task'})
     expect((await inFlight).snapshot.status).toBe('verification_required');expect((await support.get(userId,s.id)).taskId).toBeNull()
+  })
+  it('does not let a late create result overwrite a maintenance decision',async()=>{
+    const {f,userId,fake,support}=await setup()
+    let release!:(value:{id:string})=>void
+    fake.createTask.mockImplementationOnce(()=>new Promise(resolve=>{release=resolve}))
+    const prepared=(await support.prepare(userId,requestInput())).snapshot
+    const inFlight=support.advance(userId,prepared.id,{expectedRevision:prepared.revision,intent:'continue'})
+    await vi.waitFor(()=>expect(fake.createTask).toHaveBeenCalledTimes(1))
+    const running=await support.get(userId,prepared.id)
+    f.advance(90001)
+    const maintenance=createSupportMaintenance({db:f.db,clickup:fake.service,now:f.now})
+    const attempt=(await maintenance.inspect(prepared.id)).attempt!.id
+    await maintenance.confirmNotWritten(prepared.id,attempt,{evidenceKind:'provider_confirmation',providerReference:'provider-ticket-77',observedAt:f.now(),confirmedNotExecuted:true},true)
+    const decided=await support.get(userId,prepared.id)
+    expect(decided).toMatchObject({status:'failed',nextAction:'retry',taskId:null})
+    expect(decided.revision).toBeGreaterThan(running.revision)
+    release({id:'late-task'})
+    expect((await inFlight).snapshot).toEqual(decided)
+    expect((await support.get(userId,prepared.id)).revision).toBe(decided.revision)
+    expect(fake.createTask).toHaveBeenCalledTimes(1)
   })
   it('reconciles unknown attachment with downloaded content proof, dry-run cleanup and corrupted snapshot refusal',async()=>{
     const {f,userId,fake,support}=await setup(),bytes=Buffer.from('proof'),id=randomUUID()

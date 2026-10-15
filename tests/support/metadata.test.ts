@@ -1,8 +1,10 @@
 import { describe,expect,it,vi } from 'vitest'
 import { fakeClickUp,requestInput,typeOption } from '@tests/helpers/support-clickup'
-import { createMetadata,matchesTask,frozenTaskInput,TARGET } from '@server/src/domains/support/metadata'
+import { createMetadata,frozenTaskInput,TARGET } from '@server/src/domains/support/metadata'
+import { matchesFrozenTask, type FrozenTaskPayload } from '@server/src/domains/support/frozen-payload'
 import { loadFieldDefinitions } from '@server/src/domains/support/field-config'
 import { validateEvidence } from '@server/src/domains/support/maintenance'
+const matchesTask = (task: Parameters<typeof matchesFrozenTask>[0], payload: FrozenTaskPayload, id: string) => matchesFrozenTask(task,{payload,formVersion:2,userFieldIds:new Set()},id)
 describe('support read-only preflight and proof rules',()=>{
   it('isolates a missing type definition and a failed tag lookup to dependent operations',async()=>{
     const fake=fakeClickUp()

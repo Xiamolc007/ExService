@@ -5,7 +5,9 @@ import { createClickUpServices } from '@server/src/modules/clickup/factory'
 import { ClickUpError, clickUpTaskUrl } from '@server/src/modules/clickup/errors'
 import plugin from '@server/src/modules/clickup/plugin'
 import type { ClickUpTransport } from '@server/src/modules/clickup/service'
-import { frozenTaskInput, matchesTask, TARGET } from '@server/src/domains/support/metadata'
+import { frozenTaskInput, TARGET } from '@server/src/domains/support/metadata'
+import { matchesFrozenTask, validateStoredTask } from '@server/src/domains/support/frozen-payload'
+import { sha256 } from '@server/src/domains/support/validation'
 
 const token = 'pk_test_fixture_only'
 const list = { id: '123', name: 'Example', space: { id: '789' }, statuses: [{ status: '新增', type: 'open' }] }
@@ -82,10 +84,15 @@ describe('ClickUp official request mapping', () => {
     expect(JSON.stringify(parsed)).not.toContain('private@example.com')
   })
   it('does not treat a parsed complex user field as empty for an anonymous complaint', async () => {
-    const frozen = frozenTaskInput({ kind: 'complaint', title: 'Complaint', contentText: 'body', largeFileInfo: null, anonymous: true }, 'body', '', '11111111-1111-4111-8111-111111111111')
+    const form = { kind: 'complaint' as const, title: 'Complaint', contentText: 'body', largeFileInfo: null, anonymous: true }
+    const userId = '11111111-1111-4111-8111-111111111111'
+    const frozen = frozenTaskInput(form, 'body', '', userId)
+    const task_payload_json = JSON.stringify(frozen)
+    const validated = validateStoredTask({ task_payload_json, task_payload_sha256: sha256(task_payload_json), target_list_id: frozen.listId,
+      final_markdown: 'body', nickname_snapshot: '', user_id: userId, form_version: 3 }, form)
     const remote = { id: 'task-1', name: frozen.task.name, list: { id: frozen.listId }, status: { status: frozen.task.status }, custom_item_id: frozen.task.custom_item_id, markdown_description: 'body', custom_fields: [{ id: TARGET.user, name: 'User', type: 'short_text', type_config: {}, value: { id: 'secret-id', username: 'secret-name' } }], tags: frozen.task.tags.map(name => ({ name })) }
     const parsed = await fixture(json(remote)).service.getTask('task-1')
-    expect(matchesTask(parsed, frozen, 'task-1')).toBe(false)
+    expect(matchesFrozenTask(parsed, validated, 'task-1')).toBe(false)
     expect(JSON.stringify(parsed)).not.toMatch(/secret-id|secret-name/)
   })
   it('reads custom task types from the official custom_items envelope', async () => {
