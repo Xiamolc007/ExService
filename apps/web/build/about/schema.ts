@@ -5,6 +5,13 @@ export const relatedSchema = z.strictObject({ communities: refs, projects: refs,
 const base = { title: text, description: text, eyebrow: text.optional(), draft: z.boolean().default(false) }
 const entity = { ...base, slug, order: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).default(0), cover: imageSchema.optional(), related: relatedSchema.optional() }
 export const sectionSchema = z.strictObject(base)
+export const teamSchema = sectionSchema.extend({
+  showcase: z.strictObject({ headline: text, lead: text.optional() }).optional(),
+  recruitment: z.strictObject({
+    eyebrow: text, title: text, description: text, highlights: z.array(text),
+    entryEyebrow: text, entryTitle: text, entryDescription: text, buttonLabel: text,
+  }),
+})
 const entryText = z.strictObject({ communities: text.optional(), projects: text.optional(), team: text.optional(), story: text.optional(), media: text.optional(), donations: text.optional() })
 export const homeSchema = sectionSchema.extend({
   hero: z.strictObject({ headline: text, summary: text, lead: text.optional(), eyebrow: text.optional(), image: imageSchema.optional() }),

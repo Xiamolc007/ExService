@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useLocation } from 'react-router'
-import { ArrowUpRight, Code2, Compass, Users } from 'lucide-react'
+import { ArrowUpRight, Code2, Compass } from 'lucide-react'
 import { ContentImage } from '@workspace/components'
 import { NotFound } from '../NotFound'
 import { aboutImage, aboutRegistry, aboutStore } from '../../content/about/registry'
@@ -8,6 +8,8 @@ import type { AboutPage } from '../../content/about/types'
 import { useContent } from '../../content/useContent'
 import { AboutNavigation } from './AboutNavigation'
 import { AboutHome } from './AboutHome'
+import { TeamPage } from './TeamPage'
+import { teamConfig } from '../../config/team-config'
 import { Donations } from './Donations'
 import { AboutBody, aboutMdxComponents, RelatedContent, type OpenMember } from './AboutBody'
 import { MediaList } from './MediaList'
@@ -33,12 +35,13 @@ function AboutPageView({ page }: { page: AboutPage }) {
   useEffect(() => { setSelected(null) }, [location.pathname])
   const components = useMemo(() => aboutMdxComponents(openMember), [openMember])
   const state = useContent(aboutStore, page.id)
-  const main = useReadingPosition(page.kind === 'home' || state.status !== 'loading', page.title, page.description)
   const home = page.kind === 'home'
+  // The home layout and scroll target exist before its belief body loads.
+  const main = useReadingPosition(home || state.status !== 'loading', page.title, page.description, 'h1', { focusHashTarget: page.kind === 'team' })
   return <div className={home ? styles.home : styles.about}>
     {!home && <AboutNavigation page={page} />}
-    <main ref={main} className={home ? styles.homeMain : styles.main}>
-      {page.kind === 'home' ? <AboutHome page={page} state={state} components={components} retry={state.retry} /> : <>
+    <main ref={main} className={home ? styles.homeMain : page.kind === 'team' ? styles.teamMain : styles.main}>
+      {page.kind === 'home' ? <AboutHome page={page} state={state} components={components} retry={state.retry} /> : page.kind === 'team' ? <TeamPage page={page} state={state} components={components} config={teamConfig} /> : <>
       <header className={styles.pageHeader}>
         <p className={styles.eyebrow}>{page.eyebrow}</p><h1 tabIndex={-1}>{page.title}</h1>
         <p className={styles.summary}>{page.description}</p>
@@ -49,7 +52,6 @@ function AboutPageView({ page }: { page: AboutPage }) {
       </section>
       {page.section === 'communities' && page.kind === 'section' && <EntityList kind="community" />}
       {page.section === 'projects' && page.kind === 'section' && <EntityList kind="project" />}
-      {page.section === 'team' && <TeamList openMember={openMember} />}
       {page.section === 'media' && <MediaList key={page.id} openMember={openMember} />}
       {page.kind === 'donations' && <Donations page={page} />}
       {(page.kind === 'community' || page.kind === 'project') && <div className={styles.reading}><RelatedContent related={page.related} openMember={openMember} />
@@ -68,11 +70,4 @@ function EntityList({ kind }: { kind: 'community' | 'project' }) {
     {page.cover ? <ContentImage image={aboutImage(page.cover)} /> : <div className={styles.cover} aria-hidden="true">{kind === 'community' ? <Compass /> : <Code2 />}<span>素材待补充</span></div>}
     <div className={styles.cardBody}><h2>{page.title}<ArrowUpRight aria-hidden="true" /></h2><p>{page.description}</p><p className={styles.status}>{statuses[page.status]}</p></div>
   </Link>)}</div>
-}
-function TeamList({ openMember }: { openMember: OpenMember }) {
-  if (!aboutRegistry.members.length) return <p className={styles.empty}>成员与贡献者资料仍在整理中。</p>
-  return <div className={styles.cards}>{aboutRegistry.members.map(member => <button key={member.slug} className={`${styles.card} ${styles.member}`} onClick={event => openMember(member.slug, event.currentTarget)}>
-    {member.avatar ? <ContentImage image={aboutImage(member.avatar)} /> : <div className={styles.cover} aria-hidden="true"><Users /><span>头像待补充</span></div>}
-    <div className={styles.cardBody}><span className={styles.eyebrow}>{member.kind === 'member' ? '团队成员' : '贡献者'}</span><h2>{member.title}</h2><p>{member.role}</p><p>{member.summary}</p></div>
-  </button>)}</div>
 }

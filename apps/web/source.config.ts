@@ -3,6 +3,7 @@ import { aboutCollections } from './build/about/definition'
 import { contentConfig } from './build/content/preset'
 
 const dir = 'content/about'
+export const aboutTeam = defineCollections({ type: 'doc', dir, ...aboutCollections.aboutTeam })
 export const aboutHome = defineCollections({ type: 'doc', dir, ...aboutCollections.aboutHome })
 export const aboutDonationCatalog = defineCollections({ type: 'meta', dir, ...aboutCollections.aboutDonationCatalog })
 export const aboutSections = defineCollections({ type: 'doc', dir, ...aboutCollections.aboutSections })

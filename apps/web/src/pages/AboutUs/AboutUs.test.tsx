@@ -11,9 +11,10 @@ import { AboutBody } from './AboutBody'
 vi.mock('../../content/about/registry', () => {
   const pages = [
     { id: 'index.mdx', url: '/aboutus', title: '关于 Exre', description: 'Intro', section: 'home', kind: 'home', hero: { headline: '共同创造', summary: 'Summary' }, introHeading: '认识我们' },
-    ...['communities', 'projects', 'team', 'story', 'media'].map(section => ({ id: `${section}.mdx`, url: `/aboutus/${section}`, section, kind: 'section', title: { communities: '社区', projects: '项目', team: '团队', story: '历程', media: 'Media' }[section], description: `${section} introduction` })),
+    ...['communities', 'projects', 'story', 'media'].map(section => ({ id: `${section}.mdx`, url: `/aboutus/${section}`, section, kind: 'section', title: { communities: '社区', projects: '项目', story: '历程', media: 'Media' }[section], description: `${section} introduction` })),
+    { id: 'team.mdx', url: '/aboutus/team', section: 'team', kind: 'team', title: '团队', description: 'team introduction', recruitment: { eyebrow: 'BUILD WITH US', title: '加入 Exre，一起创造。', description: '共同开发', highlights: ['共同创作'], entryEyebrow: 'NEXT STEP', entryTitle: '从这里开始。', entryDescription: '通过招募入口，了解加入方式。', buttonLabel: '加入开发团队' } },
     { id: 'donations.mdx', url: '/aboutus/donations', section: 'donations', kind: 'donations', title: '捐赠', description: '捐赠信息', channels: [], donors: [] },
-    { id: 'project.mdx', url: '/aboutus/projects/example-project', section: 'projects', kind: 'project', slug: 'example-project', title: '项目故事占位', description: '项目介绍', status: 'unknown', order: 0 },
+    { id: 'project.mdx', url: '/aboutus/projects/example-project', section: 'projects', kind: 'project', slug: 'example-project', title: '项目故事占位', description: '项目介绍', status: 'unknown', order: 0, related: { members: ['person'] } },
     { id: 'community.mdx', url: '/aboutus/communities/example-community', section: 'communities', kind: 'community', slug: 'example-community', title: '社区故事占位', description: '社区介绍', status: 'unknown', order: 0 },
   ]
   return {
@@ -26,6 +27,9 @@ vi.mock('../../content/about/registry', () => {
   }
 })
 vi.mock('@paper-design/shaders-react', () => ({ MeshGradient: () => <div /> }))
+vi.mock('../../config/team-config', async () => ({ teamConfig: (await import('../../config/team')).parseTeamConfig({
+  teams: [{ id: 'showcase-member', name: '团队测试成员', role: '开发', bio: '测试简介', strengths: [], theme: { colorBack: '#0868de', accent: '#065ed1' } }],
+}) }))
 beforeEach(() => {
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
   vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
@@ -128,8 +132,17 @@ it('filters media locally and exposes a missing-source state', async () => {
   expect(screen.getByText('视频乙')).toBeTruthy()
   expect(screen.getByText('来源待补充')).toBeTruthy()
 })
-it('opens the selected member body in a named modal', async () => {
+it('uses the configured showcase on team and retains its body and recruitment section', async () => {
   show('/aboutus/team')
+  await screen.findByText('正文 team.mdx')
+  expect(screen.getByRole('button', { name: '选择团队测试成员' })).toBeTruthy()
+  expect(screen.getByRole('heading', { level: 2, name: '团队测试成员' })).toBeTruthy()
+  expect(screen.queryByRole('heading', { name: '关注领域' })).toBeNull()
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(screen.getByRole('button', { name: '加入开发团队' }).hasAttribute('disabled')).toBe(true)
+})
+it('opens the legacy member body from a project related-content entry in a named modal', async () => {
+  show('/aboutus/projects/example-project')
   fireEvent.click(screen.getByRole('button', { name: /贡献者甲/ }))
   expect(await screen.findByRole('dialog', { name: '贡献者甲' })).toBeTruthy()
   expect(await screen.findByText('成员甲的正文')).toBeTruthy()

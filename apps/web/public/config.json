@@ -2,5 +2,58 @@
   "community": {
     "rifling911-qqUrl": "https://qm.qq.com/q/37g5J9o000",
     "rifling911-kookUrl": "https://www.kookapp.cn/app/invite/9U73px"
+  },
+  "teams": [
+    {
+      "id": "member-01",
+      "name": "Raven James",
+      "avatar": { "src": "/images/team/memoji-placeholder-1.png", "alt": "Memoji 临时占位头像 1", "width": 256, "height": 256 },
+      "portrait": { "src": "/images/team/memoji-placeholder-1.png", "alt": "Memoji 临时占位人物 1", "width": 256, "height": 256 },
+      "role": "游戏功能开发, 策划",
+      "bio": "成员资料占位。真实姓名、照片与参与工作将在本人确认后补充。",
+      "strengths": [
+        {
+          "title": "开发能力占位",
+          "description": "擅长的技术与实践经验待补充。"
+        },
+        { "title": "协作能力占位", "description": "团队协作与参与方式待补充。" }
+      ],
+      "theme": { "colorBack": "#0868de", "accent": "#065ed1" }
+    },
+    {
+      "id": "member-02",
+      "name": "Kang",
+      "avatar": { "src": "/images/team/memoji-placeholder-2.png", "alt": "Memoji 临时占位头像 2", "width": 256, "height": 256 },
+      "portrait": { "src": "/images/team/memoji-placeholder-2.png", "alt": "Memoji 临时占位人物 2", "width": 256, "height": 256 },
+      "role": "运维, 后台服务",
+      "bio": "成员资料占位。真实姓名、照片与参与工作将在本人确认后补充。",
+      "strengths": [
+        {
+          "title": "设计能力占位",
+          "description": "擅长的设计领域与作品经验待补充。"
+        },
+        { "title": "协作能力占位", "description": "团队协作与参与方式待补充。" }
+      ],
+      "theme": { "colorBack": "#0c7b6f", "accent": "#087265" }
+    },
+    {
+      "id": "member-03",
+      "name": "Charli",
+      "avatar": { "src": "/images/team/memoji-placeholder-3.png", "alt": "Memoji 临时占位头像 3", "width": 421, "height": 421 },
+      "portrait": { "src": "/images/team/memoji-placeholder-3.png", "alt": "Memoji 临时占位人物 3", "width": 421, "height": 421 },
+      "role": "项目经理, 社区功能开发",
+      "bio": "成员资料占位。真实姓名、照片与参与工作将在本人确认后补充。",
+      "strengths": [
+        {
+          "title": "创作能力占位",
+          "description": "擅长的内容形式与创作经验待补充。"
+        },
+        { "title": "协作能力占位", "description": "团队协作与参与方式待补充。" }
+      ],
+      "theme": { "colorBack": "#7545c4", "accent": "#7140bd" }
+    }
+  ],
+  "teamRecruitment": {
+    "url": "tencent://message/?uin=554117278&Site=qq&Menu=yes"
   }
 }

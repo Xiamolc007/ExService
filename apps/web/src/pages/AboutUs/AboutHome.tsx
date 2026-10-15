@@ -36,7 +36,7 @@ export function AboutHome({ page, state, components, retry }: { page: HomePage; 
 
 function EntryCard({ page, section }: { page: HomePage; section: EntryKey }) {
   // Fixed public section pages are required by the About definition at build time.
-  const target = aboutRegistry.pages.find(item => (item.kind === 'section' || item.kind === 'donations') && item.section === section)!
+  const target = aboutRegistry.pages.find(item => (item.kind === 'section' || item.kind === 'donations' || item.kind === 'team') && item.section === section)!
   const rawImage = section === 'communities' ? undefined : page.cardImages?.[section]
   const image = rawImage ? aboutImage(rawImage) : undefined
   const visual = section === 'communities' ? null : <HomeImage key={image?.src ?? 'placeholder'} image={image} label={imageLabels[section]} />

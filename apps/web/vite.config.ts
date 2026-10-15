@@ -6,6 +6,7 @@ import { defineConfig } from 'vite'
 import { fumadocsMdx } from 'fumadocs-mdx/vite'
 import { contentPlugin } from './build/content/plugin.ts'
 import { contentDefinitions } from './build/collections.ts'
+import { teamConfigPlugin } from './build/team-config.ts'
 import { devEntryPlugin, docsProxy, trustedProxy, proxyBoundaryPlugin } from './dev-entry.ts'
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -25,7 +26,7 @@ const local = integrated && process.env.WEBSITE_INTEGRATION_MODE === 'local'
 const publicOrigin = local ? new URL(process.env.SERVER_PUBLIC_WEB_BASE_URL!) : new URL('http://exwebsite.test:8090')
 
 export default defineConfig({
-  plugins: [proxyBoundaryPlugin(local ? publicOrigin.origin : undefined), contentPlugin(contentDefinitions),
+  plugins: [proxyBoundaryPlugin(local ? publicOrigin.origin : undefined), teamConfigPlugin(resolve(repositoryRoot, 'apps/web')), contentPlugin(contentDefinitions),
     ...fumadocsMdx({ macro: false, index: false, updateViteConfig: false }), react(), ...(process.env.WEBSITE_DEV_ENTRY_PORT
     ? [devEntryPlugin(Number(process.env.WEBSITE_DEV_ENTRY_PORT))] : [])],
   define: {

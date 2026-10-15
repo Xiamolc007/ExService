@@ -31,6 +31,7 @@ it('builds real About donation metadata without draft donor details or QR assets
   const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
   const forcedConfig = {
     aboutHome: defineCollections({ type: 'doc', dir: content, ...aboutCollections.aboutHome }),
+    aboutTeam: defineCollections({ type: 'doc', dir: content, ...aboutCollections.aboutTeam }),
     aboutSections: defineCollections({ type: 'doc', dir: content, ...aboutCollections.aboutSections }),
     aboutCommunities: defineCollections({ type: 'doc', dir: content, ...aboutCollections.aboutCommunities }),
     aboutProjects: defineCollections({ type: 'doc', dir: content, ...aboutCollections.aboutProjects }),

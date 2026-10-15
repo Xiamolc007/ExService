@@ -1,7 +1,7 @@
 import { dirname, resolve, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { ContentDefinition, ContentEntry } from '../content/compiler.ts'
-import { aboutComponents, communitySchema, donationCatalogSchema, homeSchema, mediaSchema, memberSchema, projectSchema, sectionSchema, relatedSchema } from './schema.ts'
+import { aboutComponents, communitySchema, donationCatalogSchema, homeSchema, mediaSchema, memberSchema, projectSchema, sectionSchema, teamSchema, relatedSchema } from './schema.ts'
 import { httpsUrl } from '../content/schema.ts'
 import type { AboutPage, AboutRegistry, AboutSection, RelatedRefs } from '../../src/content/about/types.ts'
 
@@ -9,8 +9,9 @@ export const fixedPages = { 'index.mdx': 'home', 'communities/index.mdx': 'commu
 export const pageUrl = (section: string) => section === 'home' ? '/aboutus' : `/aboutus/${section}`
 export const aboutCollections = {
   aboutHome: { files: ['index.mdx'], schema: homeSchema },
+  aboutTeam: { files: ['team.mdx'], schema: teamSchema },
   aboutDonationCatalog: { files: ['donations/items.yaml'], schema: donationCatalogSchema },
-  aboutSections: { files: ['communities/index.mdx', 'projects/index.mdx', 'team.mdx', 'story.mdx', 'media/index.mdx', 'donations.mdx'], schema: sectionSchema },
+  aboutSections: { files: ['communities/index.mdx', 'projects/index.mdx', 'story.mdx', 'media/index.mdx', 'donations.mdx'], schema: sectionSchema },
   aboutCommunities: { files: ['communities/*.mdx', '!communities/index.mdx'], schema: communitySchema },
   aboutProjects: { files: ['projects/*.mdx', '!projects/index.mdx'], schema: projectSchema },
   aboutMembers: { files: ['members/*.mdx'], schema: memberSchema },
@@ -73,7 +74,7 @@ function project(entries: ContentEntry[]): AboutRegistry {
     }
     const target = path ? urls.get(path) : entry
     if (!target || (!entry.draft && target.draft)) fail(entry, `Unknown internal link: ${url}`)
-    if (anchor && !(target!.analysis.headings.includes(anchor) || (target!.id === 'story.mdx' && anchor.startsWith('milestone-') && byKind.get('milestones')?.has(anchor.slice(10))) || (target!.id === 'media/index.mdx' && anchor.startsWith('media-') && byKind.get('media')?.get(anchor.slice(6))?.draft === false))) fail(entry, `Unknown anchor: ${url}`)
+    if (anchor && !(target!.analysis.headings.includes(anchor) || (target!.id === 'team.mdx' && anchor === 'join') || (target!.id === 'story.mdx' && anchor.startsWith('milestone-') && byKind.get('milestones')?.has(anchor.slice(10))) || (target!.id === 'media/index.mdx' && anchor.startsWith('media-') && byKind.get('media')?.get(anchor.slice(6))?.draft === false))) fail(entry, `Unknown anchor: ${url}`)
   }
   for (const entry of entries) {
     related(entry, entry.data.related)
@@ -100,6 +101,9 @@ function project(entries: ContentEntry[]): AboutRegistry {
     if (section === 'home') {
       const { draft: _, ...data } = homeSchema.parse(entry.data)
       pages.push({ ...data, id: entry.id, url: '/aboutus', section, kind: 'home' })
+    } else if (section === 'team') {
+      const { draft: _, ...data } = teamSchema.parse(entry.data)
+      pages.push({ ...data, id: entry.id, url: pageUrl(section), section, kind: 'team' })
     } else if (section === 'donations') {
       const { draft: _, ...data } = sectionSchema.parse(entry.data)
       pages.push({ ...data, id: entry.id, url: pageUrl(section), section, kind: 'donations',
@@ -132,6 +136,7 @@ export const aboutDefinition: ContentDefinition = {
   namespace: 'about', root: resolve(dirname(fileURLToPath(import.meta.url)), '../../content/about'), components: aboutComponents,
   classify(file) {
     if (file === 'index.mdx') return { collection: 'aboutHome', schema: homeSchema }
+    if (file === 'team.mdx') return { collection: 'aboutTeam', schema: teamSchema }
     if (Object.hasOwn(fixedPages, file)) return { collection: 'aboutSections', schema: sectionSchema }
     if (/^communities\/[a-z0-9-]+\.mdx$/.test(file)) return { collection: 'aboutCommunities', schema: communitySchema }
     if (/^projects\/[a-z0-9-]+\.mdx$/.test(file)) return { collection: 'aboutProjects', schema: projectSchema }

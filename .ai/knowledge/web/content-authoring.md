@@ -2,17 +2,17 @@
 
 内容作者编辑 MDX/YAML 后，开发页面会重新检查与刷新。发布构建复用同一检查，非法字段、引用或作者语法不会静默上线。
 
-_最后更新：2026-10-12_
+_最后更新：2026-10-13_
 
 ## 编辑 About
 
 内容源位于 `apps/web/content/about/`。正文用 MDX，列表所需字段用 frontmatter；音乐与视频条目维护于 `media/items.yaml`。字段和默认值以 `apps/web/build/about/schema.ts` 为准。
 
-首页 `hero.headline`、`hero.eyebrow` 和 `hero.summary` 用于文字 Hero；可选 `hero.lead` 提供右侧短引言。`introHeading` 是理念标题，首页 MDX 正文完整渲染在理念区。标题可沿用 `\n` 转义换行，长内容仍会自然换行。页面与阅读行为见 `.ai/architectures/web/content-rendering.md`。
+首页 `hero.headline`、`hero.eyebrow` 和 `hero.summary` 用于背景上叠加的文案；可选 `hero.lead` 提供标题下方的短引言。`introHeading` 是理念标题，首页 MDX 正文完整渲染在理念区。标题可沿用 `\n` 转义换行，长内容仍会自然换行。页面与阅读行为见 `.ai/architectures/web/content-rendering.md`。
 
 `entryHeadlines` 与 `entryDescriptions` 仅允许 communities、projects、team、media、story、donations 六个可选非空字符串，分别覆盖首页栏目标题和简介；省略时使用对应栏目元数据。栏目标签和链接目标由 UI 与已校验注册表管理，不在这些字段中写 URL。
 
-`cardImages` 使用相同六个 key，每项为集合 ImageRef；理念是正文区，没有图片 key。嵌套图片仍经过实际资源存在性与路径边界检查；未填写和浏览器加载失败均显示稳定占位。当前素材未提供，不填写虚构资源路径。`hero.image` 保留内容兼容，但文字 Hero 不消费它。
+`cardImages` 的数据格式保留相同六个 key，每项为集合 ImageRef；首页社区块仅展示文字和入口，不消费 `communities` 图片。理念是正文区，没有图片 key。嵌套图片仍经过实际资源存在性与路径边界检查；其他五个栏目未填写图片或浏览器加载失败时显示稳定占位。当前素材未提供，不填写虚构资源路径。`hero.image` 保留内容兼容，当前 Hero 不消费它；背景暂沿用加入页现有素材，实际来源见 `.ai/architectures/web/content-rendering.md`。
 
 ### 捐赠渠道与名单
 
@@ -34,6 +34,8 @@ donors:
     date: '2026-10-12'
     draft: true
 ```
+
+内容检查在解析前将 CRLF 统一为 LF。`gray-matter` 截取 CRLF frontmatter 时会留下末尾 `\r`，使最后一行的数字或布尔值被 YAML 解析为字符串；不能通过字段强制转换绕过类型检查。`tests/content/compiler.test.ts` 覆盖两种换行下的数字类型与草稿过滤。
 
 固定首页与栏目介绍不能缺失或设为草稿。社区、项目和成员文件 basename 必须与 slug 一致。未知事实明确使用占位、unknown 或 draft，不填写未经核实的运营状态、日期或来源。
 
@@ -67,6 +69,18 @@ draft: true
 图片放入该集合 assets 目录，提供非空 alt 与正整数宽高。路径不能跳出资源目录；替换失败的图片仍显示 fallback。发布前由作者核对真实比例、版权与图注，不把宽高存在校验当作图片内容验收。
 
 执行 `pnpm --filter @workspace/web content:check` 检查已注册集合；真实编译与前端验证使用 `pnpm --filter @workspace/web build` 和项目测试流程。
+
+### 团队人物与招募入口
+
+团队页文案由 `apps/web/content/about/team.mdx` 维护。基础 `title` 仍用于文档标题与面包屑；可选 `showcase.headline`、`showcase.lead` 用于人物章节的展示标题和引言。`recruitment` 维护左侧说明、协作亮点及右侧入口文案，字段以 `teamSchema` 为准；其他栏目不接受这些字段。正文保留明确的占位说明。可用 `/aboutus/team#join` 链接至招募章节，其他未知模板锚点仍会报错。
+
+人物展示单独编辑 `apps/web/public/config.json` 的 `teams`，数组顺序就是选择顺序。每项使用唯一 ASCII kebab-case id，提供 name、role、bio、strengths 和 theme；图片 avatar、portrait 可省略，缺省或加载失败显示普通占位。左侧资料依次展示职责与简介，右侧展示能力。空数组或缺省 teams 显示整理中状态，招募章节仍保留。这份展示配置不会创建旧 MDX 成员条目或个人路由；需要项目和 Media 的成员引用时，继续维护 `apps/web/content/about/members/`。
+
+照片仅使用 `/images/team/` 下的公开资源，附非空 alt 和正安全整数宽高；路径不能带查询、fragment 或越界，开发启动与构建会检查文件和 realpath。背景与强调色为六位不透明十六进制值，与白色正文的对比度须达到 4.5:1；点颜色可使用六位或八位值，默认白色半透明填充和白色描边。团队项及嵌套对象严格拒绝未知字段；公开配置的既有 community 等字段继续保留。此文件所有内容都会公开，只放已获准公开的资料。
+
+实际招募入口填写可选 `teamRecruitment.url`：无凭据 HTTPS、已登记的站内地址，或严格限定的 QQ 聊天地址 `tencent://message/?uin=<QQ号>&Site=qq&Menu=yes`。QQ 号须为 5 至 12 位非零开头数字，不接受其他客户端协议或附加参数；QQ 链接直接交给浏览器唤起本机客户端，不打开空白标签页。缺省、空字符串或仅空格时显示禁用按钮；非法非空值使校验失败。不要用团队页自身的 hash 冒充报名地址，也不要把玩家申请或社区链接当成开发团队招募渠道。站内入口由 Router 导航，HTTPS 外链在新标签页打开并隔离 opener；此页不收集报名数据。
+
+JSON 修改使用 Vite 原生 HMR，当前成员 id 仍存在时保持选择；非法配置显示开发错误。`content:check` 检查 MDX 文案与作者链接，公开 JSON 和照片另由 Vite 启动／构建校验。发布前还需执行 Web 类型检查、对应测试和 Web 构建；Shader 与实际锚点几何须用真实浏览器验证。
 
 ## 增加其他内容栏目
 

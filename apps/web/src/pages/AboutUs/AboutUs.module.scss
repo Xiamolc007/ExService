@@ -2,6 +2,7 @@
 .home { width: 100%; color: var(--exui-text-primary); }
 .about :is(h1, h2, h3, h4, h5, h6), .home :is(h1, h2, h3, h4, h5, h6), .body :is(h2, h3, h4, h5, h6) { font-weight: var(--exui-font-weight-bold); }
 .homeMain { min-width: 0; padding-bottom: 5rem; }
+.teamMain { min-width: 0; }
 .navigation { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 3.5rem; box-sizing: border-box; padding-block: 0.75rem; border-bottom: 1px solid var(--exui-border-default); }
 .navigationTitle { font-size: 1.25rem; font-weight: var(--exui-font-weight-bold); color: var(--exui-text-primary); text-decoration: none; white-space: nowrap; }
 .desktopNavigation { display: flex; flex-shrink: 0; flex-wrap: wrap; gap: 1.75rem; font-size: 0.85rem; }

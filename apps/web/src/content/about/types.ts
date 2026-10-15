@@ -8,6 +8,7 @@ export interface AboutDonor { id: string; nickname: string; date: string }
 interface PageBase { id: string; url: string; section: AboutSection; title: string; description: string; eyebrow?: string }
 export type AboutPage = PageBase & (
   | { kind: 'home'; hero: { headline: string; summary: string; lead?: string; eyebrow?: string; image?: ContentImageData }; introHeading: string; entryDescriptions?: Partial<Record<Exclude<AboutSection, 'home'>, string>>; entryHeadlines?: Partial<Record<Exclude<AboutSection, 'home'>, string>>; cardImages?: Partial<Record<Exclude<AboutSection, 'home'>, ContentImageData>> }
+  | { kind: 'team'; section: 'team'; showcase?: { headline: string; lead?: string }; recruitment: { eyebrow: string; title: string; description: string; highlights: string[]; entryEyebrow: string; entryTitle: string; entryDescription: string; buttonLabel: string } }
   | { kind: 'section' }
   | { kind: 'donations'; channels: AboutDonationChannel[]; donors: AboutDonor[] }
   | { kind: 'community'; slug: string; status: CommunityStatus; order: number; cover?: ContentImageData; related?: RelatedRefs; joinUrl?: string }
