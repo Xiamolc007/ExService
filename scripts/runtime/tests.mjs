@@ -52,7 +52,8 @@ export async function runTests(options = {}, execute = runOwned, generate = gene
 export function isTestSourceChange(directory, path) {
   if (!path) return false
   const file = `${directory}/${path}`.replaceAll('\\', '/')
-  return !/(?:^|\/)(?:node_modules|dist|build)(?:\/|$)/.test(file) &&
+  return !/(?:^|\/)(?:node_modules|dist|\.source)(?:\/|$)/.test(file) &&
+    (!/(?:^|\/)build(?:\/|$)/.test(file) || file.startsWith('apps/web/build/')) &&
     !file.endsWith('.log') && !file.startsWith('api/generated/') &&
     !file.startsWith('packages/api-client/src/generated/')
 }
@@ -62,6 +63,7 @@ export async function watchTests(options = {}, execute = runTests) {
   const workspace = options.workspace ?? root, scope = signalScope(), watchers = []
   let pending = true, wake
   const directories = ['api', 'tests', 'scripts', 'apps/web/src', 'apps/server/src', 'packages/api-client/src', 'packages/components/src', 'packages/sdk/src',
+    'apps/web/content', 'apps/web/build', 'apps/web/source.config.ts',
     'apps/outline/server/identity', 'apps/outline/server/routes/auth', 'apps/outline/app', 'apps/outline/shared']
   try {
     for (const directory of directories) watchers.push(watch(join(workspace, directory), { recursive: true }, (_, path) => {

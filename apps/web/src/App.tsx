@@ -1,4 +1,6 @@
-import { Route, Routes } from 'react-router'
+import { Navigate, Route, Routes } from 'react-router'
+import { lazy, Suspense } from 'react'
+import { ContentBoundary } from './content/ContentBoundary'
 import { Home } from '@web/src/pages/Home'
 import { NotFound } from '@web/src/pages/NotFound'
 import { AuthPage } from '@web/src/pages/AuthPage'
@@ -14,6 +16,7 @@ import { JoinReviewPage } from '@web/src/pages/JoinReviewPage'
 import { IdentityStatusPage } from '@web/src/pages/IdentityPage/IdentityStatusPage'
 import { SignedOutPage } from '@web/src/pages/IdentityPage/SignedOutPage'
 import { OidcPage } from '@web/src/pages/IdentityPage/OidcPage'
+const AboutUs = lazy(() => import('./pages/AboutUs/AboutUs').then(module => ({ default: module.AboutUs })))
 
 /**
  * 路由表：认证和 SSO 页面使用独立布局，其余页面共用站点顶栏。
@@ -34,6 +37,8 @@ export function App() {
         <Route path="/identity/logout" element={<OidcPage phase="logout" />} />
         <Route element={<RootLayout />}>
           <Route path="/" element={<Home />} />
+          <Route path="/about" element={<Navigate to="/aboutus" replace />} />
+          <Route path="/aboutus/*" element={<ContentBoundary returnUrl="/"><Suspense fallback={<p role="status" style={{ padding: '3rem' }}>正在加载介绍…</p>}><AboutUs /></Suspense></ContentBoundary>} />
           <Route path="/communities/rifling-911" element={<JoinPage />} />
           <Route path="/communities/caep" element={<CAEPJoinPage />} />
           <Route path="/join/rifling-911" element={<JoinPage />} />

@@ -1,0 +1,11 @@
+items:
+  - id: example-music
+    type: music
+    title: 音乐条目占位
+    creator: 创作者待补充
+    usage: 这里将介绍音乐与社区体验的关联，以及使用场景。
+  - id: example-video
+    type: video
+    title: 影像条目占位
+    creator: 创作者待补充
+    usage: 这里将介绍视频记录的作品或社区瞬间。

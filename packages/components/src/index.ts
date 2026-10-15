@@ -11,6 +11,9 @@
  * 该导入点在 `apps/web/src/main.tsx`。
  */
 export { SiteHeader } from '@components/src/SiteHeader'
+export { CodeBlock } from './content/CodeBlock'
+export { Callout, ContentImage, ContentProse } from './content/Content'
+export type { ContentImageProps } from './content/Content'
 export { ExIcon } from '@components/src/ExIcon'
 export type { ExIconProps } from '@components/src/ExIcon'
 export type { SiteHeaderProps } from '@components/src/SiteHeader'
@@ -80,3 +83,15 @@ export type { CompleteJoinApplicationModalHandle, CompleteJoinApplicationModalPr
 export type { JoinApplicationDraft, JoinApplicationType, NewJoinApplicationDraft, ExperiencedJoinApplicationDraft } from '@components/src/join/applicationSchemas'
 export { newJoinApplicationSchema, experiencedJoinApplicationSchema } from '@components/src/join/applicationSchemas'
 export { joinApplicationFields, joinApplicationCommitments, joinApplicationSteps, applicantCategoryOptions, departmentOptions, discoveryChannelOptions } from '@components/src/join/applicationFields'
+
+export { TiptapEditor } from './tiptap/TiptapEditor'
+export { TiptapViewer } from './tiptap/TiptapViewer'
+export { parseTiptapContent, serializeTiptapMarkdown } from './tiptap/conversion'
+export { createMarkdownExtensions, parseMarkdownContent, serializeMarkdownContent, MarkdownEmojiPicker } from './tiptap/markdown'
+export { tiptapContentClassName } from './tiptap/content-styles'
+export type { MarkdownExtensionOptions, MarkdownEmojiAnchor, MarkdownEmojiPickerProps } from './tiptap/markdown'
+export type { TiptapInput, TiptapIssueCode, TiptapIssue, TiptapResult, TiptapContentPolicy, TiptapMentionItem, TiptapUploadedImage, TiptapEditorHandle, TiptapEditorProps, TiptapViewerProps } from './tiptap/types'
+
+export { useMarkdownPreset, useTiptapPreset } from './tiptap/presets'
+export { useTiptapEditor } from './tiptap/useTiptapEditor'
+export type { TiptapPlaceholder, MarkdownPresetOptions, TiptapPresetOptions, MarkdownPreset, FullTiptapPreset, TiptapPreset, TiptapEditorSessionOptions, TiptapServiceCallbacks, UseTiptapEditorOptions, UseTiptapEditorResult } from './tiptap/types'

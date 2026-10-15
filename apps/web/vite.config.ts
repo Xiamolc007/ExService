@@ -3,6 +3,9 @@ import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
+import { fumadocsMdx } from 'fumadocs-mdx/vite'
+import { contentPlugin } from './build/content/plugin'
+import { contentDefinitions } from './build/collections'
 import { devEntryPlugin, docsProxy, trustedProxy, proxyBoundaryPlugin } from './dev-entry'
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -22,7 +25,8 @@ const local = integrated && process.env.WEBSITE_INTEGRATION_MODE === 'local'
 const publicOrigin = local ? new URL(process.env.SERVER_PUBLIC_WEB_BASE_URL!) : new URL('http://exwebsite.test:8090')
 
 export default defineConfig({
-  plugins: [proxyBoundaryPlugin(local ? publicOrigin.origin : undefined), react(), ...(process.env.WEBSITE_DEV_ENTRY_PORT
+  plugins: [proxyBoundaryPlugin(local ? publicOrigin.origin : undefined), contentPlugin(contentDefinitions),
+    ...fumadocsMdx({ macro: false, index: false, updateViteConfig: false }), react(), ...(process.env.WEBSITE_DEV_ENTRY_PORT
     ? [devEntryPlugin(Number(process.env.WEBSITE_DEV_ENTRY_PORT))] : [])],
   define: {
     'import.meta.env.VITE_COMMUNITY_QQ_URL': JSON.stringify(communityConfig.community?.['rifling911-qqUrl'] ?? ''),

@@ -2,7 +2,7 @@
 
 本目录记录源码难以直接表达的模块边界、已接受决策、数据规则与运行陷阱。仓库以 `api/openapi.yaml` 为唯一 HTTP Contract；`apps/server/` 是唯一 Fastify Server，使用独立 PostgreSQL `exre`。当前仍是单实例开发阶段，不代表已可公网部署。
 
-_最后更新：2026-10-11_
+_最后更新：2026-10-14_
 
 ## 模块与入口
 
@@ -10,8 +10,9 @@ _最后更新：2026-10-11_
 | --- | --- | --- |
 | API Contract | `api/openapi.yaml`、`api/paths/`、`api/schemas/`、`api/generated/openapi.json` | `.ai/architectures/api/contract-layout.md` |
 | 生成式 Client | `packages/api-client/` | `.ai/decisions/api-client/01-generated-types-committed-and-read-only.md` |
-| 共享组件 | `packages/components/` | `.ai/knowledge/components/ex-message-host-lifecycle.md`、`.ai/knowledge/components/error-panel.md` |
+| 共享组件 | `packages/components/` | `.ai/knowledge/components/ex-message-host-lifecycle.md`、`.ai/knowledge/components/error-panel.md`、`.ai/knowledge/components/tiptap-content-boundaries.md` |
 | Web | `apps/web/` | `.ai/architectures/web/authentication-flow.md`、`.ai/knowledge/web/invitation-error-handoff.md` |
+| 通用内容与 About | `apps/web/build/content/`、`apps/web/build/about/`、`apps/web/src/content/`、`apps/web/src/pages/AboutUs/` | `.ai/architectures/web/content-rendering.md`、`.ai/knowledge/web/content-authoring.md` |
 | Server | `apps/server/src/modules/`、`apps/server/src/domains/`、`apps/server/src/http/` | `.ai/architectures/server/request-lifecycle.md`、`.ai/architectures/server/authentication-lifecycle.md`、`.ai/knowledge/server/multipart-lifecycle-traps.md` |
 | 存储与 SDK | `apps/server/src/modules/storage/`、`packages/sdk/` | `.ai/knowledge/storage/lifecycle-traps.md` |
 | 文档集成 | `apps/outline/`、`scripts/docs-integration/` | `.ai/architectures/docs-integration/integration-boundaries.md`、`.ai/architectures/docs-integration/unified-reading-interface.md`、`.ai/knowledge/docs-integration/public-reader-refs.md` |

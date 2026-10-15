@@ -24,6 +24,13 @@ function renderHeader(state: AuthAreaProps['state'], glassAtTop = false) {
 
 afterEach(cleanup)
 
+it('keeps About active on a detail page and uses the canonical mobile target', () => {
+  render(<MemoryRouter initialEntries={['/aboutus/projects/example-project']}><SiteHeader auth={{ state: { status: 'anonymous' }, onLogin: vi.fn(), onRegister: vi.fn(), onRetry: vi.fn(), onLogout: vi.fn(), onProfile: vi.fn(), onSettings: vi.fn() }} /></MemoryRouter>)
+  expect(screen.getByRole('link', { name: 'About Us' }).getAttribute('href')).toBe('/aboutus')
+  expect(screen.getByRole('link', { name: 'About Us' }).getAttribute('aria-current')).toBe('page')
+  expect(screen.getByRole('combobox', { name: '打开导航菜单' }).textContent).toContain('About Us')
+})
+
 it('uses glass after scrolling and clears it when returning to the top', () => {
   vi.stubGlobal('scrollY', 0)
   try {

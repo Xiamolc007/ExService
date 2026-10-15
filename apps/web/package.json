@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "content:check": "node build/content/check.mjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
@@ -26,12 +27,24 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@mdx-js/mdx": "3.1.1",
+    "@types/estree": "1.0.8",
+    "@types/hast": "3.0.4",
+    "@types/mdast": "4.0.4",
+    "@types/mdx": "2.0.13",
     "@types/node": "^22.20.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/unist": "3.0.3",
     "@vitejs/plugin-react": "^6.1.1",
+    "fumadocs-core": "16.17.1",
+    "fumadocs-mdx": "15.4.7",
+    "github-slugger": "2.0.0",
+    "gray-matter": "4.0.3",
     "sass": "^1.104.1",
     "typescript": "^5.9.3",
-    "vite": "^8.3.0"
+    "unist-util-visit": "5.1.0",
+    "vite": "^8.3.0",
+    "yaml": "2.9.1"
   }
 }
