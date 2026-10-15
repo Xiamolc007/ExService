@@ -2,15 +2,12 @@
 // Real Chromium geometry/focus with isolated UI props, not authenticated API acceptance.
 import assert from 'node:assert/strict'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { createRequire } from 'node:module'
+import { chromium } from 'playwright'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createServer } from 'vite'
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
-// Reuse the repository's existing browser infrastructure; install no dependencies.
-const require = createRequire(new URL('../../apps/outline/package.json', import.meta.url))
-const { chromium } = require('playwright')
 const evidence = resolve(repository, 'output/playwright/notification-experience')
 await mkdir(evidence, { recursive: true })
 const fixturePath = resolve(repository, 'tests/browser/notification-fixture.tsx').replaceAll('\\', '/')

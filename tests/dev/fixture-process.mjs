@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 const action = process.argv[2]
 if (action === 'lock') {
-  const { acquireLock } = await import('../../scripts/docs-integration/ownership.mjs')
+  const { acquireLock } = await import('../../scripts/runtime/ownership.mjs')
   try {
     const lock = acquireLock({ mode: process.argv[4], fingerprint: 'race-fixture', directory: process.argv[3] })
     console.log('LOCK_ACQUIRED')

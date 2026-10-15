@@ -2,7 +2,7 @@
 
 Contract Test 对真实 Fastify app 的 HTTP 行为、Glue 映射和原始 handler 输出分别断言；数据库行为测试使用独立 PostgreSQL 容器。单条断言的失败模式见 `.ai/knowledge/server/serialization-masks-handler-regressions.md` 与 `.ai/knowledge/contract-tests/contract-parsing-constraints.md`。
 
-_最后更新：2026-10-12_
+_最后更新：2026-10-15_
 
 ## 隔离夹具
 
@@ -22,17 +22,19 @@ _最后更新：2026-10-12_
 
 schema 经 `tests/helpers/contract.ts` 从 `api/generated/openapi.json` 读取，测试不复制 DTO。读器的引用、路径和 operation 约束见 `.ai/knowledge/contract-tests/contract-parsing-constraints.md`。跨多步业务测试覆盖申请、审核、验证码、完善、登录、资料与头像；PostgreSQL 专项测试覆盖空库迁移、重复迁移、错误目标拒绝、半迁移、未知对象重置拒绝、约束、事务回滚及双连接竞争。自动测试证明隔离容器中的行为；本机迁移与真实服务冒烟另行验证。
 
-## 文档集成的测试边界
+## Website 与身份运行测试
 
-根 `vitest.config.ts` 只包含 Website 自有测试路径，并显式排除 `apps/outline/`、`vendor/` 和 `output/`；Outline 使用自己的 Yarn 测试项目。`scripts/runtime/tests.mjs` 每轮先生成 Contract，再统一执行 Website、当前 runtime/共享 Docs 逻辑与 `scripts/runtime/test-manifest.mjs` 的定制 Outline 清单；`scripts/api/generate.test.mjs` 纳入默认脚本测试。旧模式专属文件和真实生命周期验收不加入默认测试。Website 分组限制为两个 worker，减少独立数据库容器和 CPU 争用，全部文件与断言仍执行。前端按 app、shared-node、shared-jsdom 分别选文件，DOM 用例只运行在 jsdom。
+根 `vitest.config.ts` 包含 Website Web、Server、共享包及 `tests/` 的自有测试，排除 `vendor/` 和 `output/`。DOM 用例以文件标记使用 jsdom；其余使用 Node。`scripts/runtime/tests.mjs` 每轮先生成 Contract，再执行完整 Website Vitest 和明确列出的 runtime/共享身份配置 Node 测试；`scripts/api/generate.test.mjs` 纳入默认脚本测试。Vitest 限制两个 worker，减少独立数据库容器和 CPU 争用，不缩减断言。
 
-`scripts/docs-integration/test-outline.mjs` 仅接受一条 `server/` 或 `plugins/` 测试文件路径及一个以上原样例名。它为每个指定例分别创建临时 PG18、Redis 与附件目录，执行完整 Outline migration，使用仅保留操作系统和包缓存变量的环境白名单及隔离的身份配置；测试要求恰好一个指定用例通过，无匹配、重复匹配、未处理错误或准备失败均失败。注入标记禁止读取 Outline 子目录 dotenv，必需的 URL 也由测试夹具提供。不要用 Outline 默认测试环境或本机开发库替代该入口。自动测试与真实浏览器、socket、数据库恢复及服务器验收分开报告。
+`tests/auth/` 和 `tests/contract/identity.test.ts` 保留独立 OIDC、内部身份接口和会话撤销覆盖；默认空客户端与显式普通客户端分别测试。runtime 测试验证配置投影、client 核验、资源归属、receipt 和退役维护；`tests/runtime/native-health.test.ts` 核对 Website/Hydra readiness、显式 client 校验及 Website 检查 CLI，不调用开发服务。维护数据库测试使用临时 PostgreSQL，资源删除使用受控适配器或临时目录。真实生命周期、浏览器和外部应用验收分别报告。
+
+`tests/browser/error-panel.mjs` 和 `tests/browser/notification-experience.mjs` 使用根锁定的 Playwright 和隔离 UI 夹具，`tests/browser/navbar-geometry.mjs` 接收真实浏览器 tab；这些工具不由 `pnpm test` 自动执行，DOM 测试不能替代真实布局或焦点验收。
 
 ## GitHub CI
 
-`.github/workflows/ci.yml` 在目标为 `main` 的 PR、`main` push 和手动触发时执行。`verify` 使用 Ubuntu 24.04 runner，递归检出锁定的 Outline 子模块，分别按 pnpm 与 Yarn lockfile 安装依赖，然后执行 `pnpm api:check`、`pnpm typecheck`、`pnpm build` 和 `pnpm test`。Outline readiness CLI 用例启动 `apps/outline/build/server/scripts/` 中的真实编译入口，因此完整构建必须先于测试。Linux runner 提供测试夹具所需的 Docker；Docker 不可用时失败，不改用开发服务。
+`.github/workflows/ci.yml` 在目标为 `main` 的 PR、`main` push 和手动触发时执行。`verify` 使用 Ubuntu 24.04 runner，检出当前仓库，按 pnpm lockfile 安装依赖，然后执行 `pnpm api:check`、`pnpm typecheck`、`pnpm build` 和 `pnpm test`。Linux runner 提供测试夹具所需的 Docker；Docker 不可用时失败，不改用开发服务。
 
-CI 使用 Node 22、pnpm 11.9.0 与 Corepack 0.34.6。通过 `INTEGRATION_NODE_BIN` 和 `INTEGRATION_COREPACK_JS` 显式提供实际工具路径，避免 runtime 按 Node 安装目录推测 Corepack 位置。测试入口和定制 Outline 清单沿用前述统一流程，不复制或缩减测试范围。
+CI 使用 Node 22、pnpm 11.9.0 与 Corepack 0.34.6。通过 `INTEGRATION_NODE_BIN` 和 `INTEGRATION_COREPACK_JS` 显式提供实际工具路径，避免 runtime 按 Node 安装目录推测 Corepack 位置。测试入口沿用前述 Website 与 runtime 统一流程，不复制或缩减身份测试范围。
 
 根 `pnpm typecheck` 先构建 `@workspace/sdk`，再检查所有 workspace 与专项类型测试。SDK 的公开导出指向 `packages/sdk/dist/` 中的 JavaScript 和声明；仅执行 SDK 的 `tsc --noEmit` 不会生成这些文件，干净检出不能依赖此前 Build 留下的产物。
 

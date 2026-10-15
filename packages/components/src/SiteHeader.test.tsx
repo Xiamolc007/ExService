@@ -94,11 +94,13 @@ describe('SiteHeader Join menu', () => {
   })
 })
 
-it('links the desktop Document entry to the gateway docs path with a native anchor', () => {
+it('opens Document inside the Website router on desktop', async () => {
   renderHeader({ status: 'anonymous' })
   const link = screen.getByRole('link', { name: 'Document' })
   expect(link.tagName).toBe('A')
   expect(link.getAttribute('href')).toBe('/docs/')
+  await userEvent.click(link)
+  expect(screen.getByTestId('path').textContent).toBe('/docs/')
 })
 
 describe('SiteHeader mobile navigation', () => {
@@ -124,7 +126,7 @@ describe('SiteHeader mobile navigation', () => {
     }
   })
 
-  it('leaves the Website router when selecting Document on mobile', async () => {
+  it('opens Document inside the Website router on mobile', async () => {
     const originalScrollIntoView = Element.prototype.scrollIntoView
     Element.prototype.scrollIntoView = vi.fn()
     try {
@@ -133,7 +135,7 @@ describe('SiteHeader mobile navigation', () => {
       trigger.focus()
       await userEvent.keyboard('[Space]')
       await userEvent.click(screen.getByRole('option', { name: 'Document' }))
-      expect(screen.getByTestId('path').textContent).toBe('/')
+      expect(screen.getByTestId('path').textContent).toBe('/docs/')
     } finally {
       if (originalScrollIntoView) Element.prototype.scrollIntoView = originalScrollIntoView
       else Reflect.deleteProperty(Element.prototype, 'scrollIntoView')

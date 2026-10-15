@@ -7,7 +7,7 @@ import { fumadocsMdx } from 'fumadocs-mdx/vite'
 import { contentPlugin } from './build/content/plugin.ts'
 import { contentDefinitions } from './build/collections.ts'
 import { teamConfigPlugin } from './build/team-config.ts'
-import { devEntryPlugin, docsProxy, trustedProxy, proxyBoundaryPlugin } from './dev-entry.ts'
+import { devEntryPlugin, trustedProxy, proxyBoundaryPlugin } from './dev-entry.ts'
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const communityConfig = JSON.parse(
@@ -21,12 +21,11 @@ const communityConfig = JSON.parse(
  */
 const SERVER_ORIGIN = `http://127.0.0.1:${process.env.INTEGRATION_SERVER_PORT ?? '8080'}`
 const INTEGRATION_WEB_PORT = Number(process.env.INTEGRATION_WEB_PORT ?? '8081')
-const integrated = process.env.WEBSITE_INTEGRATION_ENABLED === 'true'
-const local = integrated && process.env.WEBSITE_INTEGRATION_MODE === 'local'
-const publicOrigin = local ? new URL(process.env.SERVER_PUBLIC_WEB_BASE_URL!) : new URL('http://exwebsite.test:8090')
+const publicOrigin = process.env.SERVER_PUBLIC_WEB_BASE_URL
+  ? new URL(process.env.SERVER_PUBLIC_WEB_BASE_URL) : undefined
 
 export default defineConfig({
-  plugins: [proxyBoundaryPlugin(local ? publicOrigin.origin : undefined), teamConfigPlugin(resolve(repositoryRoot, 'apps/web')), contentPlugin(contentDefinitions),
+  plugins: [proxyBoundaryPlugin(publicOrigin?.origin), teamConfigPlugin(resolve(repositoryRoot, 'apps/web')), contentPlugin(contentDefinitions),
     ...fumadocsMdx({ macro: false, index: false, updateViteConfig: false }), react(), ...(process.env.WEBSITE_DEV_ENTRY_PORT
     ? [devEntryPlugin(Number(process.env.WEBSITE_DEV_ENTRY_PORT))] : [])],
   define: {
@@ -44,31 +43,20 @@ export default defineConfig({
     },
   },
   server: {
-    fs: { allow: [repositoryRoot, resolve(repositoryRoot, 'apps/outline/shared/styles')] },
-    host: integrated && !local ? '0.0.0.0' : '127.0.0.1',
+    fs: { allow: [repositoryRoot] },
+    host: '127.0.0.1',
     port: INTEGRATION_WEB_PORT,
     strictPort: true,
-    allowedHosts: integrated && !local ? ['exwebsite.test'] : undefined,
-    hmr: integrated
-      ? { protocol: 'ws', host: publicOrigin.hostname, clientPort: Number(publicOrigin.port) }
+    hmr: publicOrigin
+      ? { protocol: publicOrigin.protocol === 'https:' ? 'wss' : 'ws', host: publicOrigin.hostname, clientPort: Number(publicOrigin.port || (publicOrigin.protocol === 'https:' ? 443 : 80)) }
       : undefined,
     // Vite 注入的开发脚本早于 HTML meta，响应头必须先保护邀请 URL。
     headers: { 'Referrer-Policy': 'no-referrer' },
     proxy: {
-      ...(process.env.OUTLINE_DEV_HTTP_PORT ? {
-        '^/docs/static/': trustedProxy({
-          target: `${local ? 'http' : 'https'}://127.0.0.1:${process.env.INTEGRATION_OUTLINE_VITE_PORT ?? '3101'}`,
-          secure: local,
-          ws: true,
-          ...(integrated ? {} : { rewrite: (path: string) => path.replace(/^\/docs/, '') }),
-        }, integrated ? publicOrigin.origin : 'http://127.0.0.1:8080'),
-        '^/docs(?:/|\\?|$)': docsProxy(`http://127.0.0.1:${process.env.OUTLINE_DEV_HTTP_PORT}`,
-          { integrated, publicOrigin: integrated ? publicOrigin.origin : 'http://127.0.0.1:8080' }),
-      } : {}),
       // 原样转发 `/api/*`：Server 自己注册 `/api` 前缀，因此这里不做 rewrite。
       '/api': trustedProxy({
         target: SERVER_ORIGIN,
-      }, integrated ? publicOrigin.origin : 'http://127.0.0.1:8080'),
+      }, publicOrigin?.origin ?? 'http://127.0.0.1:8081'),
     },
   },
 })

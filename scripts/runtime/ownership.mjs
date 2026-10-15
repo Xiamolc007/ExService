@@ -5,8 +5,8 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { atomicJson, digest, LocalError, readJson } from './local-config.mjs'
-import { localRoot } from '../runtime/shared.mjs'
-import { redact as redactRuntime } from '../runtime/output.mjs'
+import { localRoot } from './shared.mjs'
+import { redact as redactRuntime } from './output.mjs'
 
 /** PID is only an address. Creation time, executable and command are the authority. */
 export function processIdentity(pid) {

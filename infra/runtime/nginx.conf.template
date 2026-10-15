@@ -17,7 +17,6 @@ http {
     merge_slashes on;
     if ($uri ~ "[%\\\\]") { return 404; }
     location ~ ^/(api|docs)/internal(?:/|$) { return 404; }
-    location = /docs { return 308 /docs/$is_args$args; }
     location /api/ {
       client_max_body_size @@API_MAX_BODY_BYTES@@;
       proxy_pass @@API_UPSTREAM@@;
@@ -25,18 +24,6 @@ http {
       proxy_set_header X-Forwarded-Host @@SITE_HOST@@;
       proxy_set_header X-Forwarded-Proto https;
       proxy_set_header X-Forwarded-For $remote_addr;
-    }
-    location /docs/ {
-      proxy_pass @@OUTLINE_UPSTREAM@@;
-      proxy_http_version 1.1;
-      proxy_set_header Host @@SITE_HOST@@;
-      proxy_set_header X-Forwarded-Host @@SITE_HOST@@;
-      proxy_set_header X-Forwarded-Proto https;
-      proxy_set_header X-Forwarded-Prefix /docs;
-      proxy_set_header X-Forwarded-For $remote_addr;
-      proxy_set_header Upgrade $http_upgrade;
-      proxy_set_header Connection $connection_upgrade;
-      proxy_read_timeout 300s;
     }
     location / { try_files $uri $uri/ /index.html; }
   }

@@ -5,8 +5,9 @@
 - 默认用中文沟通；代码、标识符、Commit message 和既有文档沿用各自语言约定。
 - 文档、注释和交付说明中的仓库路径以仓库根目录为基准，使用行内代码；不写 `./`、`../`、Markdown 相对链接或本机绝对路径。代码中的 import 和运行时路径遵循工具约定。
 - 开工前从 `.ai/README.md` 查找相关知识；启动检查单与命令见 `README.md`，配置、运行和资源边界见 `.ai/architectures/runtime/runtime-boundaries.md`。
+- 修改或消费 `packages/common/` 前，阅读 `.agents/rules/package-common.md`。
 - Monica 任务使用当前项目提示词和本工程规则提供项目上下文；Exre 通用 Agents 只定义角色职责，不携带其他项目规则。ExWebsite 项目协作约定见 `.ai/architectures/monica-team/workflow.md`。
-- 开发或修改 `/docs/` 或 Outline 相关功能、代码、页面前，必须先读取并遵守 `apps/outline/AGENTS.md`。
+- `/docs` 和 `/docs/` 是主站公开建设中页面；保留旧深路径的 404，不恢复已退役文档服务。身份客户端与 Hydra 边界见 `.ai/architectures/identity/integration-boundaries.md`。
 
 <!-- codebase-worker:start -->
 ## Project AI documentation rules
@@ -39,8 +40,8 @@
 | `packages/api-client/` | 生成类型与 `createApiClient({ baseUrl })`；不引入 React、业务状态或第二份 endpoint 定义。 |
 | `packages/components/` | 基于 ExUI 的共享 UI；不访问 API、不定义路由表、不导入 ExUI 全局样式。 |
 | `apps/web/` | 前端路由、主题、构建配置与 Client 适配；API 请求只经 `@workspace/api-client`，不直接使用 `fetch` 或复制 DTO。 |
-| `apps/server/` | 加载 Contract、映射 handler、执行受控数据库访问；不绕过 Contract 注册 HTTP 路由或静态 JSON mock，不反向生成 OpenAPI，不连接 `outline` 等其他数据库。 |
-| `apps/outline/` | 独立文档服务及 Git submodule，使用自己的 Yarn、数据库和附件存储；不属于 pnpm workspace，Website 不接管其 API。 |
+| `apps/server/` | 加载 Contract、映射 handler、执行受控数据库访问；不绕过 Contract 注册 HTTP 路由或静态 JSON mock，不反向生成 OpenAPI，不连接 `hydra` 等其他数据库。 |
+| `packages/common/` | Server 与 runtime 共享的纯身份配置解析和绑定投影；当前只开放 Node 子入口。 |
 | `tests/contract/` | 从 Contract 读取 schema，验证真实 Fastify 路由、原始 handler 输出和双向 operation 覆盖。 |
 
 ## Contract-first 工作流
@@ -73,6 +74,6 @@ Server 按已确认方案组织：公共能力放在 `apps/server/src/modules/{n
 ## 运行与交付边界
 
 - 普通 runtime 只读取根 `.env.local`，受支持的进程变量优先；已有环境须显式导入，保留原数据库、账号、秘密、存储与头像，不用示例默认值覆写。
-- 日常运行只核对准备状态；数据库创建、迁移、客户端登记和管理员初始化须显式执行。bootstrap 必须使用用户明确选择的已有启用账号 UUID。
-- ExUI 使用 registry 发布包，由 pnpm 与 Outline Yarn lockfile 分别锁定；不恢复本地 link/portal。日常启动不改写 lockfile 或依赖树；停止只清理可证明归属的运行资源，不删除持久数据。
-- 文档身份、代理与资源归属规则见 `.ai/architectures/docs-integration/integration-boundaries.md`。当前仍是单实例开发阶段，部署材料不代表公网生产验收；本阶段不部署上线。
+- 日常运行只核对准备状态；数据库创建、迁移和客户端登记须显式执行；`IDENTITY_CLIENTS_JSON` 默认空集合，不创建默认应用。
+- ExUI 使用 registry 发布包，由 pnpm lockfile 锁定；不恢复本地 link/portal。日常启动不改写 lockfile 或依赖树；停止只清理可证明归属的运行资源，不删除持久数据。
+- 身份客户端规则见 `.ai/architectures/identity/integration-boundaries.md`；代理与资源归属见 `.ai/architectures/runtime/runtime-boundaries.md`。当前仍是单实例开发阶段，部署材料不代表公网生产验收；本阶段不部署上线。

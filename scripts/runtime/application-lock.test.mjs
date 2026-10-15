@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { atomicJson, digest, readJson } from '../docs-integration/local-config.mjs'
+import { atomicJson, digest, readJson } from './local-config.mjs'
 import { acquireApplicationLock } from './application-lock.mjs'
 
 const identity = pid => ({ pid, creation: 'original', executable: 'node', commandDigest: 'original-command' })

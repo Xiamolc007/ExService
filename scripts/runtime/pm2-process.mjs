@@ -1,6 +1,6 @@
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { runOwned, signalScope } from '../docs-integration/ownership.mjs'
+import { runOwned, signalScope } from './ownership.mjs'
 import { root } from './shared.mjs'
 import { hydraSpecification } from './infrastructure.mjs'
 import { logWriter } from './logs.mjs'
@@ -8,10 +8,10 @@ import { RuntimeError } from './output.mjs'
 
 export function processSpecification(state, service) {
   if (service === 'hydra') return hydraSpecification(state, ['serve', 'all'])
-  if (!['server', 'outline'].includes(service)) throw new RuntimeError('PM2_SERVICE_INVALID')
+  if (!['server'].includes(service)) throw new RuntimeError('PM2_SERVICE_INVALID')
   return { name: service, command: state.values.INTEGRATION_NODE_BIN ?? process.execPath,
-    args: service === 'server' ? ['dist/server.js'] : ['build/server/index.js', '--no-migrate', '--services=cron,collaboration,websockets,admin,web,worker'],
-    cwd: join(state.workspace, service === 'server' ? 'apps/server' : 'apps/outline'), environment: state.environments[service] }
+    args: ['dist/server.js'],
+    cwd: join(state.workspace, 'apps/server'), environment: state.environments[service] }
 }
 
 /** The root adapter creates one consumer-specific snapshot; no other service secrets are included. */

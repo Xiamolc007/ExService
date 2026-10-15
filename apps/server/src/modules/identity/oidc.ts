@@ -175,7 +175,7 @@ export class OidcService {
 
   private approved(request: HydraRequest) {
     const clientId = request.client?.client_id
-    const config = clientId && this.options.clients[clientId]
+    const config = clientId && Object.hasOwn(this.options.clients, clientId) && this.options.clients[clientId]
     if (!config || !request.client?.redirect_uris?.includes(config.redirectUri)) {
       throw new AuthError('IDENTITY_CLIENT_FORBIDDEN')
     }

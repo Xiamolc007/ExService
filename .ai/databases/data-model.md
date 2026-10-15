@@ -2,13 +2,13 @@
 
 本文件记录表的业务职责、关系和必须保留的数据规则。它是修改模型前的设计入口，不代替可执行结构：PostgreSQL 结构以 `apps/server/src/db/schema.ts` 和 `apps/server/drizzle/` 为准；HTTP 字段与行为以 `api/openapi.yaml` 为准。
 
-_最后更新：2026-10-09_
+_最后更新：2026-10-15_
 
 ## 适用范围
 
 邀请生命周期依据 `.notes/archive/join-registration/rfcs/join-registration-rfc.md`；完整申请与一次申请规则依据 `.notes/archive/join-registration/rfcs/join-application-pages-rfc.md`。PostgreSQL 从空库建立当前有效模型，不导入旧 SQLite 记录；版本 0 历史简版的读取兼容规则仍保留在应用行为中。
 
-下文“身份与会话集成模型”记录已写入 Website schema 和 migration 的数据职责；实际物理结构以 `apps/server/src/db/schema.ts` 和 `apps/server/drizzle/` 为准。跨服务身份控制流见 `.ai/architectures/docs-integration/integration-boundaries.md`。
+下文“身份与会话集成模型”记录已写入 Website schema 和 migration 的数据职责；实际物理结构以 `apps/server/src/db/schema.ts` 和 `apps/server/drizzle/` 为准。跨服务身份控制流见 `.ai/architectures/identity/integration-boundaries.md`。
 
 ```mermaid
 erDiagram
@@ -47,15 +47,15 @@ erDiagram
 
 ## 身份与会话集成模型
 
-本站 `exre` 数据库承担 Website 账号、本站会话与 Hydra 身份关联。Hydra 提供 OIDC 协议，不成为本站账号或会话的事实来源。Outline 的 `ExternalIdentity` 和 `ExternalSession` 属于其独立数据库，不在 Website 数据库建表；本站也不保存 Outline 文档授权。HTTP 请求和响应字段仍由 `api/openapi.yaml` 定义。
+本站 `exre` 数据库承担 Website 账号、本站会话与 Hydra 身份关联。Hydra 提供 OIDC 协议，不成为本站账号或会话的事实来源。外部应用拥有各自的会话和业务授权，本站不接管其数据。身份客户端配置改变不删除 Website 身份表或重写历史 migration。HTTP 请求和响应字段仍由 `api/openapi.yaml` 定义。
 
 | Website 表 | 职责与关系 | 必须保持的数据规则 |
 | --- | --- | --- |
-| `auth_users` | 在现有账号上保存可空 `disabledAt` 和非负 `profileVersion`，分别记录停用事实与资料版本。 | 停用使该用户所有本站会话失效；恢复账号不恢复旧会话。昵称、邮箱或头像更新在同一事务中递增资料版本，以免 Outline 的迟到同步覆盖较新资料。 |
-| `auth_sessions` | 保留 `tokenHash` 主键与现有 Bearer 凭据模型，另有唯一、非空、稳定的 UUID `id`，供 Hydra sid 与 Outline 会话关联；迁移时为既有行回填。 | `id` 是非凭据标识，不外发 token 摘要。退出只撤销当前会话组；同账号其他设备的会话不受影响。被关联的已撤销或到期会话须保留到撤销投递完成及重试保留期结束。 |
+| `auth_users` | 在现有账号上保存可空 `disabledAt` 和非负 `profileVersion`，分别记录停用事实与资料版本。 | 停用使该用户所有本站会话失效；恢复账号不恢复旧会话。昵称、邮箱或头像更新在同一事务中递增资料版本，供外部应用区分较新资料与迟到同步。 |
+| `auth_sessions` | 保留 `tokenHash` 主键与现有 Bearer 凭据模型，另有唯一、非空、稳定的 UUID `id`，供 Hydra sid 与外部应用会话关联；迁移时为既有行回填。 | `id` 是非凭据标识，不外发 token 摘要。退出只撤销当前会话组；同账号其他设备的会话不受影响。被关联的已撤销或到期会话须保留到撤销投递完成及重试保留期结束。 |
 | `auth_oidc_flows` | 保存短期 login/consent challenge 处理状态及同一本站会话的重试结果，关联 `auth_sessions.id`。 | `phase + challengeHash` 唯一；challenge 只存摘要，跳转结果短期加密保存。有效期不超过 10 分钟或本站会话到期时间。处理中、已完成、须重新发起的状态可区分；过期 flow 才可清理。 |
 | `auth_oidc_bindings` | 关联 `clientId`、`hydraSid`、本站 `sessionId` 和 `userId`，记录创建与撤销事实。 | `clientId + hydraSid` 唯一；会话外键按限制删除，且关联用户必须与会话拥有者一致。失效会话不能新增有效绑定；绑定已撤销后不因协议清理失败恢复有效。 |
-| `auth_identity_outbox` | 在会话退出或用户停用事务中保存待投递撤销事件和所有受影响 binding 的 `clientId/hydraSid` 快照。 | `eventId` 幂等；保存重试次数、下次时间及各目标结果，Hydra 逐 sid 清理和 Outline 投递都完成后才标记完成。待投递事件不得因过期或会话清理而丢失；普通退出不能按用户批量撤销其他设备。 |
+| `auth_identity_outbox` | 在会话退出或用户停用事务中保存待投递撤销事件和所有受影响 binding 的 `clientId/hydraSid` 快照。 | `eventId` 幂等；保存重试次数、下次时间及各目标结果，Hydra 逐 sid 清理和已配置的应用通知均完成后才标记完成；没有应用通知配置时只执行 Hydra 撤销，缺失目标仍 pending。待投递事件不得因过期或会话清理而丢失；普通退出不能按用户批量撤销其他设备。 |
 
 撤销事务先锁定会话，标记会话和相关 binding 无效，并写入 outbox；提交即为本站拒绝后续核验的生效点。账号停用按用户锁、会话锁、binding 锁的顺序进行；用户锁使用 `FOR NO KEY UPDATE`，以免与 outbox 外键的 `KEY SHARE` 锁互相阻塞。用户级事件为停用时每个旧绑定固化原 Website `sessionId` 和独立、稳定的投递 `eventId`。账号恢复不恢复旧会话；迟到投递只能撤销快照中的旧会话，不能按 userId 撤销恢复后的新会话。缺少这些快照字段的旧事件保留待处理并报告错误，不能扩大撤销范围。
 

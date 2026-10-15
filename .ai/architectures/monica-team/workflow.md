@@ -42,7 +42,7 @@ Architect 使用 `brainstorming --handoff --module=<模块名>` 自主读取相�
 
 作者不能自审；评审和必需验证覆盖同一候选。内容改变后刷新受影响证据，保留仍然有效的无关结果。报告 PASS、FAIL、BLOCKED、NOT_EXECUTED；必需证据缺失阻止适用验收。自动测试、真实浏览器和部署验收分别记录。
 
-共享本地目录、Git 索引和运行服务的修改串行；保留用户和其他任务的改动。Engineer 负责授权内 Git 写入，遵循 CONTRIBUTING.md 与 code-commiter；Outline 子仓库与父仓库交付按仓库边界处理。测试和 runtime 仍遵循相关模块规则，不连接开发库作为自动测试替代，不隐式迁移或 reset。本阶段不部署上线。
+共享本地目录、Git 索引和运行服务的修改串行；保留用户和其他任务的改动。Engineer 负责授权内 Git 写入，遵循 CONTRIBUTING.md 与 code-commiter。测试和 runtime 仍遵循相关模块规则，不连接开发库作为自动测试替代，不隐式迁移或 reset。本阶段不部署上线。
 
 ## 知识入口
 

@@ -2,7 +2,7 @@
 
 本文件说明 ExWebsite 当前开发拓扑。HTTP 形状以 `api/openapi.yaml` 为准；Server 请求与数据库生命周期见 `.ai/architectures/server/request-lifecycle.md`，数据规则见 `.ai/databases/data-model.md`。
 
-_最后更新：2026-10-11_
+_最后更新：2026-10-15_
 
 ## 系统结构
 
@@ -19,7 +19,7 @@ api/openapi.yaml + api/paths/ + api/schemas/
 
 上图是 Website 业务请求链；`apps/server/` 是唯一 Website Fastify Server。Contract 不依赖实现；Fastify 只注册带 `operationId` 的 operation，Website 前端只经共享 Client 发请求。当前仍是本地开发拓扑，公网部署能力需后续设计。
 
-普通开发入口已接入完整 local 文档与统一身份集成；Website 的 `/api` 仍归 Fastify。Outline 是 `apps/outline/` Git submodule，保留自己的 Yarn、数据库与附件存储，不成为 pnpm workspace 包，Website Fastify 不接管文档 API。local 与原 8090 dev/full 的配置、身份及请求边界统一见 `.ai/architectures/docs-integration/integration-boundaries.md`。
+普通开发入口保留 Website 与 Hydra 身份服务，`/api` 仍归 Fastify。`/docs`、`/docs/` 由 Website 的 `apps/web/src/pages/DocsPage/` 在 RootLayout 内公开显示“文档建设中”；其他 `/docs/*` 使用既有 404，Document 导航使用内部路由。文档数据、编辑、协作与代理已退役，不借此接入新的文档系统。身份协议边界见 `.ai/architectures/identity/integration-boundaries.md`。
 
 ## 模块边界
 
@@ -30,7 +30,7 @@ api/openapi.yaml + api/paths/ + api/schemas/
 | `packages/components/` | 基于 ExUI 的应用级共享 UI。 |
 | `apps/web/` | Vite/React 前端、路由、主题和 Client 接入。 |
 | `apps/server/` | `modules/` 公共能力、`domains/` 具体流程、统一 HTTP/Glue 入口与受控 PostgreSQL 访问。 |
-| `apps/outline/` | 独立文档服务，负责文档数据、权限、公共阅读及协作。 |
+| `packages/common/` | runtime 与 Server 经 `@workspace/common/node/identity-config` 共用纯客户端配置验证与部署绑定投影；消费规则见 `.agents/rules/package-common.md`。 |
 | `tests/contract/` | 对真实 Fastify app 的 HTTP 行为与原始 handler 输出做验证。 |
 
 ## 依赖与构建
@@ -41,7 +41,7 @@ api/openapi.yaml + api/paths/ + api/schemas/
 
 ## 开发进程
 
-根目录 `pnpm dev` 经 `scripts/runtime/entry.mjs` 和 `applications.mjs` 监督应用；依赖由独立服务入口管理，普通运行只读核对准备状态。运行配置、资源归属与维护边界见 `.ai/architectures/runtime/runtime-boundaries.md`；文档身份与请求边界见 `.ai/architectures/docs-integration/integration-boundaries.md`。首次使用步骤见 `README.md`。正常运行与构建证明不替代真实浏览器或公网部署验收。
+根目录 `pnpm dev` 经 `scripts/runtime/entry.mjs` 和 `applications.mjs` 监督应用；依赖由独立服务入口管理，普通运行只读核对准备状态。运行配置、资源归属与维护边界见 `.ai/architectures/runtime/runtime-boundaries.md`；身份客户端与请求边界见 `.ai/architectures/identity/integration-boundaries.md`。首次使用步骤见 `README.md`。正常运行与构建证明不替代真实浏览器或公网部署验收。
 
 ## 前端请求流
 

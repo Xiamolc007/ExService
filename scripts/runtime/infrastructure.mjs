@@ -1,17 +1,15 @@
 import { existsSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
-import { join } from 'node:path'
-import { runOwned, acquireLock, signalScope, spawnOwned, stopOwned } from '../docs-integration/ownership.mjs'
-import { toolchain } from '../docs-integration/local-config.mjs'
-import { httpReady, assertPortFree, validUuid, verifyFoundationSchemas } from '../docs-integration/local-dev.mjs'
-import { ensureHydraClient } from '../docs-integration/hydra-client.mjs'
+import { runOwned, acquireLock, signalScope } from './ownership.mjs'
+import { toolchain } from './local-config.mjs'
+import { verifyFoundationSchemas } from './local-dev.mjs'
+import { ensureHydraClient } from './hydra-client.mjs'
 import { RuntimeError, diagnostic, reporter } from './output.mjs'
 import { Services } from './services.mjs'
-import { cliSpecification, hydraOptions } from './applications.mjs'
-import { validateDeployment } from './deployment.mjs'
+import { hydraOptions } from './applications.mjs'
 
-/** Creates only missing local document databases, never exre or existing role passwords. */
-export async function initializeDocumentDatabases(state, { connect } = {}) {
+/** Creates only the missing local Hydra database, never exre or existing role passwords. */
+export async function initializeHydraDatabase(state, { connect } = {}) {
   if (state.profile !== 'local') return // Native services are explicitly provisioned by their operator.
   const { default: pg } = await import('pg')
   const client = connect ? await connect() : new pg.Client({ host: '127.0.0.1', port: state.config.ports.postgres,
@@ -19,7 +17,7 @@ export async function initializeDocumentDatabases(state, { connect } = {}) {
   try {
     if (!connect) await client.connect()
     const plans = []
-    for (const name of ['outline', 'hydra']) {
+    for (const name of ['hydra']) {
       const prefix = `${name.toUpperCase()}_DATABASE`, user = state.values[`${prefix}_USER`]
       if (user === (state.values.POSTGRES_USER ?? 'postgres') || user === 'postgres' || user === state.values.DATABASE_USER) throw new RuntimeError('DATABASE_OWNER_CONFLICT', { service: name })
       const role = (await client.query('SELECT rolcanlogin,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls FROM pg_roles WHERE rolname=$1', [user])).rows[0]
@@ -28,12 +26,11 @@ export async function initializeDocumentDatabases(state, { connect } = {}) {
         throw new RuntimeError('DATABASE_OWNER_CONFLICT', { service: name })
       plans.push({ name, user, prefix, createRole: !role, createDatabase: !database })
     }
-    if (plans[0].user === plans[1].user) throw new RuntimeError('DATABASE_OWNER_CONFLICT')
     for (const plan of plans) {
       if (plan.createRole) await client.query(`CREATE ROLE ${pg.escapeIdentifier(plan.user)} LOGIN PASSWORD ${pg.escapeLiteral(state.values[`${plan.prefix}_PASSWORD`])}`)
       if (plan.createDatabase) await client.query(`CREATE DATABASE ${pg.escapeIdentifier(plan.name)} OWNER ${pg.escapeIdentifier(plan.user)}`)
     }
-  } catch (error) { throw diagnostic(error, { service: 'PostgreSQL', phase: '显式准备文档库', keys: ['POSTGRES_PASSWORD'], next: '检查数据库 owner 与原凭据；重复 init 不修改既有角色密码' }) }
+  } catch (error) { throw diagnostic(error, { service: 'PostgreSQL', phase: '显式准备 Hydra 库', keys: ['POSTGRES_PASSWORD'], next: '检查数据库 owner 与原凭据；重复 init 不修改既有角色密码' }) }
   finally { await client.end().catch(() => {}) }
 }
 
@@ -61,45 +58,24 @@ export async function prepareInfrastructure(state, { migrateOnly = false, execut
     if (state.profile === 'local') {
       const services = new Services(state)
       services.verify(services.inventory()); services.verifyVolumes()
-      await services.start({ selectedServices: ['postgres', 'redis'], log: output })
-      if (!migrateOnly) await initializeDocumentDatabases(state)
+      await services.start({ selectedServices: ['postgres'], log: output })
+      if (!migrateOnly) await initializeHydraDatabase(state)
       services.compose(['run', '--rm', '--no-deps', 'hydra', 'migrate', 'sql', 'up', '--read-from-env', '--yes'])
     } else {
       verifyHydraBinary(state)
       await execute(hydraSpecification(state, ['migrate', 'sql', 'up', '--read-from-env', '--yes']), { signal: scope.signal,
         onLog: output.log, code: 'HYDRA_MIGRATION_FAILED' })
     }
-    await output.stage('Outline migration', onLog => execute({ name: 'Outline', command: tools.node,
-      args: [tools.corepack, 'yarn', 'db:migrate', '--env', state.values.OUTLINE_DATABASE_SSLMODE === 'disable' || state.profile === 'local' ? 'production-ssl-disabled' : 'production'],
-      cwd: join(state.workspace, 'apps/outline'), environment: state.environments.outline }, { signal: scope.signal, onLog }))
-    if (!existsSync(join(state.workspace, 'apps/outline/build/server/scripts/integration-check.js')))
-      await output.stage('Outline server build', onLog => execute({ name: 'Outline', command: tools.node, args: [tools.corepack, 'yarn', 'build:server'],
-        cwd: join(state.workspace, 'apps/outline'), environment: state.environments.outline }, { signal: scope.signal, onLog }))
     await verifyFoundationSchemas(state)
-    if (state.profile === 'deployment') await validateDeployment(state, { prepare: true })
-    output.title('文档基础设施准备完成；Website 迁移仍须显式 pnpm db:migrate')
+    output.title('Hydra 基础设施准备完成；Website 迁移仍须显式 pnpm db:migrate')
   } finally { scope.close(); lock.release() }
 }
 
-export async function bootstrapInfrastructure(state, adminUserId) {
-  if (!validUuid(adminUserId)) throw new RuntimeError('BOOTSTRAP_UUID_REQUIRED')
-  const tools = toolchain({ workspace: state.workspace, inherited: state.values }), output = reporter({ environment: state.values })
+/** Explicit, idempotent client registration. Ordinary start/dev only verify. */
+export async function provisionIdentityClients(state, { ensureClient = ensureHydraClient } = {}) {
   const lock = acquireLock({ mode: 'local', fingerprint: state.fingerprint, directory: state.directory, name: 'applications-lock.json' })
-  const scope = signalScope()
-  let temporary
   try {
-    await verifyFoundationSchemas(state)
-    if (state.profile === 'deployment') await validateDeployment(state, { prepare: true })
-    await runOwned(cliSpecification(state, tools, 'server', 'integration:check', ['--admin-user-id', adminUserId]), { signal: scope.signal, onLog: output.log })
-    const port = Number(state.environments.server.SERVER_PORT)
-    await assertPortFree(port)
-    const compiled = state.profile === 'deployment'
-    temporary = await spawnOwned({ name: 'Website bootstrap', command: tools.node, cwd: join(state.workspace, 'apps/server'),
-      args: compiled ? ['dist/server.js'] : ['--import', 'tsx', 'src/server.ts'], environment: state.environments.server }, { signal: scope.signal, onLog: output.log })
-    await httpReady(new URL('/api/health', state.internal.website), { children: [temporary], timeout: 30000 })
-    await ensureHydraClient(hydraOptions(state))
-    await runOwned(cliSpecification(state, tools, 'outline', 'integration-bootstrap', ['--admin-user-id', adminUserId]), { signal: scope.signal, onLog: output.log })
-    await runOwned(cliSpecification(state, tools, 'outline', 'integration-check', ['--admin-user-id', adminUserId]), { signal: scope.signal, onLog: output.log })
-    output.title('文档身份准备完成；重复准备不会恢复已撤销管理员权限')
-  } finally { scope.close(); if (temporary) await stopOwned([temporary]); lock.release() }
+    for (const client of Object.values(state.clients)) await ensureClient(hydraOptions(state, client))
+    return { clients: Object.keys(state.clients) }
+  } finally { lock.release() }
 }

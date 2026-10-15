@@ -31,7 +31,7 @@ describe('AuthService session and SSO boundaries', () => {
     const session = await fixture.authServices.authenticateToken(login.token)
     await fixture.db.query(`INSERT INTO auth_oidc_bindings
       (client_id, hydra_sid, session_id, user_id, created_at, revoked_at)
-      VALUES ('ex-outline', 'sid-one', $1, $2, $3, NULL)`, [session.id, userId, fixture.now()])
+      VALUES ('another-app', 'sid-one', $1, $2, $3, NULL)`, [session.id, userId, fixture.now()])
     await fixture.authServices.logout(session)
     await fixture.authServices.createSsoRequest()
     const sessions = await fixture.db.query<{ id: string; revoked_at: number }>(
@@ -41,7 +41,7 @@ describe('AuthService session and SSO boundaries', () => {
       'SELECT kind, target_bindings, completed_at FROM auth_identity_outbox WHERE session_id = $1', [session.id])
     expect(outbox.rows).toHaveLength(1)
     expect(outbox.rows[0]).toMatchObject({ kind: 'session', completed_at: null })
-    expect(JSON.parse(outbox.rows[0]!.target_bindings)).toEqual([{ clientId: 'ex-outline', hydraSid: 'sid-one' }])
+    expect(JSON.parse(outbox.rows[0]!.target_bindings)).toEqual([{ clientId: 'another-app', hydraSid: 'sid-one' }])
   })
   it('does not couple distinct browser revocations to a caller request id', async () => {
     const fixture = await createTestAuth()
@@ -52,12 +52,12 @@ describe('AuthService session and SSO boundaries', () => {
     const sessions = await Promise.all([one, two].map(login => fixture.authServices.authenticateToken(login.token)))
     for (const [index, session] of sessions.entries()) {
       await fixture.db.query(`INSERT INTO auth_oidc_bindings
-        (client_id, hydra_sid, session_id, user_id, created_at) VALUES ('ex-outline', $1, $2, $3, $4)`,
+        (client_id, hydra_sid, session_id, user_id, created_at) VALUES ('another-app', $1, $2, $3, $4)`,
       [`sid-${index}`, session.id, userId, fixture.now()])
     }
     const requestId = '11111111-1111-4111-8111-111111111111'
-    await fixture.authServices.revokeLinkedSession('ex-outline', 'sid-0', userId, requestId)
-    await expect(fixture.authServices.revokeLinkedSession('ex-outline', 'sid-1', userId, requestId))
+    await fixture.authServices.revokeLinkedSession('another-app', 'sid-0', userId, requestId)
+    await expect(fixture.authServices.revokeLinkedSession('another-app', 'sid-1', userId, requestId))
       .resolves.toEqual({ revoked: true })
     const outbox = await fixture.db.query<{ count: string }>('SELECT count(*) AS count FROM auth_identity_outbox')
     expect(outbox.rows[0]?.count).toBe('2')

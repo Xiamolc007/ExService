@@ -10,6 +10,7 @@ vi.mock('@workspace/components', () => ({
 vi.mock('@web/src/pages/Home', () => ({
   Home: () => <main>Home</main>,
 }))
+vi.mock('@web/src/pages/AuthPage/AuthBackdrop', () => ({ AuthBackdrop: () => null }))
 
 vi.mock('@web/src/pages/NotFound', () => ({
   NotFound: () => <main>Page not found</main>,
@@ -22,6 +23,23 @@ vi.mock('@web/src/pages/JoinPage/CAEP', () => ({ CAEPJoinPage: () => <main>CAEP 
 import { App } from '@web/src/App'
 
 describe('App', () => {
+  it.each(['/docs', '/docs/'])('serves the public construction page at %s within the site layout', path => {
+    const markup = renderToStaticMarkup(<MemoryRouter initialEntries={[path]}><App /></MemoryRouter>)
+    expect(markup).toContain('Site header')
+    expect(markup).toContain('文档建设中')
+    expect(markup).toContain('href="/"')
+    expect(markup).not.toContain('Page not found')
+  })
+  it.each(['/docs/doc/old-document', '/docs/collection/old', '/docs/search', '/identity/status'])('keeps retired path %s on the existing 404', path => {
+    const markup = renderToStaticMarkup(<MemoryRouter initialEntries={[path]}><App /></MemoryRouter>)
+    expect(markup).toContain('Page not found')
+    expect(markup).not.toContain('文档建设中')
+  })
+  it.each(['login', 'consent', 'logout'])('keeps the %s identity entrance registered', phase => {
+    const markup = renderToStaticMarkup(<MemoryRouter initialEntries={['/identity/' + phase]}><App /></MemoryRouter>)
+    expect(markup).toContain('身份入口无效')
+    expect(markup).not.toContain('Page not found')
+  })
   it('serves both community routes inside the site layout', () => {
     const rifling = renderToStaticMarkup(<MemoryRouter initialEntries={['/communities/rifling-911']}><App /></MemoryRouter>)
     const caep = renderToStaticMarkup(<MemoryRouter initialEntries={['/communities/caep']}><App /></MemoryRouter>)

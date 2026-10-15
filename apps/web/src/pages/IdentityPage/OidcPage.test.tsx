@@ -57,7 +57,7 @@ describe('Website OIDC browser flow', () => {
   it('inspects a login challenge, then accepts it with only the current Bearer', async () => {
     window.localStorage.setItem(AUTH_TOKEN_KEY, 'current-token')
     post.mockImplementation((path: string) => path === '/auth/oidc/inspect'
-      ? Promise.resolve({ clientName: 'Docs', scopes: ['openid', 'profile'] })
+      ? Promise.resolve({ clientName: '示例应用', scopes: ['openid', 'profile'] })
       : Promise.reject(new ExAxiosError('http', 'SERVICE_UNAVAILABLE', 'Unavailable', { status: 503 })))
     show('login', '?login_challenge=valid-challenge')
     await waitFor(() => expect(post).toHaveBeenCalledWith('/auth/oidc/login/accept', {
@@ -73,7 +73,7 @@ describe('Website OIDC browser flow', () => {
   it('does not duplicate challenge requests under React StrictMode', async () => {
     window.localStorage.setItem(AUTH_TOKEN_KEY, 'current-token')
     post.mockImplementation((path: string) => path === '/auth/oidc/inspect'
-      ? Promise.resolve({ clientName: 'Docs', scopes: ['openid'] })
+      ? Promise.resolve({ clientName: '示例应用', scopes: ['openid'] })
       : Promise.reject(new ExAxiosError('http', 'SERVICE_UNAVAILABLE', 'Unavailable', { status: 503 })))
     show('login', '?login_challenge=valid-challenge', true)
     expect(await screen.findByRole('button', { name: '重试' })).toBeTruthy()
@@ -84,13 +84,13 @@ describe('Website OIDC browser flow', () => {
     window.localStorage.setItem(AUTH_TOKEN_KEY, 'old-token')
     let finishAccept: ((value: unknown) => void) | undefined
     post.mockImplementation((path: string) => path === '/auth/oidc/inspect'
-      ? Promise.resolve({ clientName: 'Docs', scopes: ['openid'] })
+      ? Promise.resolve({ clientName: '示例应用', scopes: ['openid'] })
       : new Promise(resolve => { finishAccept = resolve }))
     show('consent', '?consent_challenge=valid-challenge')
     await waitFor(() => expect(finishAccept).toBeDefined())
     window.localStorage.setItem(AUTH_TOKEN_KEY, 'new-token')
     finishAccept?.({ redirectUrl: 'http://identity.exwebsite.test:8090/' })
-    expect(await screen.findByText(/重新从文档服务发起登录/)).toBeTruthy()
+    expect(await screen.findByText(/重新从应用发起登录/)).toBeTruthy()
     expect(post).toHaveBeenCalledTimes(2)
     expect(window.localStorage.getItem(AUTH_TOKEN_KEY)).toBe('new-token')
   })
@@ -98,10 +98,10 @@ describe('Website OIDC browser flow', () => {
   it('keeps consent tied to its existing session when the Bearer is invalid', async () => {
     window.localStorage.setItem(AUTH_TOKEN_KEY, 'expired-token')
     post.mockImplementation((path: string) => path === '/auth/oidc/inspect'
-      ? Promise.resolve({ clientName: 'Docs', scopes: ['openid'] })
+      ? Promise.resolve({ clientName: '示例应用', scopes: ['openid'] })
       : Promise.reject(new ExAxiosError('http', 'SESSION_INVALID', 'Invalid session', { status: 401 })))
     show('consent', '?consent_challenge=valid-challenge')
-    expect(await screen.findByText(/重新从文档服务发起登录/)).toBeTruthy()
+    expect(await screen.findByText(/重新从应用发起登录/)).toBeTruthy()
     expect(window.localStorage.getItem(AUTH_TOKEN_KEY)).toBeNull()
     expect(post).toHaveBeenCalledTimes(2)
     expect(post).toHaveBeenCalledWith('/auth/oidc/consent/accept', {

@@ -1,0 +1,19 @@
+.page {
+  min-height: 65svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  padding: 3rem 1.5rem;
+  text-align: center;
+
+  h1 { margin: 0; font-size: clamp(1.75rem, 5vw, 2.5rem); }
+  p { margin: 0 0 .75rem; color: var(--exui-text-secondary); }
+}
+
+.icon {
+  width: 3rem;
+  height: 3rem;
+  color: var(--exui-text-tertiary);
+}

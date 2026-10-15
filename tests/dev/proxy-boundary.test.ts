@@ -2,30 +2,35 @@ import { createServer as httpServer, request } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, expect, it } from 'vitest'
 import { createServer, loadConfigFromFile } from 'vite'
-import { createDevEntryServer, docsProxy, isInternalPath, proxyBoundaryPlugin, trustedProxy } from '../../apps/web/dev-entry'
+import { createDevEntryServer, isInternalPath, proxyBoundaryPlugin, trustedProxy } from '../../apps/web/dev-entry'
 
 const cleanup: (() => Promise<void>)[] = []
-it('resolves local HMR at its public entry while preserving legacy and standalone static behavior', async () => {
+it('uses explicit public origin for HMR and proxies only Website API without legacy Docs modes', async () => {
   const keys = ['WEBSITE_INTEGRATION_ENABLED', 'WEBSITE_INTEGRATION_MODE', 'SERVER_PUBLIC_WEB_BASE_URL', 'OUTLINE_DEV_HTTP_PORT',
-    'INTEGRATION_OUTLINE_VITE_PORT', 'INTEGRATION_WEB_PORT', 'WEBSITE_DEV_ENTRY_PORT']
+    'INTEGRATION_OUTLINE_VITE_PORT', 'INTEGRATION_WEB_PORT', 'INTEGRATION_SERVER_PORT', 'WEBSITE_DEV_ENTRY_PORT']
   const original = Object.fromEntries(keys.map(key => [key, process.env[key]]))
   try {
-    for (const [mode, integrated] of [['local', true], ['dev', true], ['', false]] as const) {
-      Object.assign(process.env, { WEBSITE_INTEGRATION_ENABLED: String(integrated), WEBSITE_INTEGRATION_MODE: mode,
-        SERVER_PUBLIC_WEB_BASE_URL: 'http://127.0.0.1:18080', OUTLINE_DEV_HTTP_PORT: '13102', INTEGRATION_OUTLINE_VITE_PORT: '13101', INTEGRATION_WEB_PORT: '18081' })
+    for (const mode of ['local', 'dev', 'full']) {
+      Object.assign(process.env, { WEBSITE_INTEGRATION_ENABLED: 'true', WEBSITE_INTEGRATION_MODE: mode,
+        SERVER_PUBLIC_WEB_BASE_URL: 'http://127.0.0.1:18080', OUTLINE_DEV_HTTP_PORT: '13102', INTEGRATION_OUTLINE_VITE_PORT: '13101',
+        INTEGRATION_WEB_PORT: '18081', INTEGRATION_SERVER_PORT: '18082' })
       delete process.env.WEBSITE_DEV_ENTRY_PORT
       const loaded = await loadConfigFromFile({ command: 'serve', mode: 'development' }, 'apps/web/vite.config.ts')
       const server = loaded!.config.server!
-      expect(server.host).toBe(integrated && mode !== 'local' ? '0.0.0.0' : '127.0.0.1')
-      expect(server.hmr).toEqual(integrated ? { protocol: 'ws', host: mode === 'local' ? '127.0.0.1' : 'exwebsite.test', clientPort: mode === 'local' ? 18080 : 8090 } : undefined)
-      const proxy = server.proxy!['^/docs/static/'] as { target: string; rewrite?: (path: string) => string }
-      expect(proxy.target).toBe(`${mode === 'local' ? 'http' : 'https'}://127.0.0.1:13101`)
-      expect(proxy.rewrite?.('/docs/static/@vite/client') ?? '/docs/static/@vite/client').toBe(integrated ? '/docs/static/@vite/client' : '/static/@vite/client')
+      expect(server.host).toBe('127.0.0.1')
+      expect(server.port).toBe(18081)
+      expect(server.hmr).toEqual({ protocol: 'ws', host: '127.0.0.1', clientPort: 18080 })
+      expect(server.headers).toMatchObject({ 'Referrer-Policy': 'no-referrer' })
+      expect(Object.keys(server.proxy!)).toEqual(['/api'])
+      expect(server.proxy!['/api']).toMatchObject({ target: 'http://127.0.0.1:18082' })
     }
+    delete process.env.SERVER_PUBLIC_WEB_BASE_URL
+    const standalone = await loadConfigFromFile({ command: 'serve', mode: 'development' }, 'apps/web/vite.config.ts')
+    expect(standalone!.config.server!.hmr).toBeUndefined()
   } finally { for (const key of keys) { if (original[key] === undefined) delete process.env[key]; else process.env[key] = original[key] } }
 })
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close() })
-it('keeps Website login and Docs OIDC on the configured origin before serving either entry', async () => {
+it('keeps Website login and OIDC on the configured origin before serving either entry', async () => {
   const publicOrigin = 'http://127.0.0.1:8080'
   const vite = await createServer({ configFile: false, logLevel: 'silent', server: {
     host: '127.0.0.1', port: 0, allowedHosts: true,
@@ -37,7 +42,7 @@ it('keeps Website login and Docs OIDC on the configured origin before serving ei
   cleanup.push(() => new Promise(resolve => { entry.closeAllConnections(); entry.close(() => resolve()) }))
   for (const port of [(entry.address() as AddressInfo).port, (vite.httpServer!.address() as AddressInfo).port]) {
     for (const host of ['localhost:8080', '127.0.0.1:8081']) {
-      for (const path of ['/', '/login', '/docs/?q=hello%20world', '/identity/status', '/docs?x=1', '//outside.test/path']) {
+      for (const path of ['/', '/login', '/docs/?q=hello%20world', '/identity/login', '/docs?x=1', '//outside.test/path']) {
         const response = await raw(port, path, false, { Host: host })
         expect(response, `${host}${path}`).toMatchObject({ status: 307, headers: { location: `${publicOrigin}${path}` } })
         expect(response.body).not.toContain('Website home')
@@ -47,7 +52,7 @@ it('keeps Website login and Docs OIDC on the configured origin before serving ei
     }
     const canonical = await raw(port, '/', false, { Host: '127.0.0.1:8080' })
     expect(canonical).toMatchObject({ status: 200, body: 'Website home' })
-    expect((await raw(port, '/docs?x=1', false, { Host: '127.0.0.1:8080' })).headers.location).toBe('/docs/?x=1')
+    expect(await raw(port, '/docs?x=1', false, { Host: '127.0.0.1:8080' })).toMatchObject({ status: 200, body: 'Website home' })
   }
 })
 function raw(port: number, path: string, upgrade = false, headers: Record<string, string> = {}, method = 'GET') {
@@ -67,13 +72,9 @@ it('blocks internal HTTP and WS bypasses on both entries before any upstream cal
   const upstream = httpServer((req, res) => {
     upstreamCalls.push(req.url!)
     if (req.method === 'POST' && req.headers.origin !== publicOrigin) { res.writeHead(403); res.end('CSRF_ORIGIN_REJECTED'); return }
-    if (req.url?.startsWith('/redirect/')) {
-      const location = decodeURIComponent(req.url.slice('/redirect/'.length))
-      res.writeHead(302, { Location: location, 'Set-Cookie': ['__Host-csrfToken=value; Path=/; Secure', 'exdocs_access=value; Path=/docs; HttpOnly'] }); res.end(); return
-    }
     res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify({ path: req.url, origin: req.headers.origin, forwardedHost: req.headers['x-forwarded-host'],
-      forwardedProto: req.headers['x-forwarded-proto'], docsOrigin: req.headers['x-website-docs-origin'] }))
+      forwardedProto: req.headers['x-forwarded-proto'], forwardedFor: req.headers['x-forwarded-for'], forwarded: req.headers.forwarded }))
   })
   upstream.on('upgrade', (req, socket) => {
     upstreamCalls.push(req.url!)
@@ -84,9 +85,7 @@ it('blocks internal HTTP and WS bypasses on both entries before any upstream cal
   const target = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`
   const vite = await createServer({ configFile: false, logLevel: 'silent', server: {
     host: '127.0.0.1', port: 0, allowedHosts: true,
-    proxy: { '/api': trustedProxy({ target, ws: true }, publicOrigin),
-      '^/docs/static/': trustedProxy({ target, ws: true }, publicOrigin),
-      '^/docs(?:/|\\?|$)': docsProxy(target, { integrated: true, publicOrigin }) },
+    proxy: { '/api': trustedProxy({ target, ws: true }, publicOrigin) },
   }, plugins: [proxyBoundaryPlugin()] })
   await vite.listen(); cleanup.push(() => vite.close())
   const entry = await createDevEntryServer(vite, 0)
@@ -103,23 +102,16 @@ it('blocks internal HTTP and WS bypasses on both entries before any upstream cal
       expect(response.status, `${path} upgrade=${upgrade}`).toBe(404)
       expect(upstreamCalls.length).toBe(before)
     }
-    expect(await raw(port, '/docs?x=1')).toMatchObject({ status: 308, headers: { location: '/docs/?x=1' } })
-    const staticResponse = await raw(port, '/docs/static/@vite/client?x=1')
-    expect(JSON.parse(staticResponse.body).path).toBe('/docs/static/@vite/client?x=1')
-    const trusted = await raw(port, '/docs/api/documents.info', false, { Host: 'attacker.test', 'X-Forwarded-Host': 'attacker.test',
-      'X-Forwarded-Proto': 'https', 'X-Website-Docs-Origin': 'http://attacker.test', Origin: publicOrigin })
-    expect(JSON.parse(trusted.body)).toMatchObject({ path: '/api/documents.info', forwardedHost: '127.0.0.1:8080', forwardedProto: 'http', docsOrigin: publicOrigin })
-    expect((await raw(port, '/docs/api/documents.update', false, { Origin: 'http://attacker.test' }, 'POST')).status).toBe(403)
-    expect((await raw(port, '/docs/api/documents.update', false, {}, 'POST')).status).toBe(403)
-    expect((await raw(port, '/docs/api/documents.update', false, { Origin: publicOrigin }, 'POST')).status).toBe(200)
-    const upgrade = await raw(port, '/docs/realtime/?EIO=4&transport=websocket', true, { 'X-Forwarded-Host': 'attacker.test' })
-    expect(upgrade).toMatchObject({ status: 101, headers: { 'x-upstream-path': '/realtime/?EIO=4&transport=websocket', 'x-forwarded-host': '127.0.0.1:8080' } })
-    for (const location of ['/identity/login?x=1', 'http://hydra.test/oauth2/auth?x=1', '//external.test/path', '/docs/doc/already']) {
-      const response = await raw(port, `/docs/redirect/${encodeURIComponent(location)}`)
-      expect(response.headers.location).toBe(location)
-      expect(response.headers['set-cookie']).toEqual(['__Host-csrfToken=value; Path=/; Secure', 'exdocs_access=value; Path=/docs; HttpOnly'])
-    }
-    expect((await raw(port, `/docs/redirect/${encodeURIComponent('/doc/example?x=1')}`)).headers.location).toBe('/docs/doc/example?x=1')
+    const trusted = await raw(port, '/api/health', false, { Host: 'attacker.test', 'X-Forwarded-Host': 'attacker.test',
+      'X-Forwarded-Proto': 'https', 'X-Forwarded-For': '203.0.113.9', Forwarded: 'for=203.0.113.9', Origin: publicOrigin })
+    expect(JSON.parse(trusted.body).forwarded).toBeUndefined()
+    expect(JSON.parse(trusted.body)).toMatchObject({ path: '/api/health', origin: publicOrigin, forwardedHost: '127.0.0.1:8080', forwardedProto: 'http', forwardedFor: '127.0.0.1' })
+    expect((await raw(port, '/api/auth/login', false, { Origin: 'http://attacker.test' }, 'POST')).status).toBe(403)
+    expect((await raw(port, '/api/auth/login', false, {}, 'POST')).status).toBe(403)
+    expect((await raw(port, '/api/auth/login', false, { Origin: publicOrigin }, 'POST')).status).toBe(200)
+    const upgrade = await raw(port, '/api/socket?x=1', true, { 'X-Forwarded-Host': 'attacker.test' })
+    expect(upgrade).toMatchObject({ status: 101, headers: { 'x-upstream-path': '/api/socket?x=1', 'x-forwarded-host': '127.0.0.1:8080' } })
+
   }
 })
 it('normalizes deep repeated encodings, slash/backslash and dot-segment internal paths', () => {

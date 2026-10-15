@@ -13,7 +13,7 @@ _最后更新：2026-10-09_
 
 ## 决策
 
-- 使用 registry 发布的 `@exre/exui` 作为组件库、设计 token 与主题的来源；消费方 manifest 声明版本范围，pnpm 与 Outline Yarn lockfile 分别锁定实际版本，不依赖本地源码链接。图标另装 `lucide-react`（ExUI 不 re-export 它）。
+- 使用 registry 发布的 `@exre/exui` 作为组件库、设计 token 与主题的来源；消费方 manifest 声明版本范围，pnpm lockfile 锁定实际版本，不依赖本地源码链接。图标另装 `lucide-react`（ExUI 不 re-export 它）。
 - `@exre/exui` 在 `apps/web` 与 `packages/components` **各自声明**为依赖。
 - `@exre/exui/style.css` 只在 `apps/web/src/main.tsx` 导入一次。
 - `ThemeProvider` 挂在 `main.tsx`，包住 `<BrowserRouter>`；主题切换用 `useTheme` 的三态（`light` / `dark` / `system`）。

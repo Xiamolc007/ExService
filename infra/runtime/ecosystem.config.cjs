@@ -3,7 +3,7 @@ const root = path.resolve(__dirname, '../..')
 const plan = JSON.parse(process.env.EXWEBSITE_RUNTIME_LAUNCH_PLAN || '{}')
 // Each wrapper receives only its consumer environment from the validated root adapter.
 module.exports = {
-  apps: ['server', 'outline', 'hydra'].map(service => ({
+  apps: ['server', 'hydra'].map(service => ({
     name: `exwebsite-${service}`,
     script: path.join(root, 'scripts/runtime/pm2-process.mjs'),
     args: [service], cwd: root, interpreter: process.execPath,

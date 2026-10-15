@@ -10,7 +10,8 @@ _最后更新：2026-09-18_
 
 `@exre/exui/style.css` 指向 `dist/index.css`，其中已经包含 Token CSS（`dist/tokens/style.css` 的内容）与字体 CSS（`@fontsource-variable/outfit`）。
 
-- 导入点固定在 `apps/web/src/main.tsx`，且必须排在 `./styles/index.scss` **之前**，应用样式才能覆盖库的默认值。
+- 导入点固定在 `apps/web/src/main.tsx`，且必须排在 `apps/web/src/styles/index.scss` **之前**，应用样式才能覆盖库的默认值。
+- 黑白品牌覆盖的唯一来源为 `apps/web/src/styles/website-theme.css`，顺序固定为 ExUI、品牌 CSS、应用 SCSS。根 `website-theme-profile` 与 `.website-theme-profile.dark` 限定两套覆盖；主题偏好继续由既有 reconciliation 与 ExUI provider 管理。
 - 不得再导入 `@exre/exui/tokens/style.css` 或 `@exre/exui/tokens/font.css`——那是重复的 CSS，不会报错。
 - 不得在 `packages/components` 内导入它：那是共享包，一旦被第二个入口引用就会出现第二个导入点。
 

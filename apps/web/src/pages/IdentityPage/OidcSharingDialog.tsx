@@ -2,18 +2,18 @@ import {
   Button, Dialog, DialogClose, DialogContent, DialogDescription,
   DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '@exre/exui'
-import { BookOpen, ChevronDown, IdCard, Info, Mail, UserRound, type LucideIcon } from 'lucide-react'
+import { AppWindow, ChevronDown, IdCard, Info, Mail, UserRound, type LucideIcon } from 'lucide-react'
 import styles from './OidcPage.module.scss'
 
 const scopeDetails = new Map<string, { title: string; description: string; icon: LucideIcon }>([
   ['openid', {
     title: '账号身份',
-    description: '用于识别你的 Exre 账号，关联文档服务中的身份。',
+    description: '用于识别你的 Exre 账号，关联应用中的身份。',
     icon: IdCard,
   }],
   ['profile', {
     title: '基本资料',
-    description: '昵称、头像等基本资料，用于在文档服务中展示你的身份。',
+    description: '昵称、头像等基本资料，用于在应用中展示你的身份。',
     icon: UserRound,
   }],
   ['email', {
@@ -33,7 +33,7 @@ export function OidcSharingDialog({ serviceName, scopes }: { serviceName: string
       </DialogTrigger>
       <DialogContent className={styles.sharingDialog} closeLabel="关闭信息说明">
         <DialogHeader className={styles.sharingHeader}>
-          <span className={styles.sharingService}><BookOpen aria-hidden="true" />{serviceName}</span>
+          <span className={styles.sharingService}><AppWindow aria-hidden="true" />{serviceName}</span>
           <DialogTitle className={styles.sharingTitle}>登录时共享的信息</DialogTitle>
           <DialogDescription className={styles.sharingDescription}>
             使用 Exre 账号登录后，{serviceName}会获取以下信息。

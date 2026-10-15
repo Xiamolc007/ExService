@@ -21,7 +21,7 @@ export function nginxConfiguration(state) {
   const values = {
     API_MAX_BODY_BYTES: String(Math.max(joinBytes, storageWireBytes)),
     SITE_HOST: origin.hostname, ISSUER_HOST: issuer.hostname, SITE_ROOT: join(state.workspace, 'apps/web/dist').replaceAll('\\', '/'),
-    API_UPSTREAM: state.internal.website.replace(/\/$/, ''), OUTLINE_UPSTREAM: state.internal.outline,
+    API_UPSTREAM: state.internal.website.replace(/\/$/, ''),
     HYDRA_UPSTREAM: state.values.HYDRA_INTERNAL_PUBLIC_URL?.replace(/\/$/, ''),
     SITE_CERT: state.values.NGINX_SITE_CERT, SITE_KEY: state.values.NGINX_SITE_KEY,
     ISSUER_CERT: state.values.NGINX_ISSUER_CERT, ISSUER_KEY: state.values.NGINX_ISSUER_KEY,

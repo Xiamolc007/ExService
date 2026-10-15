@@ -102,7 +102,7 @@ test('explicit Host HTTPS keeps certificate verification and accepts only an exp
     const url = `https://127.0.0.1:${server.address().port}/health`
     await assert.rejects(httpReady(url, { headers: { Host: 'exwebsite.test' }, timeout: 300 }), /APPLICATION_NOT_READY/)
     assert.deepEqual(hosts, [])
-    const source = `import { httpReady } from ${JSON.stringify(pathToFileURL(resolve('scripts/docs-integration/local-dev.mjs')).href)};await httpReady(${JSON.stringify(url)},{headers:{Host:'exwebsite.test'},timeout:1500,expected:async r=>r instanceof Response&&(await r.json()).ready});console.log('TRUSTED_TLS_READY '+process.version)`
+    const source = `import { httpReady } from ${JSON.stringify(pathToFileURL(resolve('scripts/runtime/local-dev.mjs')).href)};await httpReady(${JSON.stringify(url)},{headers:{Host:'exwebsite.test'},timeout:1500,expected:async r=>r instanceof Response&&(await r.json()).ready});console.log('TRUSTED_TLS_READY '+process.version)`
     const child = spawn(process.execPath, ['--input-type=module', '-e', source], { windowsHide: true, shell: false,
       env: { ...process.env, NODE_EXTRA_CA_CERTS: certPath } })
     let output = ''; child.stdout.on('data', chunk => { output += chunk }); child.stderr.on('data', chunk => { output += chunk })
@@ -131,7 +131,7 @@ function fixture() {
   const request = (action, extra = {}) => atomicJson(join(directory, 'control-request.json'), {
     action, mode: 'dev', fingerprint: 'target', runId: lock.record.runId, requestId: randomUUID(), ...extra })
   const options = { mode: 'dev', fingerprint: 'target', directory, controlDirectory: directory, lock,
-    specifications: ['server', 'web', 'outline'].map(name => ({ name })), spawnChild, stopChildren,
+    specifications: ['server', 'web'].map(name => ({ name })), spawnChild, stopChildren,
     readiness: async () => {}, onLog() {}, banner: 'FIXTURE_READY', pollInterval: 10 }
   return { directory, events, all, options, state, request, lock }
 }

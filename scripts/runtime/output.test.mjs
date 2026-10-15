@@ -89,3 +89,10 @@ test('log colors follow severity, not error words in file names or informational
     assert.ok(lines[0].includes(`\x1b[${color}m[outline]`), line)
   }
 })
+
+test('missing Hydra clients point to the supported explicit registration action',async()=>{
+ const {runtimeFailure}=await import('./output.mjs'),{parseRuntimeArguments}=await import('./entry.mjs')
+ const message=runtimeFailure({code:'HYDRA_CLIENT_MISSING'})
+ assert.match(message,/IDENTITY_CLIENTS_JSON/);assert.match(message,/pnpm infra clients/);assert.doesNotMatch(message,/bootstrap|UUID|admin-user-id/)
+ assert.deepEqual(parseRuntimeArguments(['infra','clients']),{command:'infra',action:'clients',verbose:false})
+})
