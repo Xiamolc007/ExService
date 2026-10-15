@@ -1,0 +1,1316 @@
+diff --git a/.ai/architectures/identity/integration-boundaries.md b/.ai/architectures/identity/integration-boundaries.md
+index d3bf3a4..825e334 100644
+--- a/.ai/architectures/identity/integration-boundaries.md
++++ b/.ai/architectures/identity/integration-boundaries.md
+@@ -2,11 +2,11 @@
+ 
+ Website 管理账号和本站会话，Hydra 提供 OIDC 协议。身份能力不依赖文档应用；HTTP 形状以 `api/openapi.yaml` 为准，持久数据规则见 `.ai/databases/data-model.md`，进程与资源见 `.ai/architectures/runtime/runtime-boundaries.md`。
+ 
+-_最后更新：2026-10-15_
++_最后更新：2026-10-16_
+ 
+ ## 配置与批准客户端
+ 
+-`apps/server/src/modules/identity/config.ts` 经 `@workspace/common/node/identity-config` 使用 `packages/common/` 的无副作用解析器；消费边界见 `.agents/rules/package-common.md`。`IDENTITY_ENABLED` 仅接受 `true`、`false`；未启用时保持身份 operation 不可用。根 runtime 显式启用身份，并从 `RUNTIME_PROFILE` 派生 `IDENTITY_MODE=local|deployment`。issuer、Hydra admin、Website public origin、flow/bootstrap key 均显式验证，空客户端不能省略基础配置。
++`apps/server/src/modules/identity/config.ts` 与 `scripts/runtime/settings.mjs` 经 `@workspace/common/node/identity-config` 调用 `parseIdentityConfiguration()`，统一验证显式传入的 mode、三个根 URL、local origin 互异、身份密钥、客户端和 cleanup-only 目标，返回冻结的配置与权限投影。Common 不读取环境、文件或运行状态；消费边界见 `.agents/rules/package-common.md`。Server 保留环境读取与 `IDENTITY_ENABLED` 开关，仅接受 `true`、`false`；未启用时不解析其余身份值，身份 operation 不可用。runtime 保留根配置来源、端口拓扑与环境投影，从 `RUNTIME_PROFILE` 派生 `IDENTITY_MODE=local|deployment`；身份密钥仍以共享规则校验，并保留根入口的缺失/格式诊断。空客户端不能省略基础配置。
+ 
+ `IDENTITY_CLIENTS_JSON` 是客户端数组，缺省 `[]`。每个记录包含唯一 `clientId`、显示名 `name`、精确 `redirectUri` 和 `postLogoutRedirectUri`、`scopes`、`clientSecret`，可选 `integrationKey` 和 `revocation: { url, key }`。重复 ID、未知字段、不合法 URL 与秘密拒绝；退役 ID `ex-outline-local`、`ex-outline` 不能登记。清单只由可信服务端和登记进程消费，不进入 Web 环境或日志。
+ 
+@@ -32,6 +32,10 @@ local 回调使用带显式端口的 literal `127.0.0.1` HTTP，deployment 使
+ 
+ `scripts/runtime/hydra-client.mjs` 的 `verifyHydraClient()` 只读检查精确 callback、退出地址、scope、grant、response type、认证方法和秘密有效性。随机无效 code 探测应返回 `invalid_grant`；admin metadata 指纹不能代替实际凭据核验。`pnpm infra clients` 才幂等创建缺失 client，已有冲突失败，不覆盖或扩权。
+ 
++校验模块以 `HydraClientCheckError.kind` 区分客户端缺失、配置冲突、凭据探测失败、非法配置、网络失败和未知检查失败。`scripts/runtime/applications.mjs` 按合法结构化类别生成运行诊断，不解释英文消息；网络原因仅保留已知安全码，其他未知或伪造错误固定安全失败。错误文案、日志和公开诊断不携带原始响应、配置值或凭据。token 探测的非预期有效 JSON 结果仍映射既有冲突诊断，不能据此断定密钥错误。
++
+ 部署 receipt v2 由共享 `createIdentityBinding()` 固定 Website 实际数据库目标、public origin、issuer、Hydra admin、排序后的现役与 cleanup-only 目标、精确 callback/scope、可用内部能力及秘密 SHA-256 指纹，不保存原始秘密。`apps/server/src/modules/identity/deployment-binding.ts` 在 worker 启动前核验；runtime 的 `deployment.mjs` 普通启动只验证，只有显式 prepare 为无旧绑定的新环境建立记录。issuer、已有客户端路由或秘密改变需要明确维护，不能删除 pin 后重建来绕过检查。
+ 
++两端构造的 `websiteTarget` 历来具有不同 JSON 键顺序；Server 按完整绑定深相等、runtime 按规范化摘要核验，不以原始 JSON 字节判断跨端身份一致。配置重构分别保持两端原有的 v2 字节投影，不重排字段或要求刷新 pin。
++
+ 旧 v1 receipt 的转换必须保存匹配的原始备份并核验原配置、实际状态与未完成目标；不能映射的历史记录拒绝转换。退役维护及保留资源的再次核验见 runtime 边界。源码和隔离测试证明实现行为，不能替代第三方 provider、其他应用、真实数据库维护或公网部署验收。
+diff --git a/.ai/architectures/runtime/runtime-boundaries.md b/.ai/architectures/runtime/runtime-boundaries.md
+index c4fa316..ae7c3b7 100644
+--- a/.ai/architectures/runtime/runtime-boundaries.md
++++ b/.ai/architectures/runtime/runtime-boundaries.md
+@@ -2,7 +2,7 @@
+ 
+ 运行入口由 `scripts/runtime/entry.mjs`、`settings.mjs`、`services.mjs`、`applications.mjs` 和 `native.mjs` 分担。日常启动和首次准备检查单集中在 `README.md`；身份客户端边界见 `.ai/architectures/identity/integration-boundaries.md`。
+ 
+-_最后更新：2026-10-15_
++_最后更新：2026-10-16_
+ 
+ ## 配置来源与消费者
+ 
+@@ -18,7 +18,7 @@ PM2 wrapper 收到根适配器生成的服务专属环境快照；管理入口
+ 
+ Windows 外层运行器可能在异步清理完成前结束监督进程。应用锁恢复在私有 gate 内核验原 run/lock 的完整身份与空依赖归属，确认原 owner、记录的 helper 及未登记直接子进程均已退出后才归档并接管；不按 PID 杀进程。正常 preflight 的已退出 owner 同样检查未登记子进程，归档或完成记录写入失败保留可重试状态。显式依赖停止取得应用锁后，还须核验全部应用端口静默。Linux 不套用 Windows JobObject 的退出证明。
+ 
+-Docker inspect 的 Mounts 数组顺序及未设置 DNS 列表的表示可能在启停后变化。`services.mjs` 的 proof 保留全部挂载字段并按 Destination 排序；仅将 `HostConfig.Dns`、`DnsOptions`、`DnsSearch` 的 null 归一为 []。非空 DNS 值、其他配置或挂载字段变化仍拒绝，不能通过刷新 proof 或删除归属记录接管资源。
++Docker inspect 的 Mounts 数组顺序及未设置 DNS 列表的表示可能在启停后变化。`scripts/runtime/container-proof.mjs` 的纯 `containerProof(item)` 由日常 `scripts/runtime/services.mjs` 和退役维护 `scripts/runtime/retire-outline.mjs` 正常导入，共享既有 `{ id, service, digest }` 证明。它保留全部挂载字段并按 Destination 排序；仅将 `HostConfig.Dns`、`DnsOptions`、`DnsSearch` 的 null 归一为 []。非空 DNS 值、其他配置或挂载字段变化仍拒绝，不能通过刷新 proof 或删除归属记录接管资源。停止前后仍完整核验旧 proof；成功写回的证明须与旧值相等，不能以漂移现场重建证明。
+ 
+ 启动在 Compose 操作前核验已有归属记录的完整 proof；操作后保存记录前再次比较原容器的 ID 与完整配置。已核验容器沿用原 proof，只有本次创建的服务容器建立新 proof。已有容器但归属记录缺失时拒绝启动，空 inventory 仍允许首次创建。启动后核验失败时保留原记录，不用失败现场刷新证明或调用依赖停止；仅在本次记录成功保存后，才能按记录回收本次启动的资源。
+ 
+diff --git a/apps/server/src/modules/identity/config.ts b/apps/server/src/modules/identity/config.ts
+index e1cd08e..da25a44 100644
+--- a/apps/server/src/modules/identity/config.ts
++++ b/apps/server/src/modules/identity/config.ts
+@@ -1,36 +1,18 @@
+-import { IdentityConfigError, composeIdentityClients, parseIdentityClients, parseIdentityDeliveryTargets,
+-  parseIdentityKey, parseIdentityUrl, type IdentityClient, type IdentityDeliveryTarget, type IdentityMode } from '@workspace/common/node/identity-config'
++import { IdentityConfigError, parseIdentityConfiguration, type IdentityConfiguration } from '@workspace/common/node/identity-config'
+ export { IdentityConfigError, isIdentityClientId } from '@workspace/common/node/identity-config'
+ export type { IdentityClientId, IdentityDeliveryTarget, IdentityMode } from '@workspace/common/node/identity-config'
+ 
+-export interface IdentityConfig {
++export interface IdentityConfig extends IdentityConfiguration {
+   readonly enabled: true
+-  readonly mode: IdentityMode
+-  readonly issuer: string
+-  readonly publicOrigin: string
+-  readonly hydraAdminUrl: string
+-  readonly keys: Readonly<{ bootstrap: string; flow: string }>
+-  readonly approvedClients: Readonly<Record<string, Readonly<IdentityClient>>>
+-  readonly integrationClients: Readonly<Record<string, string>>
+-  readonly cleanupTargets: Readonly<Record<string, Readonly<IdentityDeliveryTarget>>>
+-  readonly deliveryTargets: Readonly<Record<string, Readonly<IdentityDeliveryTarget>>>
+ }
+ 
+ /** Independent identity configuration; no implicit application or legacy mode. */
+ export function parseIdentityConfig(env: NodeJS.ProcessEnv = process.env): IdentityConfig | Readonly<{ enabled: false }> {
+   if (env.IDENTITY_ENABLED !== undefined && !['true', 'false'].includes(env.IDENTITY_ENABLED)) throw new IdentityConfigError('IDENTITY_ENABLED')
+   if (env.IDENTITY_ENABLED !== 'true') return Object.freeze({ enabled: false })
+-  if (env.IDENTITY_MODE !== 'local' && env.IDENTITY_MODE !== 'deployment') throw new IdentityConfigError('IDENTITY_MODE')
+-  const mode = env.IDENTITY_MODE
+-  const publicOrigin = new URL(parseIdentityUrl(env.SERVER_PUBLIC_WEB_BASE_URL, mode, 'SERVER_PUBLIC_WEB_BASE_URL', { root: true })).origin
+-  const issuer = parseIdentityUrl(env.HYDRA_PUBLIC_URL, mode, 'HYDRA_PUBLIC_URL', { root: true })
+-  const hydraAdminUrl = parseIdentityUrl(env.HYDRA_ADMIN_URL, mode, 'HYDRA_ADMIN_URL', { root: true, admin: true })
+-  if (mode === 'local' && new Set([publicOrigin, new URL(issuer).origin, new URL(hydraAdminUrl).origin]).size !== 3) throw new IdentityConfigError('IDENTITY_MODE')
+-  const keys = Object.freeze({ bootstrap: parseIdentityKey(env.IDENTITY_BOOTSTRAP_KEY, 'IDENTITY_BOOTSTRAP_KEY'),
+-    flow: parseIdentityKey(env.IDENTITY_FLOW_KEY, 'IDENTITY_FLOW_KEY') })
+-  const approvedClients = parseIdentityClients(env.IDENTITY_CLIENTS_JSON, mode)
+-  const cleanupTargets = parseIdentityDeliveryTargets(env.IDENTITY_OUTBOX_TARGETS_JSON, mode)
+-  const { integrationClients, deliveryTargets } = composeIdentityClients(approvedClients, cleanupTargets, hydraAdminUrl)
+-  return Object.freeze({ enabled: true, mode, issuer, publicOrigin, hydraAdminUrl, keys, approvedClients,
+-    integrationClients, cleanupTargets, deliveryTargets })
++  const identity = parseIdentityConfiguration({ mode: env.IDENTITY_MODE, publicOrigin: env.SERVER_PUBLIC_WEB_BASE_URL,
++    publicOriginVariable: 'SERVER_PUBLIC_WEB_BASE_URL', issuer: env.HYDRA_PUBLIC_URL, hydraAdminUrl: env.HYDRA_ADMIN_URL,
++    bootstrapKey: env.IDENTITY_BOOTSTRAP_KEY, flowKey: env.IDENTITY_FLOW_KEY,
++    clientsJson: env.IDENTITY_CLIENTS_JSON, cleanupTargetsJson: env.IDENTITY_OUTBOX_TARGETS_JSON })
++  return Object.freeze({ enabled: true, ...identity })
+ }
+diff --git a/packages/common/src/node/identity-config/index.d.mts b/packages/common/src/node/identity-config/index.d.mts
+index dd4216a..9edea96 100644
+--- a/packages/common/src/node/identity-config/index.d.mts
++++ b/packages/common/src/node/identity-config/index.d.mts
+@@ -31,6 +31,29 @@ export function composeIdentityClients(clients: Readonly<Record<string, Readonly
+     integrationClients: Readonly<Record<string, string>>
+     deliveryTargets: Readonly<Record<string, Readonly<IdentityDeliveryTarget>>>
+   }>
++export interface IdentityConfigurationInput {
++  readonly mode: unknown
++  readonly publicOrigin: unknown
++  readonly publicOriginVariable: 'SERVER_PUBLIC_WEB_BASE_URL' | 'PUBLIC_ORIGIN'
++  readonly issuer: unknown
++  readonly hydraAdminUrl: unknown
++  readonly bootstrapKey: unknown
++  readonly flowKey: unknown
++  readonly clientsJson?: string
++  readonly cleanupTargetsJson?: string
++}
++export interface IdentityConfiguration {
++  readonly mode: IdentityMode
++  readonly publicOrigin: string
++  readonly issuer: string
++  readonly hydraAdminUrl: string
++  readonly keys: Readonly<{ bootstrap: string; flow: string }>
++  readonly approvedClients: Readonly<Record<string, Readonly<IdentityClient>>>
++  readonly cleanupTargets: Readonly<Record<string, Readonly<IdentityDeliveryTarget>>>
++  readonly integrationClients: Readonly<Record<string, string>>
++  readonly deliveryTargets: Readonly<Record<string, Readonly<IdentityDeliveryTarget>>>
++}
++export function parseIdentityConfiguration(input: IdentityConfigurationInput): Readonly<IdentityConfiguration>
+ export interface IdentityWebsiteTarget {
+   readonly host: string
+   readonly port: number
+diff --git a/packages/common/src/node/identity-config/index.mjs b/packages/common/src/node/identity-config/index.mjs
+index 1d9e267..9692242 100644
+--- a/packages/common/src/node/identity-config/index.mjs
++++ b/packages/common/src/node/identity-config/index.mjs
+@@ -234,6 +234,31 @@ export function composeIdentityClients(clients, cleanupTargets, hydraAdminUrl) {
+   });
+ }
+ 
++/** Parse one explicit identity configuration without reading its source or runtime state. */
++export function parseIdentityConfiguration(input) {
++  if (!record(input)) fail('IDENTITY_MODE');
++  const { mode, publicOrigin, publicOriginVariable, issuer, hydraAdminUrl,
++    bootstrapKey, flowKey, clientsJson, cleanupTargetsJson } = input;
++  modeCheck(mode);
++  if (!['SERVER_PUBLIC_WEB_BASE_URL', 'PUBLIC_ORIGIN'].includes(publicOriginVariable))
++    fail('IDENTITY_MODE');
++  const parsedPublicOrigin = new URL(parseIdentityUrl(publicOrigin, mode, publicOriginVariable, { root: true })).origin;
++  const parsedIssuer = parseIdentityUrl(issuer, mode, 'HYDRA_PUBLIC_URL', { root: true });
++  const parsedHydraAdminUrl = parseIdentityUrl(hydraAdminUrl, mode, 'HYDRA_ADMIN_URL', { root: true, admin: true });
++  if (mode === 'local' && new Set([parsedPublicOrigin, new URL(parsedIssuer).origin,
++    new URL(parsedHydraAdminUrl).origin]).size !== 3) fail('IDENTITY_MODE');
++  const keys = Object.freeze({
++    bootstrap: parseIdentityKey(bootstrapKey, 'IDENTITY_BOOTSTRAP_KEY'),
++    flow: parseIdentityKey(flowKey, 'IDENTITY_FLOW_KEY'),
++  });
++  const approvedClients = parseIdentityClients(clientsJson, mode);
++  const cleanupTargets = parseIdentityDeliveryTargets(cleanupTargetsJson, mode);
++  const { integrationClients, deliveryTargets } = composeIdentityClients(approvedClients, cleanupTargets, parsedHydraAdminUrl);
++  return Object.freeze({ mode, publicOrigin: parsedPublicOrigin, issuer: parsedIssuer,
++    hydraAdminUrl: parsedHydraAdminUrl, keys, approvedClients, cleanupTargets,
++    integrationClients, deliveryTargets });
++}
++
+ /** Project already-validated configuration into the shared, secret-free v2 receipt. */
+ export function createIdentityBinding({
+   websiteTarget,
+diff --git a/packages/common/test/config.test.mjs b/packages/common/test/config.test.mjs
+index d28368c..a891504 100644
+--- a/packages/common/test/config.test.mjs
++++ b/packages/common/test/config.test.mjs
+@@ -5,6 +5,58 @@ const client = { clientId: 'test-app', name: 'Test App', redirectUri: 'http://12
+   postLogoutRedirectUri: 'http://127.0.0.1:9000/signed-out', scopes: ['openid', 'profile', 'email'], clientSecret: 'non-hex existing secret',
+   integrationKey: 'a'.repeat(64), revocation: { url: 'http://127.0.0.1:9000/revoke/session', key: 'b'.repeat(64) } }
+ const parse = value => parseIdentityClients(JSON.stringify(value), 'local')
++test('explicit identity configuration parses and freezes an empty local allowlist', async () => {
++  const module = await import('@workspace/common/node/identity-config')
++  assert.equal(typeof module.parseIdentityConfiguration, 'function')
++  const configuration = module.parseIdentityConfiguration({ mode: 'local', publicOrigin: 'http://127.0.0.1:8080',
++    publicOriginVariable: 'SERVER_PUBLIC_WEB_BASE_URL', issuer: 'http://127.0.0.1:4444/',
++    hydraAdminUrl: 'http://127.0.0.1:4445/', bootstrapKey: 'a'.repeat(64), flowKey: 'b'.repeat(64) })
++  assert.deepEqual(configuration.approvedClients, {})
++  assert.deepEqual(configuration.cleanupTargets, {})
++  assert.deepEqual(configuration.integrationClients, {})
++  assert.deepEqual(configuration.deliveryTargets, {})
++  assert.equal(configuration.publicOrigin, 'http://127.0.0.1:8080')
++  for (const value of [configuration, configuration.keys, configuration.approvedClients,
++    configuration.cleanupTargets, configuration.integrationClients, configuration.deliveryTargets]) assert.ok(Object.isFrozen(value))
++})
++test('explicit identity configuration rejects invalid input shape with a fixed diagnostic', async () => {
++  const { parseIdentityConfiguration } = await import('@workspace/common/node/identity-config')
++  for (const input of [null, undefined, []]) assert.throws(() => parseIdentityConfiguration(input), error => {
++    assert.ok(error instanceof IdentityConfigError)
++    assert.equal(error.message, 'IDENTITY_CONFIG_INVALID:IDENTITY_MODE')
++    return true
++  })
++})
++test('explicit identity configuration keeps historical delivery routes separate from client permissions', async () => {
++  const { parseIdentityConfiguration } = await import('@workspace/common/node/identity-config')
++  const values = { mode: 'local', publicOrigin: 'http://127.0.0.1:8080/', publicOriginVariable: 'PUBLIC_ORIGIN',
++    issuer: 'http://127.0.0.1:4444/', hydraAdminUrl: 'http://127.0.0.1:4445/',
++    bootstrapKey: 'c'.repeat(64), flowKey: 'd'.repeat(64), clientsJson: JSON.stringify([client]),
++    cleanupTargetsJson: JSON.stringify({ 'old-app': { hydraAdminUrl: 'http://127.0.0.1:5555/' } }) }
++  const parsed = parseIdentityConfiguration(values)
++  assert.equal(parsed.publicOrigin, 'http://127.0.0.1:8080')
++  assert.deepEqual(Object.keys(parsed.approvedClients), ['test-app'])
++  assert.deepEqual(parsed.integrationClients, { 'test-app': client.integrationKey })
++  assert.deepEqual(Object.keys(parsed.deliveryTargets), ['old-app', 'test-app'])
++  assert.equal(parsed.approvedClients['old-app'], undefined)
++  assert.equal(parsed.integrationClients['old-app'], undefined)
++  for (const value of [parsed.approvedClients['test-app'], parsed.approvedClients['test-app'].scopes,
++    parsed.approvedClients['test-app'].revocation, parsed.cleanupTargets['old-app'],
++    parsed.deliveryTargets['test-app'], parsed.deliveryTargets['test-app'].revocation]) assert.ok(Object.isFrozen(value))
++  const same = { hydraAdminUrl: values.hydraAdminUrl, revocation: client.revocation }
++  assert.deepEqual(parseIdentityConfiguration({ ...values, cleanupTargetsJson: JSON.stringify({ 'test-app': same }) }).deliveryTargets['test-app'], same)
++  for (const conflicting of [{ hydraAdminUrl: values.hydraAdminUrl },
++    { ...same, revocation: { ...client.revocation, key: 'e'.repeat(64) } }])
++    assert.throws(() => parseIdentityConfiguration({ ...values, cleanupTargetsJson: JSON.stringify({ 'test-app': conflicting }) }),
++      { message: 'IDENTITY_CONFIG_INVALID:IDENTITY_OUTBOX_TARGETS_JSON' })
++  assert.throws(() => parseIdentityConfiguration({ ...values, hydraAdminUrl: values.issuer }),
++    { message: 'IDENTITY_CONFIG_INVALID:IDENTITY_MODE' })
++  assert.throws(() => parseIdentityConfiguration({ ...values, publicOriginVariable: 'secret-value' }), error => {
++    assert.equal(error.message, 'IDENTITY_CONFIG_INVALID:IDENTITY_MODE')
++    assert.doesNotMatch(error.message, /secret-value/)
++    return true
++  })
++})
+ test('defaults are empty, clients immutable, query exact and cleanup does not grant authorization', () => {
+   assert.deepEqual(parseIdentityClients(undefined, 'local'), {})
+   assert.deepEqual(parseIdentityDeliveryTargets(undefined, 'local'), {})
+diff --git a/packages/common/test/entry.test.mjs b/packages/common/test/entry.test.mjs
+index 89d3102..55c1873 100644
+--- a/packages/common/test/entry.test.mjs
++++ b/packages/common/test/entry.test.mjs
+@@ -18,6 +18,7 @@ function importWithConditions(specifier, conditions = []) {
+ test('Node exposes only the identity configuration subpath', async () => {
+   const imported = await import(publicEntry)
+   assert.equal(typeof imported.parseIdentityClients, 'function')
++  assert.equal(typeof imported.parseIdentityConfiguration, 'function')
+   assert.deepEqual(imported.parseIdentityClients(undefined, 'local'), {})
+   for (const specifier of ['@workspace/common', '@workspace/common/src/node/identity-config/index.mjs']) {
+     const result = importWithConditions(specifier)
+@@ -49,7 +50,7 @@ test('Vite browser build rejects the Node identity configuration subpath', async
+     })
+     await build(settings(control))
+     const entry = join(source, 'entry.js')
+-    await writeFile(entry, `import { parseIdentityClients } from '${publicEntry}'\nconsole.log(parseIdentityClients)\n`)
++    await writeFile(entry, `import { parseIdentityConfiguration } from '${publicEntry}'\nconsole.log(parseIdentityConfiguration)\n`)
+     await assert.rejects(build(settings(entry)), error => {
+       assert.match(String(error), /"\.\/node\/identity-config" is not exported under the conditions \[[^\]]*"browser"/)
+       assert.match(String(error), /packages[\\/]common/)
+diff --git a/scripts/runtime/applications.mjs b/scripts/runtime/applications.mjs
+index adb59ce..44cbde0 100644
+--- a/scripts/runtime/applications.mjs
++++ b/scripts/runtime/applications.mjs
+@@ -4,13 +4,24 @@ import { runOwned, signalScope } from './ownership.mjs'
+ import { acquireApplicationLock } from './application-lock.mjs'
+ import { toolchain } from './local-config.mjs'
+ import { httpReady, assertPortFree, supervise, specifications, verifyFoundationSchemas } from './local-dev.mjs'
+-import { verifyHydraClient } from './hydra-client.mjs'
++import { verifyHydraClient, HydraClientCheckError } from './hydra-client.mjs'
+ import { withNodePath } from './settings.mjs'
+ import { reporter, RuntimeError, diagnostic } from './output.mjs'
+ 
+ export const hydraOptions = (state, client) => ({ mode: state.profile, adminUrl: state.internal.hydra,
+   publicUrl: state.config.issuer, client })
+ 
++const hydraCheckCodes = Object.freeze({ CLIENT_MISSING: 'HYDRA_CLIENT_MISSING',
++  CLIENT_CONFLICT: 'HYDRA_CLIENT_CONFLICT', CREDENTIAL_PROBE_FAILED: 'HYDRA_CLIENT_CONFLICT',
++  INVALID_CONFIG: 'HYDRA_CONFIG_INVALID', CHECK_FAILED: 'HYDRA_CLIENT_CHECK_FAILED' })
++const networkCodes = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'ETIMEDOUT', 'ECONNRESET'])
++
++function safeNetworkCode(error) {
++  for (const code of [error?.code, error?.cause?.code, error?.errors?.[0]?.code]) {
++    if (networkCodes.has(code)) return code
++  }
++}
++
+ export function cliSpecification(state, tools, service, action, args = []) {
+   if (service !== 'server') throw new RuntimeError('APPLICATION_SERVICE_INVALID')
+   return { name: service, command: tools.node, cwd: state.workspace,
+@@ -29,12 +40,16 @@ export async function verifyRuntimeHydraClient(state, verifyClient = verifyHydra
+     return await Promise.all(Object.values(state.clients).map(client => verifyClient(hydraOptions(state, client))))
+   }
+   catch (error) {
++    if (error instanceof RuntimeError) throw error
+     const context = { service: 'Hydra', phase: 'OIDC client 检查', keys: ['HYDRA_ADMIN_URL', 'HYDRA_PUBLIC_URL', 'IDENTITY_CLIENTS_JSON'] }
+-    if (error?.message === 'Hydra client initialization failed (HTTP 404)') throw new RuntimeError('HYDRA_CLIENT_MISSING', context)
+-    if (error?.message === 'Invalid Hydra bootstrap configuration') throw new RuntimeError('HYDRA_CONFIG_INVALID', context)
+-    if (/^Existing Hydra client (configuration conflict; explicit operator repair is required|secret conflict or protocol service unavailable)$/.test(error?.message ?? ''))
+-      throw new RuntimeError('HYDRA_CLIENT_CONFLICT', context)
+-    if (error?.code || error?.cause?.code) throw diagnostic(error, { ...context, next: '核对 Hydra admin/public 地址；本地检查 pnpm service:status 和 pnpm service:logs hydra' })
++    if (error instanceof HydraClientCheckError) {
++      if (Object.hasOwn(hydraCheckCodes, error.kind)) throw new RuntimeError(hydraCheckCodes[error.kind], context)
++      if (error.kind !== 'NETWORK_FAILURE') throw new RuntimeError('HYDRA_CLIENT_CHECK_FAILED', context)
++      error = error.cause
++    } else if (error && (typeof error === 'object' || typeof error === 'function') && 'kind' in error)
++      throw new RuntimeError('HYDRA_CLIENT_CHECK_FAILED', context)
++    const code = safeNetworkCode(error)
++    if (code) throw diagnostic({ code }, { ...context, next: '核对 Hydra admin/public 地址；本地检查 pnpm service:status 和 pnpm service:logs hydra' })
+     throw new RuntimeError('HYDRA_CLIENT_CHECK_FAILED', context)
+   }
+ }
+diff --git a/scripts/runtime/deployment.test.mjs b/scripts/runtime/deployment.test.mjs
+index bfa1757..0e8cefb 100644
+--- a/scripts/runtime/deployment.test.mjs
++++ b/scripts/runtime/deployment.test.mjs
+@@ -3,7 +3,30 @@ import assert from 'node:assert/strict'
+ import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
+ import { tmpdir } from 'node:os'
+ import { join } from 'node:path'
+-import { validateDeployment, convertLegacyBinding } from './deployment.mjs'
++import { validateDeployment, convertLegacyBinding, deploymentBinding } from './deployment.mjs'
++import { readRuntimeConfiguration } from './settings.mjs'
++
++const oldEmptyV2 = '{"version":2,"websiteTarget":{"host":"postgres","port":5432,"database":"exre","user":"website","verifiedDatabase":"exre"},"issuer":"https://issuer.example/","publicOrigin":"https://site.example","hydraAdminUrl":"http://hydra:4445/","clients":[],"cleanupTargets":[],"flowKeyFingerprint":"ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb","bootstrapKeyFingerprint":"a0fab1377f49a759b57f63318262ebe89fabfc990e8e93ceac2984561482b9d4"}'
++const oldFilledV2 = '{"version":2,"websiteTarget":{"host":"postgres","port":5432,"database":"exre","user":"website","verifiedDatabase":"exre"},"issuer":"https://issuer.example/","publicOrigin":"https://site.example","hydraAdminUrl":"http://hydra:4445/","clients":[{"clientId":"test-app","name":"Test App","redirectUri":"https://app.example/callback?exact=true","postLogoutRedirectUri":"https://app.example/out","scopes":["email","openid"],"clientSecretFingerprint":"7977fd45a6717b935cec23e7ec648eda6033ad70b4f1d27033a631df59b0184d","integrationKeyFingerprint":"52b6419d27bd7f547cee3b92f8c17a908b8a49601ecbec161e5030de1dfe9e0a","revocation":{"url":"https://app.example/revoke","keyFingerprint":"d91323a5298f3b9f814db29efaa271f24fbdccedfdd062491b8abc8e07b7fb69"}}],"cleanupTargets":[{"clientId":"old-app","hydraAdminUrl":"http://old-hydra:4445/","revocation":null}],"flowKeyFingerprint":"ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb","bootstrapKeyFingerprint":"a0fab1377f49a759b57f63318262ebe89fabfc990e8e93ceac2984561482b9d4"}'
++
++test('runtime binding matches fixed pre-change v2 bytes with empty and approved clients', () => {
++  const app = { clientId: 'test-app', name: 'Test App', redirectUri: 'https://app.example/callback?exact=true',
++    postLogoutRedirectUri: 'https://app.example/out', scopes: ['openid', 'email'], clientSecret: 'existing non-hex secret',
++    integrationKey: 'c'.repeat(64), revocation: { url: 'https://app.example/revoke', key: 'd'.repeat(64) } }
++  const values = { RUNTIME_PROFILE: 'deployment', PUBLIC_ORIGIN: 'https://site.example', HYDRA_PUBLIC_URL: 'https://issuer.example/',
++    HYDRA_ADMIN_URL: 'http://hydra:4445/', WEBSITE_INTERNAL_URL: 'http://127.0.0.1:8082/',
++    AUTH_CODE_HMAC_KEY: 'e'.repeat(64), HYDRA_SYSTEM_SECRET: 'f'.repeat(64),
++    IDENTITY_FLOW_KEY: 'a'.repeat(64), IDENTITY_BOOTSTRAP_KEY: 'b'.repeat(64),
++    DATABASE_HOST: 'postgres', DATABASE_NAME: 'exre', DATABASE_USER: 'website', DATABASE_PASSWORD: 'fixture',
++    HYDRA_DATABASE_HOST: 'postgres', HYDRA_DATABASE_NAME: 'hydra', HYDRA_DATABASE_USER: 'hydra', HYDRA_DATABASE_PASSWORD: 'fixture' }
++  for (const [extra, expected] of [[{}, oldEmptyV2], [
++    { IDENTITY_CLIENTS_JSON: JSON.stringify([app]), IDENTITY_OUTBOX_TARGETS_JSON: JSON.stringify({ 'old-app': { hydraAdminUrl: 'http://old-hydra:4445/' } }) }, oldFilledV2]]) {
++    const state = readRuntimeConfiguration({ sourceValues: { ...values, ...extra }, inherited: {} })
++    const receipt = JSON.stringify(deploymentBinding(state))
++    assert.equal(receipt, expected)
++    assert.ok(!receipt.includes(app.clientSecret))
++  }
++})
+ 
+ function fixture(t, pending = false) {
+   const workspace = mkdtempSync(join(tmpdir(), 'exwebsite-deployment-'))
+diff --git a/scripts/runtime/hydra-client.mjs b/scripts/runtime/hydra-client.mjs
+index bebc884..2803c5c 100644
+--- a/scripts/runtime/hydra-client.mjs
++++ b/scripts/runtime/hydra-client.mjs
+@@ -1,6 +1,34 @@
+ import { parseIdentityClients, parseIdentityUrl } from '@workspace/common/node/identity-config'
+ import { createHash, randomBytes } from 'node:crypto'
+ 
++const checkMessages = Object.freeze({
++  CLIENT_MISSING: 'Hydra client is not registered',
++  CLIENT_CONFLICT: 'Hydra client configuration differs',
++  CREDENTIAL_PROBE_FAILED: 'Hydra credential probe failed',
++  INVALID_CONFIG: 'Invalid Hydra client configuration',
++  NETWORK_FAILURE: 'Hydra request failed',
++  CHECK_FAILED: 'Hydra client check failed',
++})
++
++export class HydraClientCheckError extends Error {
++  constructor(kind, { cause } = {}) {
++    if (!Object.hasOwn(checkMessages, kind)) throw new TypeError('Invalid Hydra client check kind')
++    super(checkMessages[kind], cause === undefined ? undefined : { cause })
++    this.name = 'HydraClientCheckError'
++    Object.defineProperty(this, 'kind', { value: kind, enumerable: true })
++  }
++}
++
++async function fetchHydra(url, options) {
++  try { return await fetch(url, options) }
++  catch (cause) { throw new HydraClientCheckError('NETWORK_FAILURE', { cause }) }
++}
++
++async function responseJson(response) {
++  try { return await response.json() }
++  catch { throw new HydraClientCheckError('CHECK_FAILED') }
++}
++
+ /** OAuth Basic credentials encode each original field as form data before Base64. */
+ export function hydraClientBasic(clientId, clientSecret) {
+   const formField = value => new URLSearchParams({ value }).toString().slice('value='.length)
+@@ -17,7 +45,7 @@ async function checkHydraClient({ adminUrl, publicUrl, client: input, mode }, cr
+     client = Object.values(parseIdentityClients(JSON.stringify([input]), mode))[0]
+     base = new URL(parseIdentityUrl(adminUrl, mode, 'HYDRA_ADMIN_URL', { root: true, admin: true }))
+     issuer = new URL(parseIdentityUrl(publicUrl, mode, 'HYDRA_PUBLIC_URL', { root: true }))
+-  } catch { throw new Error('Invalid Hydra bootstrap configuration') }
++  } catch { throw new HydraClientCheckError('INVALID_CONFIG') }
+   const { clientId, clientSecret } = client
+   const desired = {
+     client_id: clientId, client_name: client.name, client_secret: clientSecret,
+@@ -29,18 +57,21 @@ async function checkHydraClient({ adminUrl, publicUrl, client: input, mode }, cr
+     metadata: { integration: 'website-identity', issuer: issuer.href,
+       secretFingerprint: createHash('sha256').update(clientSecret).digest('hex') },
+   }
+-  const request = (path, options = {}) => fetch(new URL(path, base), {
++  const request = (path, options = {}) => fetchHydra(new URL(path, base), {
+     ...options, redirect: 'manual', signal: AbortSignal.timeout(1000),
+   })
+   let response = await request(`/admin/clients/${clientId}`)
++  if (response.status === 404 && !create) throw new HydraClientCheckError('CLIENT_MISSING')
+   if (response.status === 404 && create) {
+     response = await request('/admin/clients', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify(desired) })
+     // A competing bootstrap may have created the same client. Recheck exact state.
+     if (response.status === 409) response = await request(`/admin/clients/${clientId}`)
+   }
+-  if (!response.ok) throw new Error(`Hydra client initialization failed (HTTP ${response.status})`)
+-  const actual = await response.json()
++  if (!response.ok) throw new HydraClientCheckError('CHECK_FAILED')
++  const actual = await responseJson(response)
++  if (!actual || typeof actual !== 'object' || Array.isArray(actual) || typeof actual.scope !== 'string')
++    throw new HydraClientCheckError('CHECK_FAILED')
+   const lists = ['redirect_uris', 'grant_types', 'response_types', 'post_logout_redirect_uris']
+   const scalars = ['client_id', 'subject_type', 'token_endpoint_auth_method']
+   const lifespans = ['authorization_code_grant_access_token_lifespan', 'authorization_code_grant_id_token_lifespan']
+@@ -52,20 +83,20 @@ async function checkHydraClient({ adminUrl, publicUrl, client: input, mode }, cr
+       Object.entries(desired.metadata).some(([key, value]) => actual.metadata?.[key] !== value) ||
+       ['allowed_cors_origins', 'audience'].some(key => actual[key]?.length) ||
+       ['frontchannel_logout_uri', 'backchannel_logout_uri', 'jwks_uri'].some(key => actual[key])) {
+-    throw new Error('Existing Hydra client configuration conflict; explicit operator repair is required')
++    throw new HydraClientCheckError('CLIENT_CONFLICT')
+   }
+   // A non-existent random code cannot issue a token, but proves the stored client secret
+   // is valid. Hydra does not return stored secrets through its administrative GET API.
+-  const probe = await fetch(new URL('/oauth2/token', publicUrl), {
++  const probe = await fetchHydra(new URL('/oauth2/token', publicUrl), {
+     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded',
+       Authorization: hydraClientBasic(clientId, clientSecret) },
+     body: new URLSearchParams({ grant_type: 'authorization_code', code: randomBytes(32).toString('base64url'),
+       redirect_uri: desired.redirect_uris[0], code_verifier: randomBytes(32).toString('base64url') }),
+     redirect: 'manual', signal: AbortSignal.timeout(1000),
+   })
+-  const result = await probe.json()
+-  if (probe.status !== 400 || result.error !== 'invalid_grant') {
+-    throw new Error('Existing Hydra client secret conflict or protocol service unavailable')
++  const result = await responseJson(probe)
++  if (probe.status !== 400 || result?.error !== 'invalid_grant') {
++    throw new HydraClientCheckError('CREDENTIAL_PROBE_FAILED')
+   }
+   return { clientId: desired.client_id }
+ }
+diff --git a/scripts/runtime/hydra-client.test.mjs b/scripts/runtime/hydra-client.test.mjs
+index e37c751..0eba93a 100644
+--- a/scripts/runtime/hydra-client.test.mjs
++++ b/scripts/runtime/hydra-client.test.mjs
+@@ -2,15 +2,19 @@ import assert from 'node:assert/strict'
+ import { createServer } from 'node:http'
+ import test from 'node:test'
+ import { createHash } from 'node:crypto'
+-import { ensureHydraClient, verifyHydraClient } from './hydra-client.mjs'
++import { ensureHydraClient, verifyHydraClient, HydraClientCheckError } from './hydra-client.mjs'
++import { verifyRuntimeHydraClient } from './applications.mjs'
++import { reporter } from './output.mjs'
+ 
+ async function fixture(run) {
+   const clients = new Map()
+   const secrets = new Map()
+   const calls = []
++  let override
+   const server = createServer(async (request, response) => {
+     calls.push([request.method, request.url])
+     response.setHeader('Content-Type', 'application/json')
++    if (override?.(request, response)) return
+     if (request.url === '/oauth2/token') {
+       const basic = Buffer.from((request.headers.authorization ?? '').replace(/^Basic /, ''), 'base64').toString()
+       const separator = basic.indexOf(':')
+@@ -45,7 +49,8 @@ async function fixture(run) {
+   try {
+     await run({ adminUrl: `http://127.0.0.1:${server.address().port}`, publicUrl: `http://127.0.0.1:${server.address().port}`,
+       mode: 'local', client: { clientId: 'sample-app', name: 'Sample', redirectUri: 'http://127.0.0.1:18765/callback', postLogoutRedirectUri: 'http://127.0.0.1:18765/signed-out', scopes: ['openid','profile','email'], clientSecret: 'fixture-client-secret' },
+-      calls, getClient: (id = 'sample-app') => clients.get(id), setSecret: (id, secret) => secrets.set(id, secret) })
++      calls, getClient: (id = 'sample-app') => clients.get(id), setSecret: (id, secret) => secrets.set(id, secret),
++      override: handler => { override = handler } })
+   } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)) }
+ }
+ 
+@@ -57,7 +62,7 @@ test('OAuth Basic form encoding preserves special characters and raw secret fing
+       await verifyHydraClient(options)
+       assert.equal(state.getClient().metadata.secretFingerprint, createHash('sha256').update(clientSecret).digest('hex'))
+       state.setSecret(state.client.clientId, `${clientSecret}-wrong`)
+-      await assert.rejects(verifyHydraClient(options), /secret conflict/)
++      await assert.rejects(verifyHydraClient(options), { kind: 'CREDENTIAL_PROBE_FAILED' })
+       assert.equal(state.calls.filter(([method, path]) => method === 'POST' && path === '/admin/clients').length, 1)
+     })
+   }
+@@ -91,7 +96,7 @@ test('registers independent explicit clients without changing another client', a
+     assert.notEqual(state.getClient().metadata.secretFingerprint, state.getClient('second-app').metadata.secretFingerprint)
+     assert.equal(state.calls.filter(([method, path]) => method === 'POST' && path === '/admin/clients').length, 2)
+     const before = state.calls.length
+-    await assert.rejects(ensureHydraClient({ ...state, client: { ...state.client, clientId: 'ex-outline' } }), /configuration/)
++    await assert.rejects(ensureHydraClient({ ...state, client: { ...state.client, clientId: 'ex-outline' } }), { kind: 'INVALID_CONFIG' })
+     assert.equal(state.calls.length, before)
+   })
+ })
+@@ -104,24 +109,166 @@ test('rejects changed callbacks, privileges, or secret rather than overwriting a
+     await fixture(async state => {
+       await ensureHydraClient(state)
+       change(state.getClient())
+-      await assert.rejects(ensureHydraClient(state), /conflict/)
++      await assert.rejects(ensureHydraClient(state), { kind: 'CLIENT_CONFLICT' })
+       assert.equal(state.calls.filter(([method, path]) => method !== 'GET' && path !== '/oauth2/token').length, 1)
+     })
+   }
+ })
+ 
+ test('read-only runtime verify refuses missing clients without creating or updating', async () => fixture(async state => {
+-  await assert.rejects(verifyHydraClient(state), /initialization failed/)
++  await assert.rejects(verifyHydraClient(state), error => {
++    assert.ok(error instanceof HydraClientCheckError)
++    assert.equal(error.kind, 'CLIENT_MISSING')
++    return true
++  })
+   assert.equal(state.calls.filter(([method]) => method !== 'GET').length, 0)
+   await ensureHydraClient(state)
+   const before = state.calls.filter(([method, path]) => method === 'POST' && path === '/admin/clients').length
+   await verifyHydraClient(state)
+   assert.equal(state.calls.filter(([method, path]) => method === 'POST' && path === '/admin/clients').length, before)
+ }))
++test('unexpected admin HTTP and invalid JSON fail safely without classifying a client as missing', async () => {
++  for (const [method, path, status, body] of [
++    ['GET', '/admin/clients/sample-app', 503, '{"private":"response-secret"}'],
++    ['GET', '/admin/clients/sample-app', 200, '{not-json'],
++    ['POST', '/admin/clients', 404, '{"private":"response-secret"}'],
++  ]) await fixture(async state => {
++    state.override((request, response) => {
++      if (request.method !== method || request.url !== path) return false
++      response.statusCode = status
++      response.end(body)
++      return true
++    })
++    await assert.rejects(method === 'POST' ? ensureHydraClient(state) : verifyHydraClient(state), error => {
++      assert.ok(error instanceof HydraClientCheckError)
++      assert.equal(error.kind, 'CHECK_FAILED')
++      assert.doesNotMatch(error.message, /response-secret|not-json|127\.0\.0\.1/)
++      return true
++    })
++    assert.equal(state.calls.some(([called]) => called === 'PUT'), false)
++    if (method === 'GET') assert.equal(state.calls.some(([called]) => called === 'POST'), false)
++  })
++})
++test('malformed client metadata yields a stable check failure', async () => fixture(async state => {
++  await ensureHydraClient(state)
++  state.getClient().scope = 42
++  await assert.rejects(verifyHydraClient(state), { kind: 'CHECK_FAILED' })
++}))
++test('token JSON distinguishes a failed credential probe from an unreadable response', async () => {
++  for (const [status, body, kind] of [
++    [401, '{"error":"invalid_client","private":"response-secret"}', 'CREDENTIAL_PROBE_FAILED'],
++    [503, '{"error":"temporarily_unavailable","private":"response-secret"}', 'CREDENTIAL_PROBE_FAILED'],
++    [503, '{bad-json', 'CHECK_FAILED'],
++  ]) await fixture(async state => {
++    await ensureHydraClient(state)
++    state.override((request, response) => {
++      if (request.url !== '/oauth2/token') return false
++      response.statusCode = status
++      response.end(body)
++      return true
++    })
++    await assert.rejects(verifyHydraClient(state), error => {
++      assert.equal(error.kind, kind)
++      assert.doesNotMatch(error.message, /response-secret|bad-json|127\.0\.0\.1/)
++      return true
++    })
++    assert.equal(state.calls.filter(([method, path]) => method === 'POST' && path === '/admin/clients').length, 1)
++    assert.equal(state.calls.some(([method]) => method === 'PUT'), false)
++  })
++})
++test('a concurrent explicit registration is rechecked and never overwritten', async () => fixture(async state => {
++  await ensureHydraClient(state)
++  let getCount = 0
++  state.override((request, response) => {
++    if (request.method === 'GET' && request.url === '/admin/clients/sample-app' && getCount++ === 0) {
++      response.statusCode = 404; response.end('{}'); return true
++    }
++    if (request.method === 'POST' && request.url === '/admin/clients') {
++      response.statusCode = 409; response.end('{}'); return true
++    }
++    return false
++  })
++  assert.deepEqual(await ensureHydraClient(state), { clientId: 'sample-app' })
++  assert.equal(state.calls.some(([method]) => method === 'PUT'), false)
++}))
++test('real loopback missing-client result keeps its runtime classification when wording changes', async () => fixture(async state => {
++  const runtimeState = { profile: state.mode, internal: { hydra: state.adminUrl },
++    config: { issuer: state.publicUrl }, clients: { [state.client.clientId]: state.client } }
++  await assert.rejects(verifyRuntimeHydraClient(runtimeState, async options => {
++    try { return await verifyHydraClient(options) }
++    catch (error) {
++      Object.defineProperty(error, 'message', { value: 'unrelated new wording with Bearer private-token' })
++      throw error
++    }
++  }, { ready: async () => {} }), error => {
++    assert.equal(error.code, 'HYDRA_CLIENT_MISSING')
++    assert.doesNotMatch(error.message, /private-token|unrelated/)
++    return true
++  })
++  assert.deepEqual(state.calls, [['GET', '/admin/clients/sample-app']])
++}))
++test('token 5xx keeps the existing conflict diagnosis without leaking its response', async () => fixture(async state => {
++  await ensureHydraClient(state)
++  state.override((request, response) => {
++    if (request.url !== '/oauth2/token') return false
++    response.statusCode = 503
++    response.end('{"error":"temporarily_unavailable","private":"response-secret"}')
++    return true
++  })
++  const runtimeState = { profile: state.mode, internal: { hydra: state.adminUrl },
++    config: { issuer: state.publicUrl }, clients: { [state.client.clientId]: state.client } }
++  const terminal = [], persisted = []
++  await assert.rejects(verifyRuntimeHydraClient(runtimeState, verifyHydraClient, { ready: async () => {} }), error => {
++    assert.equal(error.code, 'HYDRA_CLIENT_CONFLICT')
++    reporter({ write: line => terminal.push(line), persist: line => persisted.push(line) }).failure(error)
++    for (const line of [...terminal, ...persisted]) assert.doesNotMatch(line, /response-secret|fixture-client-secret|127\.0\.0\.1/)
++    return true
++  })
++  assert.equal(state.calls.filter(([method, path]) => method === 'POST' && path === '/admin/clients').length, 1)
++}))
++test('check kinds are closed and immutable', () => {
++  const error = new HydraClientCheckError('CLIENT_MISSING')
++  assert.throws(() => { error.kind = 'CLIENT_CONFLICT' }, TypeError)
++  assert.equal(error.kind, 'CLIENT_MISSING')
++  assert.throws(() => new HydraClientCheckError('FUTURE_KIND'), TypeError)
++})
++test('admin and token network rejection preserve only a safe diagnostic cause', async t => {
++  const originalFetch = globalThis.fetch
++  let failedPath
++  t.mock.method(globalThis, 'fetch', (url, options) => {
++    if (new URL(url).pathname === failedPath) return Promise.reject(Object.assign(new Error('Bearer private-token at private-url'), {
++      cause: { code: 'ECONNREFUSED', message: 'response-secret' },
++    }))
++    return originalFetch(url, options)
++  })
++  for (const path of ['/admin/clients/sample-app', '/oauth2/token']) await fixture(async state => {
++    if (path === '/oauth2/token') await ensureHydraClient(state)
++    failedPath = path
++    await assert.rejects(verifyHydraClient(state), error => {
++      assert.equal(error.kind, 'NETWORK_FAILURE')
++      assert.equal(error.cause.cause.code, 'ECONNREFUSED')
++      assert.doesNotMatch(error.message, /private-token|private-url|response-secret/)
++      return true
++    })
++    assert.equal(state.calls.some(([method]) => method === 'PUT'), false)
++    failedPath = undefined
++  })
++})
++test('admin and token timeouts are network failures without request details', async () => {
++  for (const path of ['/admin/clients/sample-app', '/oauth2/token']) await fixture(async state => {
++    if (path === '/oauth2/token') await ensureHydraClient(state)
++    state.override((request) => request.url === path)
++    await assert.rejects(verifyHydraClient(state), error => {
++      assert.equal(error.kind, 'NETWORK_FAILURE')
++      assert.doesNotMatch(error.message, /127\.0\.0\.1|fixture-client-secret/)
++      return true
++    })
++  })
++})
+ test('generic clients reject unsafe callbacks before contacting Hydra', async () => fixture(async state => {
+   for (const redirectUri of ['http://localhost:18765/callback', 'http://127.0.0.1:18765/a/../callback']) {
+     const before = state.calls.length
+-    await assert.rejects(ensureHydraClient({ ...state, client: { ...state.client, redirectUri } }), /configuration/)
++    await assert.rejects(ensureHydraClient({ ...state, client: { ...state.client, redirectUri } }), { kind: 'INVALID_CONFIG' })
+     assert.equal(state.calls.length, before)
+   }
+ }))
+diff --git a/scripts/runtime/retire-outline.mjs b/scripts/runtime/retire-outline.mjs
+index 0fdbae6..5617a6a 100644
+--- a/scripts/runtime/retire-outline.mjs
++++ b/scripts/runtime/retire-outline.mjs
+@@ -12,7 +12,7 @@ import { verifyHydraClient, hydraClientBasic } from './hydra-client.mjs'
+ import { connectDatabase, convertLegacyBinding, validateLegacyBinding, deploymentBinding } from './deployment.mjs'
+ import { serializeEnvironment, convertValues } from './convert.mjs'
+ import { acquireApplicationLock } from './application-lock.mjs'
+-import { Services } from './services.mjs'
++import { containerProof } from './container-proof.mjs'
+ import { identityAlive, acquireLock } from './ownership.mjs'
+ 
+ const environmentFingerprint = path => createHash('sha256').update(readFileSync(path)).digest('hex')
+@@ -88,7 +88,6 @@ function docker(args) {
+ }
+ const containerExists = id => docker(['ps','-a','--no-trunc','--format','{{.ID}}']).trim().split(/\r?\n/).includes(id)
+ const inspectContainer = id => JSON.parse(docker(['inspect',id]))[0]
+-const containerProof = item => Services.prototype.proof.call({}, item)
+ function assertInside(workspace, target) {
+   const checkout=resolve(workspace),base=resolve(checkout,'.local'),path=resolve(target),rel=relative(base,path)
+   if(!rel||rel==='..'||rel.startsWith(`..${sep}`)||isAbsolute(rel))fail('RETIREMENT_STORAGE_OWNERSHIP_CONFLICT')
+diff --git a/scripts/runtime/retire-outline.test.mjs b/scripts/runtime/retire-outline.test.mjs
+index cd85bbe..0d5d3e5 100644
+--- a/scripts/runtime/retire-outline.test.mjs
++++ b/scripts/runtime/retire-outline.test.mjs
+@@ -120,7 +120,7 @@ import { tmpdir } from 'node:os'
+ import { join, resolve } from 'node:path'
+ import { digest } from './local-config.mjs'
+ import { serializeEnvironment } from './convert.mjs'
+-import { Services } from './services.mjs'
++import { containerProof } from './container-proof.mjs'
+ import { readRuntimeConfiguration, environmentFile } from './settings.mjs'
+ import { deploymentBinding } from './deployment.mjs'
+ import { createHash } from 'node:crypto'
+@@ -132,11 +132,12 @@ function applyFixture(t) {
+  mkdirSync(join(workspace,'.local/runtime'),{recursive:true})
+  const source=serializeEnvironment(values);writeFileSync(join(workspace,'.env.local'),source)
+  assert.equal(typeof retirement.retirementDatabaseTargets,'function')
+- const targets=retirement.retirementDatabaseTargets(values),containers=Object.fromEntries(['postgres','hydra'].map(name=>[name,{Id:`${name}-exact`,Image:`${name}-image`,Config:{Labels:{'com.docker.compose.service':name}},HostConfig:{},Mounts:[]}]))
+- const preserved=Object.fromEntries(Object.entries(containers).map(([name,item])=>[name,Services.prototype.proof.call({},item)]))
++  const targets=retirement.retirementDatabaseTargets(values),containers=Object.fromEntries(['postgres','hydra'].map(name=>[name,{Id:`${name}-exact`,Image:`${name}-image`,Config:{Labels:{'com.docker.compose.service':name}},
++    HostConfig:{Dns:null,DnsOptions:null,DnsSearch:null,Privileged:false},Mounts:[{Type:'bind',Source:`/${name}/b`,Destination:'/b',Mode:'rw',RW:true},{Type:'bind',Source:`/${name}/a`,Destination:'/a',Mode:'ro',RW:false}]}]))
++ const preserved=Object.fromEntries(Object.entries(containers).map(([name,item])=>[name,containerProof(item)]))
+  const identities={exre:{name:'exre',user:'site',owner:'site',oid:'123'},hydra:{name:'hydra',user:'hydra',owner:'hydra',oid:'124'},outline:{name:'outline',user:'outline',owner:'outline',oid:'125'},postgres:{name:'postgres',user:'admin',owner:'postgres-owner',oid:'126'}}
+  const databases=Object.fromEntries(['exre','hydra','outline'].map(name=>[name,{...identities[name],targetFingerprint:digest(targets[name])}]))
+- const calls=[],mutations=[]
++  const calls=[],mutations=[],dockerMutations=[]
+  const plan={version:1,workspace:resolve(workspace),sourceFingerprint:digest(source),receiptFingerprint:null,preserved,databases,outlineAdmin:{...identities.postgres,targetFingerprint:digest(targets.outlineAdmin)},retired:{redis:null,storage:join(workspace,'.local/attachments')},completed:['stop','clients','resources','configuration'],progress:{}}
+  let mismatchPurpose,mismatchField='user'
+  const connect=async(url,options={})=>{
+@@ -149,11 +150,76 @@ function applyFixture(t) {
+     return {rows:[]}
+    },end:async()=>{}}
+  }
+- const dockerCall=args=>{calls.push({docker:args});if(args[0]==='inspect'){const item=Object.values(containers).find(item=>item.Id===args[1]);assert.ok(item);return JSON.stringify([item])}throw Error('unexpected Docker mutation')}
++  const dockerCall=args=>{calls.push({docker:args});if(args[0]==='inspect'){const item=Object.entries(containers).find(([name])=>`${name}-exact`===args[1])?.[1];assert.ok(item);return JSON.stringify([item])}
++    if(args[0]==='ps')return Object.keys(containers).map(name=>`${name}-exact`).join('\n')
++    if(args[0]==='rm'){dockerMutations.push(args);return ''}
++    throw Error('unexpected Docker mutation')}
+  const acquire=()=>{calls.push({lock:true});return {release(){}}}
+- return {workspace,values,targets,identities,plan,calls,mutations,connect,dockerCall,acquire,applicationAcquire:acquire,mismatch:(purpose,field='user')=>{mismatchPurpose=purpose;mismatchField=field}}
++  return {workspace,values,targets,identities,containers,plan,calls,mutations,dockerMutations,connect,dockerCall,acquire,applicationAcquire:acquire,mismatch:(purpose,field='user')=>{mismatchPurpose=purpose;mismatchField=field}}
+ }
+ 
++function saveApplyProofEvidence(f) {
++  const directory=join(f.workspace,'.local/runtime'),dependencies=join(directory,'dependencies.json'),path=join(directory,'outline-retirement-plan.json')
++  const record={version:1,project:'exwebsite-runtime',proofs:[...Object.values(f.plan.preserved),...(f.plan.retired.redis?[f.plan.retired.redis]:[])],newlyStarted:[]}
++  writeFileSync(dependencies,JSON.stringify(record))
++  f.plan.dependencyFingerprint=digest(record)
++  writeFileSync(path,JSON.stringify(f.plan))
++  return {dependencies,path,dependencyBytes:readFileSync(dependencies),planBytes:readFileSync(path)}
++}
++
++test('apply rechecks original preserved proofs despite Docker mount and unset DNS presentation changes',async t=>{
++  const f=applyFixture(t),original=structuredClone(f.plan.preserved)
++  saveApplyProofEvidence(f)
++  for(const item of Object.values(f.containers)){
++    item.Mounts.reverse()
++    Object.assign(item.HostConfig,{Dns:[],DnsOptions:[],DnsSearch:[]})
++  }
++  await retirement.applyRetirementPlan(f.plan,f)
++  assert.ok(f.mutations.some(call=>call.sql.startsWith('DELETE')))
++  assert.deepEqual(f.dockerMutations,[])
++  assert.deepEqual(f.plan.preserved,original)
++  assert.deepEqual(JSON.parse(readFileSync(join(f.workspace,'.local/runtime/outline-retirement-plan.json'),'utf8')).preserved,original)
++})
++
++test('apply refuses each preserved container drift before any mutation and leaves proofs and plan unchanged',async t=>{
++  const changes=[
++    ['Dns',item=>{item.HostConfig.Dns=['1.1.1.1']}],
++    ['DnsOptions',item=>{item.HostConfig.DnsOptions=['ndots:2']}],
++    ['DnsSearch',item=>{item.HostConfig.DnsSearch=['example.test']}],
++    ['HostConfig',item=>{item.HostConfig.Privileged=true}],
++    ['Config',item=>{item.Config.WorkingDir='/changed'}],
++    ['Image',item=>{item.Image='replacement-image'}],
++    ['Id',item=>{item.Id='replacement-exact'}],
++  ]
++  const mountFields=Object.keys(applyFixture(t).containers.postgres.Mounts[0])
++  for(const key of mountFields)changes.push([`Mounts.${key}`,item=>{item.Mounts[0][key]=typeof item.Mounts[0][key]==='boolean'?!item.Mounts[0][key]:'changed'}])
++  for(const [name,change] of changes){
++    const f=applyFixture(t),evidence=saveApplyProofEvidence(f),original=structuredClone(f.plan.preserved)
++    change(f.containers.postgres)
++    await assert.rejects(retirement.applyRetirementPlan(f.plan,f),/RETIREMENT_PRESERVED_PROOF_CHANGED/,name)
++    assert.deepEqual(f.mutations,[],name)
++    assert.deepEqual(f.dockerMutations,[],name)
++    assert.deepEqual(f.plan.preserved,original,name)
++    assert.deepEqual(readFileSync(evidence.dependencies),evidence.dependencyBytes,name)
++    assert.deepEqual(readFileSync(evidence.path),evidence.planBytes,name)
++  }
++})
++
++test('apply rejects Redis proof drift before Docker rm or any retirement mutation',async t=>{
++  const f=applyFixture(t),redis={Id:'redis-exact',Image:'redis-image',Config:{Labels:{'com.docker.compose.service':'redis'}},
++    HostConfig:{Dns:null,DnsOptions:null,DnsSearch:null},Mounts:[]}
++  f.containers.redis=redis
++  f.plan.retired={...f.plan.retired,redis:containerProof(redis),redisMounts:[],redisVolumes:[]}
++  f.plan.completed=['stop','clients','website']
++  const evidence=saveApplyProofEvidence(f)
++  redis.Image='replacement-image'
++  await assert.rejects(retirement.applyRetirementPlan(f.plan,f),/RETIREMENT_REDIS_PROOF_CHANGED/)
++  assert.deepEqual(f.mutations,[])
++  assert.deepEqual(f.dockerMutations,[])
++  assert.deepEqual(readFileSync(evidence.dependencies),evidence.dependencyBytes)
++  assert.deepEqual(readFileSync(evidence.path),evidence.planBytes)
++})
++
+ test('apply writes Website only on the verified nondefault cluster and preserves original connection options',async t=>{
+  const f=applyFixture(t)
+  await retirement.applyRetirementPlan(f.plan,f)
+diff --git a/scripts/runtime/services.mjs b/scripts/runtime/services.mjs
+index 96ed1f5..088326f 100644
+--- a/scripts/runtime/services.mjs
++++ b/scripts/runtime/services.mjs
+@@ -6,6 +6,7 @@ import { acquireLock } from './ownership.mjs'
+ import { assertPortFree, httpReady } from './local-dev.mjs'
+ import { RuntimeError, reporter, diagnostic } from './output.mjs'
+ import { acquireApplicationLock } from './application-lock.mjs'
++import { containerProof } from './container-proof.mjs'
+ 
+ export const serviceNames = Object.freeze(['postgres', 'hydra'])
+ const project = 'exwebsite-runtime'
+@@ -85,14 +86,6 @@ export class Services {
+     } else log.next(items.every(item => item.State.Running && (!item.State.Health || item.State.Health.Status === 'healthy'))
+       && items.length === serviceNames.length ? 'pnpm dev' : '检查 pnpm service:logs；依赖尚未运行时执行 pnpm service:start')
+   }
+-  proof(item) {
+-    const host = { ...item.HostConfig }
+-    // Docker normalizes unset DNS lists between null and [] after a restart.
+-    for (const key of ['Dns', 'DnsOptions', 'DnsSearch']) if (host[key] === null) host[key] = []
+-    return { id: item.Id, service: item.Config.Labels['com.docker.compose.service'],
+-      digest: digest({ image: item.Image, config: item.Config, host,
+-        mounts: [...item.Mounts].sort((left, right) => left.Destination.localeCompare(right.Destination)) }) }
+-  }
+   verify(items) {
+     const configuration = JSON.parse(this.compose(['config', '--format', 'json']))
+     for (const item of items) {
+@@ -148,7 +141,7 @@ export class Services {
+     return record
+   }
+   verifyProofs(items, proofs, code, phase) {
+-    for (const item of items) if (!proofs.some(proof => proof?.id === item.Id && digest(proof) === digest(this.proof(item))))
++    for (const item of items) if (!proofs.some(proof => proof?.id === item.Id && digest(proof) === digest(containerProof(item))))
+       throw new RuntimeError(code, context('Docker', phase))
+   }
+   async start({ ready = verifyDependencyHealth, assertFree = assertPortFree, log = reporter({ environment: this.state.values }), selectedServices = serviceNames } = {}) {
+@@ -161,7 +154,7 @@ export class Services {
+       if (!record && previous.length) throw new RuntimeError('OWNERSHIP_RECORD_MISSING', context('Docker', '启动前归属核验'))
+       if (record) this.verifyProofs(previous, record.proofs, 'START_OWNERSHIP_CONFLICT', '启动前归属核验')
+       this.verifyVolumes()
+-      const priorProofs = previous.map(item => this.proof(item))
++      const priorProofs = previous.map(containerProof)
+       const p = this.state.config.ports
+       for (const [service, ports] of [['postgres', [p.postgres]], ['hydra', [p.hydraPublic, p.hydraAdmin]]].filter(([service]) => selectedServices.includes(service))) {
+         if (!previous.some(item => item.Config.Labels['com.docker.compose.service'] === service && item.State.Running))
+@@ -175,7 +168,7 @@ export class Services {
+         const existing = items.filter(item => previous.some(prior => prior.Config.Labels['com.docker.compose.service'] === item.Config.Labels['com.docker.compose.service']))
+         this.verifyProofs(existing, priorProofs, 'START_OWNERSHIP_CONFLICT', '启动后归属核验')
+         atomicJson(this.file, { version: 1, project, proofs: items.map(item =>
+-          record?.proofs.find(proof => proof.id === item.Id) ?? priorProofs.find(proof => proof.id === item.Id) ?? this.proof(item)),
++          record?.proofs.find(proof => proof.id === item.Id) ?? priorProofs.find(proof => proof.id === item.Id) ?? containerProof(item)),
+           newlyStarted: items.filter(item => !original.has(item.Id)).map(item => item.Id) })
+         saved = true
+       }
+@@ -210,7 +203,7 @@ export class Services {
+       const actual = this.inventory()
+       this.verifyProofs(actual, record.proofs, 'STOP_OWNERSHIP_CONFLICT', '停止后归属核验')
+       if (actual.some(item => selected.some(prior => prior.Id === item.Id) && item.State.Running)) throw new RuntimeError('STOP_INCOMPLETE')
+-      atomicJson(this.file, { ...record, proofs: actual.map(item => this.proof(item)) })
++      atomicJson(this.file, { ...record, proofs: actual.map(containerProof) })
+     } finally { lock?.release(); applicationLock?.release() }
+   }
+ }
+diff --git a/scripts/runtime/settings.mjs b/scripts/runtime/settings.mjs
+index e6d55b3..387cf45 100644
+--- a/scripts/runtime/settings.mjs
++++ b/scripts/runtime/settings.mjs
+@@ -4,7 +4,7 @@ import { parseEnv } from 'node:util'
+ import { root } from './shared.mjs'
+ import { RuntimeError } from './output.mjs'
+ import { digest } from './local-config.mjs'
+-import { parseIdentityClients, parseIdentityDeliveryTargets, composeIdentityClients, parseIdentityKey, parseIdentityUrl } from '@workspace/common/node/identity-config'
++import { IdentityConfigError, parseIdentityConfiguration, parseIdentityKey } from '@workspace/common/node/identity-config'
+ 
+ export const defaults = Object.freeze({ public: 8080, web: 8081, api: 8082, postgres: 5432, hydraPublic: 4444, hydraAdmin: 4445 })
+ export const portKeys = Object.freeze({ public: 'LOCAL_PUBLIC_PORT', web: 'LOCAL_WEB_PORT', api: 'LOCAL_API_PORT',
+@@ -92,7 +92,10 @@ export function readRuntimeConfiguration({ workspace = root, inherited = process
+     throw new RuntimeError('LAYOUT_CONFLICT', { keys: ['PUBLIC_ORIGIN', 'HYDRA_PUBLIC_URL'] })
+   for (const key of cryptoKeys) {
+     const value = required(values[key], key)
+-    if (!/^[0-9a-f]{64}$/i.test(value)) throw new RuntimeError('CRYPTO_KEY_INVALID', { keys: [key] })
++    if (key === 'IDENTITY_BOOTSTRAP_KEY' || key === 'IDENTITY_FLOW_KEY') {
++      try { parseIdentityKey(value, key) }
++      catch { throw new RuntimeError('CRYPTO_KEY_INVALID', { keys: [key] }) }
++    } else if (!/^[0-9a-f]{64}$/i.test(value)) throw new RuntimeError('CRYPTO_KEY_INVALID', { keys: [key] })
+   }
+   for (const key of ['STORAGE_UPLOAD_HMAC_KEY', 'SERVER_NOTIFICATION_TOKEN_KEY']) if (values[key] !== undefined && !/^[0-9a-f]{64}$/i.test(values[key]))
+     throw new RuntimeError('CRYPTO_KEY_INVALID', { keys: [key] })
+@@ -112,17 +115,17 @@ export function readRuntimeConfiguration({ workspace = root, inherited = process
+     }
+   }
+   const target = new URL(databases.DATABASE)
+-  let clients, cleanupTargets, identity
++  let parsedIdentity
+   try {
+-    parseIdentityUrl(publicOrigin, values.RUNTIME_PROFILE, 'PUBLIC_ORIGIN', { root: true })
+-    parseIdentityUrl(issuer, values.RUNTIME_PROFILE, 'HYDRA_PUBLIC_URL', { root: true })
+-    parseIdentityUrl(internal.hydra, values.RUNTIME_PROFILE, 'HYDRA_ADMIN_URL', { root: true, admin: true })
+-    clients = parseIdentityClients(values.IDENTITY_CLIENTS_JSON, values.RUNTIME_PROFILE)
+-    cleanupTargets = parseIdentityDeliveryTargets(values.IDENTITY_OUTBOX_TARGETS_JSON, values.RUNTIME_PROFILE)
+-    identity = composeIdentityClients(clients, cleanupTargets, internal.hydra)
+-    parseIdentityKey(values.IDENTITY_FLOW_KEY, 'IDENTITY_FLOW_KEY'); parseIdentityKey(values.IDENTITY_BOOTSTRAP_KEY, 'IDENTITY_BOOTSTRAP_KEY')
+-  } catch (error) { throw new RuntimeError('IDENTITY_CONFIG_INVALID', { keys: [error.variable ?? 'IDENTITY_CLIENTS_JSON'] }) }
+-  const config = { version: 2, mode: values.RUNTIME_PROFILE, project: 'exwebsite-runtime', ports, publicOrigin, issuer,
++    parsedIdentity = parseIdentityConfiguration({ mode: values.RUNTIME_PROFILE, publicOrigin, publicOriginVariable: 'PUBLIC_ORIGIN',
++      issuer, hydraAdminUrl: internal.hydra, bootstrapKey: values.IDENTITY_BOOTSTRAP_KEY, flowKey: values.IDENTITY_FLOW_KEY,
++      clientsJson: values.IDENTITY_CLIENTS_JSON, cleanupTargetsJson: values.IDENTITY_OUTBOX_TARGETS_JSON })
++  } catch (error) { throw new RuntimeError('IDENTITY_CONFIG_INVALID', { keys: [error instanceof IdentityConfigError ? error.variable : 'IDENTITY_CLIENTS_JSON'] }) }
++  const { approvedClients: clients, cleanupTargets, integrationClients, deliveryTargets } = parsedIdentity
++  const identity = Object.freeze({ integrationClients, deliveryTargets })
++  internal.hydra = parsedIdentity.hydraAdminUrl
++  const config = { version: 2, mode: parsedIdentity.mode, project: 'exwebsite-runtime', ports,
++    publicOrigin: parsedIdentity.publicOrigin, issuer: parsedIdentity.issuer,
+     websiteTarget: { host: target.hostname, port: Number(target.port), database: 'exre', user: decodeURIComponent(target.username), verifiedDatabase: 'exre' } }
+   const state = { workspace, directory: join(workspace, '.local/runtime'), profile: values.RUNTIME_PROFILE, values,
+     databases, internal, config, clients, cleanupTargets, identity, secrets: pick(values, cryptoKeys),
+diff --git a/scripts/runtime/settings.test.mjs b/scripts/runtime/settings.test.mjs
+index 93568ca..ad0f3b6 100644
+--- a/scripts/runtime/settings.test.mjs
++++ b/scripts/runtime/settings.test.mjs
+@@ -7,9 +7,11 @@ import { join } from 'node:path'
+ import { createServer } from 'node:net'
+ import { readRuntimeConfiguration, databaseUrl, defaults } from './settings.mjs'
+ import { convertValues, convertConfiguration, serializeEnvironment, verifyOriginalTargets } from './convert.mjs'
+-import { redact, diagnostic, reporter, runtimeFailure } from './output.mjs'
++import { redact, diagnostic, reporter, runtimeFailure, RuntimeError } from './output.mjs'
+ import { verifyApplications, verifyRuntimeHydraClient } from './applications.mjs'
++import { HydraClientCheckError } from './hydra-client.mjs'
+ import { composeEnvironment, Services } from './services.mjs'
++import { containerProof } from './container-proof.mjs'
+ import { root } from './shared.mjs'
+ import { NativeApplications, verifyNativeClient } from './native.mjs'
+ import { processSpecification, processRecord } from './pm2-process.mjs'
+@@ -24,6 +26,65 @@ import { verifyHydraBinary, initializeHydraDatabase } from './infrastructure.mjs
+ const { parseRuntimeArguments } = runtimeEntry
+ const { testSpecifications, runTests } = runtimeTests
+ 
++test('container proof preserves the legacy literal digest and its input', () => {
++  const item = {
++    Id: 'container-1', Image: 'sha256:img',
++    Config: { Image: 'repo@sha256:manifest', Labels: { 'com.docker.compose.service': 'hydra' }, Env: ['A=1'] },
++    HostConfig: { Dns: null, DnsOptions: null, DnsSearch: null, Privileged: false,
++      PortBindings: { '5432/tcp': [{ HostIp: '127.0.0.1', HostPort: '15432' }] } },
++    Mounts: [
++      { Type: 'volume', Name: 'vol-b', Source: '/var/lib/docker/volumes/vol-b/_data', Destination: '/b', Driver: 'local', Mode: 'rw', RW: true, Propagation: '' },
++      { Type: 'bind', Source: '/host/a', Destination: '/a', Mode: 'ro', RW: false, Propagation: 'rprivate' },
++    ],
++  }
++  const original = structuredClone(item)
++  assert.deepEqual(containerProof(item), {
++    id: 'container-1', service: 'hydra',
++    digest: 'ac4538fe791ed70f9571fb6c45be27b6ad87adb867433971f1b979998d2f52cf',
++  })
++  assert.deepEqual(item, original)
++})
++
++test('container proof accepts Docker presentation changes and detects every substantive inspect field', () => {
++  const item = { Id: 'owned', Image: 'sha256:image',
++    Config: { Image: 'image:tag', Env: ['A=1'], Labels: { 'com.docker.compose.service': 'hydra' } },
++    HostConfig: { Dns: null, DnsOptions: null, DnsSearch: null, Privileged: false },
++    Mounts: [
++      { Type: 'volume', Name: 'data', Source: '/data', Destination: '/b', Driver: 'local', Mode: 'rw', RW: true, Propagation: '' },
++      { Type: 'bind', Name: 'bind', Source: '/host', Destination: '/a', Driver: '', Mode: 'ro', RW: false, Propagation: 'rprivate' },
++    ],
++  }
++  const before = structuredClone(item), expected = containerProof(item)
++  const equivalent = structuredClone(item)
++  equivalent.Mounts.reverse()
++  Object.assign(equivalent.HostConfig, { Dns: [], DnsOptions: [], DnsSearch: [] })
++  assert.deepEqual(containerProof(equivalent), expected)
++  assert.deepEqual(item, before)
++
++  for (const key of ['Dns', 'DnsOptions', 'DnsSearch']) {
++    const changed = structuredClone(item)
++    changed.HostConfig[key] = ['changed']
++    assert.notEqual(containerProof(changed).digest, expected.digest, key)
++  }
++  for (const key of Object.keys(item.Mounts[0])) {
++    const changed = structuredClone(item)
++    changed.Mounts[0][key] = typeof changed.Mounts[0][key] === 'boolean' ? !changed.Mounts[0][key] : 'changed'
++    assert.notEqual(containerProof(changed).digest, expected.digest, `Mounts.${key}`)
++  }
++  for (const change of [
++    value => { value.HostConfig.Privileged = true },
++    value => { value.Config.Env = ['A=2'] },
++    value => { value.Image = 'sha256:replacement' },
++  ]) {
++    const changed = structuredClone(item)
++    change(changed)
++    assert.notEqual(containerProof(changed).digest, expected.digest)
++  }
++  const replaced = { ...structuredClone(item), Id: 'replacement' }
++  assert.equal(containerProof(replaced).digest, expected.digest)
++  assert.notDeepEqual(containerProof(replaced), expected)
++})
++
+ function fixture(t, profile = 'local') {
+   const workspace = mkdtempSync(join(tmpdir(), 'runtime-fields-'))
+   t.after(() => rmSync(workspace, { recursive: true, force: true }))
+@@ -95,18 +156,58 @@ test('startup diagnostics name the failed check and corrective step without refe
+ 
+ test('Hydra startup separates missing clients, configuration conflicts and network failures', async t => {
+   const state = fixture(t).read()
+-  for (const [error, code] of [
+-    [new Error('Hydra client initialization failed (HTTP 404)'), 'HYDRA_CLIENT_MISSING'],
+-    [new Error('Existing Hydra client configuration conflict; explicit operator repair is required'), 'HYDRA_CLIENT_CONFLICT'],
+-    [new Error('Existing Hydra client secret conflict or protocol service unavailable'), 'HYDRA_CLIENT_CONFLICT'],
+-    [new Error('Invalid Hydra bootstrap configuration'), 'HYDRA_CONFIG_INVALID'],
+-    [Object.assign(new Error('private-token'), { cause: { code: 'ECONNREFUSED' } }), 'ECONNREFUSED (连接被拒绝)'],
++  for (const [kind, code] of [
++    ['CLIENT_MISSING', 'HYDRA_CLIENT_MISSING'], ['CLIENT_CONFLICT', 'HYDRA_CLIENT_CONFLICT'],
++    ['CREDENTIAL_PROBE_FAILED', 'HYDRA_CLIENT_CONFLICT'], ['INVALID_CONFIG', 'HYDRA_CONFIG_INVALID'],
++    ['CHECK_FAILED', 'HYDRA_CLIENT_CHECK_FAILED'],
++  ]) {
++    const error = new HydraClientCheckError(kind)
++    Object.defineProperty(error, 'message', { value: 'changed Bearer private-token' })
++    await assert.rejects(verifyRuntimeHydraClient(state, async () => { throw error }, { ready: async () => {} }), failure => {
++      assert.equal(failure.code, code)
++      assert.match(failure.message, /Hydra/)
++      assert.doesNotMatch(failure.message, /private-token|docs\/runtime\.md/)
++      return true
++    })
++  }
++  for (const error of [
++    { kind: 'CLIENT_MISSING', message: 'Hydra client initialization failed (HTTP 404)' },
++    { kind: 'CLIENT_MISSING', cause: { code: 'ECONNREFUSED' } },
++    Object.assign(new Error('private-token'), { kind: 'FUTURE_KIND' }),
++    Object.assign(new Error('private-token'), { code: 'UNSAFE_PRIVATE_CODE' }),
+   ]) await assert.rejects(verifyRuntimeHydraClient(state, async () => { throw error }, { ready: async () => {} }), failure => {
+-    assert.equal(failure.code, code)
+-    assert.match(failure.message, /Hydra/)
+-    assert.doesNotMatch(failure.message, /private-token|docs\/runtime\.md/)
++    assert.equal(failure.code, 'HYDRA_CLIENT_CHECK_FAILED')
++    assert.doesNotMatch(failure.message, /private-token|UNSAFE_PRIVATE_CODE/)
++    return true
++  })
++  for (const error of [new HydraClientCheckError('NETWORK_FAILURE', { cause: { code: 'ECONNREFUSED', message: 'Bearer private-token' } }),
++    Object.assign(new Error('private-token'), { cause: { code: 'ECONNREFUSED' } })]) {
++    await assert.rejects(verifyRuntimeHydraClient(state, async () => { throw error }, { ready: async () => {} }), failure => {
++      assert.equal(failure.code, 'ECONNREFUSED (连接被拒绝)')
++      assert.doesNotMatch(failure.message, /private-token/)
++      return true
++    })
++  }
++  for (const cause of [{ code: 'UNSAFE_PRIVATE_CODE', message: 'Bearer private-token' },
++    { cause: { code: 'UNSAFE_PRIVATE_CODE' }, errors: [{ code: 'UNSAFE_PRIVATE_CODE' }] },
++    new Error('postgres://private:credential@host/exre')]) {
++    await assert.rejects(verifyRuntimeHydraClient(state, async () => {
++      throw new HydraClientCheckError('NETWORK_FAILURE', { cause })
++    }, { ready: async () => {} }), failure => {
++      assert.equal(failure.code, 'HYDRA_CLIENT_CHECK_FAILED')
++      assert.doesNotMatch(failure.message, /private-token|credential|UNSAFE_PRIVATE_CODE/)
++      return true
++    })
++  }
++  const terminal = [], persisted = []
++  const unsafe = new HydraClientCheckError('NETWORK_FAILURE', { cause: new Error('Bearer private-token response-secret http://secret.invalid/') })
++  await assert.rejects(verifyRuntimeHydraClient(state, async () => { throw unsafe }, { ready: async () => {} }), failure => {
++    reporter({ write: line => terminal.push(line), persist: line => persisted.push(line) }).failure(failure)
++    for (const line of [...terminal, ...persisted]) assert.doesNotMatch(line, /private-token|response-secret|secret\.invalid/)
+     return true
+   })
++  await assert.rejects(verifyRuntimeHydraClient(state, async () => {}, { ready: async () => { throw new RuntimeError('DEPLOYMENT_HYDRA_NOT_READY') } }),
++    { code: 'DEPLOYMENT_HYDRA_NOT_READY' })
+   const calls = []
+   await verifyApplications(state, { tools: { node: process.execPath }, verifySchemas: async () => {},
+     execute: async (spec, options) => { calls.push(spec.name); options.onLog(spec.name, '检查完成') }, verifyClient: async () => {}, ready: async () => {}, onLog: () => {} })
+@@ -166,6 +267,24 @@ test('invalid profile, old sources, duplicate ports, names and cryptographic key
+   }
+ })
+ 
++test('identity key diagnostics retain missing and format priority before client parsing', t => {
++  const f = fixture(t)
++  for (const key of ['IDENTITY_BOOTSTRAP_KEY', 'IDENTITY_FLOW_KEY']) {
++    for (const [value, code] of [['', 'CONFIG_REQUIRED'], ['not-a-key', 'CRYPTO_KEY_INVALID']]) {
++      assert.throws(() => f.read({ [key]: value, IDENTITY_CLIENTS_JSON: 'private malformed JSON' }), error => {
++        assert.equal(error.code, code)
++        assert.deepEqual(error.keys, [key])
++        assert.doesNotMatch(error.message, /private malformed JSON|not-a-key/)
++        return true
++      })
++    }
++  }
++  const state = f.read({ IDENTITY_CLIENTS_JSON: '[]' })
++  assert.deepEqual(state.clients, {})
++  assert.equal(state.environments.server.IDENTITY_CLIENTS_JSON, '[]')
++  assert.equal(state.environments.web.IDENTITY_CLIENTS_JSON, undefined)
++})
++
+ test('deployment uses independently configured database hosts and explicit application ports', t => {
+   const f = fixture(t, 'deployment')
+   const state = f.read({ OUTLINE_DATABASE_HOST: 'outline-db.example', HYDRA_DATABASE_HOST: 'hydra-db.example', SERVER_PORT: '18080', OUTLINE_PORT: '13000',
+@@ -255,10 +374,18 @@ test('owned stop validates the whole inventory before mutation and refuses unkno
+   service.inventory = () => [item]
+   service.call = args => { changes.push(args); item.State.Running = false; return '' }
+   service.file = join(f.workspace, 'dependencies.json')
+-  writeFileSync(service.file, JSON.stringify({ version: 1, project: 'exwebsite-runtime', proofs: [{ ...service.proof(item), digest: 'changed' }], newlyStarted: ['owned'] }))
++  writeFileSync(service.file, JSON.stringify({ version: 1, project: 'exwebsite-runtime', proofs: [{ ...containerProof(item), digest: 'changed' }], newlyStarted: ['owned'] }))
+   await assert.rejects(service.stop({ lock: false }), /STOP_OWNERSHIP_CONFLICT/); assert.deepEqual(changes, [])
+-  writeFileSync(service.file, JSON.stringify({ version: 1, project: 'exwebsite-runtime', proofs: [service.proof(item)], newlyStarted: ['owned'] }))
++  writeFileSync(service.file, JSON.stringify({ version: 1, project: 'exwebsite-runtime', proofs: [containerProof(item)], newlyStarted: ['owned'] }))
++  const saved = readFileSync(service.file, 'utf8')
++  const unknown = { ...structuredClone(item), Id: 'unknown' }
++  service.inventory = () => [item, unknown]
++  await assert.rejects(service.stop({ lock: false }), /STOP_OWNERSHIP_CONFLICT/)
++  assert.equal(readFileSync(service.file, 'utf8'), saved)
++  assert.deepEqual(changes, [])
++  service.inventory = () => [item]
+   await service.stop({ lock: false }); assert.deepEqual(changes, [['stop', '--time', '10', 'owned']])
++  assert.deepEqual(JSON.parse(readFileSync(service.file, 'utf8')).proofs, [containerProof(item)])
+ })
+ 
+ test('start cannot replace a saved proof after DNS drift to make a later stop succeed', async t => {
+@@ -269,7 +396,8 @@ test('start cannot replace a saved proof after DNS drift to make a later stop su
+       'com.docker.compose.service': 'hydra', 'com.docker.compose.project': 'exwebsite-runtime',
+       'com.docker.compose.oneoff': 'false', 'com.docker.compose.config-hash': 'hydra-hash',
+       'dev.exwebsite.runtime': 'dependencies',
+-    } }, HostConfig: { Dns: [], PortBindings: {} }, Mounts: [], State: { Running: false } }
++    } }, HostConfig: { Dns: null, DnsOptions: null, DnsSearch: null, PortBindings: {} },
++    Mounts: [{ Name: 'first', Destination: '/a', Mode: 'rw' }, { Name: 'second', Destination: '/b', Mode: 'ro' }], State: { Running: false } }
+   const services = new Services(state, { run: (_command, args) => {
+     let stdout = ''
+     if (args[0] === 'ps') stdout = present ? item.Id : ''
+@@ -283,7 +411,7 @@ test('start cannot replace a saved proof after DNS drift to make a later stop su
+     return { status: 0, stdout }
+   } })
+   mkdirSync(state.directory, { recursive: true })
+-  const saved = JSON.stringify({ version: 1, project: 'exwebsite-runtime', proofs: [services.proof(item)], newlyStarted: [] })
++  const saved = JSON.stringify({ version: 1, project: 'exwebsite-runtime', proofs: [containerProof(item)], newlyStarted: [] })
+   writeFileSync(services.file, saved)
+   item.HostConfig.Dns = ['1.1.1.1']
+   await assert.rejects(services.stop({ lock: false }), /STOP_OWNERSHIP_CONFLICT/)
+@@ -293,10 +421,12 @@ test('start cannot replace a saved proof after DNS drift to make a later stop su
+   await assert.rejects(services.stop({ lock: false }), /STOP_OWNERSHIP_CONFLICT/)
+   assert.deepEqual(mutations, [])
+ 
+-  item.HostConfig.Dns = []
++  Object.assign(item.HostConfig, { Dns: [], DnsOptions: [], DnsSearch: [] })
++  item.Mounts.reverse()
+   const originalItem = structuredClone(item)
+-  for (const change of [value => { value.HostConfig.Privileged = true }, value => { value.Mounts = [{ Name: 'foreign', Destination: '/extra' }] },
+-    value => { value.Image = 'replacement-image-id' }, value => { value.Id = 'b'.repeat(64) }]) {
++  for (const change of [value => { value.HostConfig.Privileged = true }, value => { value.Mounts[0].Mode = 'changed' },
++    value => { value.Config.WorkingDir = '/changed' }, value => { value.Image = 'replacement-image-id' },
++    value => { value.Id = 'b'.repeat(64) }]) {
+     Object.assign(item, structuredClone(originalItem)); change(item)
+     await assert.rejects(services.start({ selectedServices: ['hydra'], assertFree: async () => {}, ready: async () => {},
+       log: reporter({ write() {} }) }), /START_OWNERSHIP_CONFLICT/)
+@@ -321,6 +451,7 @@ test('start cannot replace a saved proof after DNS drift to make a later stop su
+   assert.deepEqual(JSON.parse(readFileSync(services.file, 'utf8')).proofs, JSON.parse(saved).proofs)
+   await services.stop({ lock: false })
+   assert.equal(item.State.Running, false)
++  assert.deepEqual(JSON.parse(readFileSync(services.file, 'utf8')).proofs, JSON.parse(saved).proofs)
+ 
+   // A change during Compose must not overwrite proof or trigger an unsafe rollback stop.
+   const beforeStart = readFileSync(services.file, 'utf8')
+@@ -345,7 +476,7 @@ test('owned stop tolerates Docker mount ordering and unset DNS normalization but
+   const item = { Id: 'owned', Config: { Labels: { 'com.docker.compose.service': 'hydra' } }, Image: 'image',
+     HostConfig: { Dns: null, DnsOptions: null, DnsSearch: null },
+     Mounts: [{ Name: 'first', Destination: '/a' }, { Name: 'second', Destination: '/b' }], State: { Running: true } }
+-  const record = { version: 1, project: 'exwebsite-runtime', proofs: [services.proof(item)], newlyStarted: ['owned'] }
++  const record = { version: 1, project: 'exwebsite-runtime', proofs: [containerProof(item)], newlyStarted: ['owned'] }
+   mkdirSync(state.directory, { recursive: true })
+   services.file = join(state.directory, 'dependencies.json'); writeFileSync(services.file, JSON.stringify(record))
+   services.inventory = () => [item]
+@@ -354,15 +485,32 @@ test('owned stop tolerates Docker mount ordering and unset DNS normalization but
+   await services.stop({ lock: false })
+   assert.deepEqual(calls, [['stop', '--time', '10', 'owned']])
+   const valid = structuredClone(item)
++  const saved = readFileSync(services.file, 'utf8')
+   for (const mutation of [value => { value.HostConfig.Dns = ['1.1.1.1'] }, value => { value.Mounts[0].Name = 'foreign' },
+     value => { value.Config.Env = ['PASSWORD=changed'] }, value => { value.Image = 'replacement' }]) {
+     Object.assign(item, structuredClone(valid)); item.State.Running = true; mutation(item)
+     calls.length = 0
+     await assert.rejects(services.stop({ lock: false }), /STOP_OWNERSHIP_CONFLICT/)
+     assert.deepEqual(calls, [])
++    assert.equal(readFileSync(services.file, 'utf8'), saved)
+   }
+ })
+ 
++test('owned stop refuses post-stop inspect drift without rewriting the old proof', async t => {
++  const state = fixture(t).read(); state.workspace = root
++  const services = new Services(state), calls = []
++  const item = { Id: 'owned', Image: 'image', Config: { Labels: { 'com.docker.compose.service': 'hydra' } },
++    HostConfig: { Dns: null }, Mounts: [], State: { Running: true } }
++  services.inventory = () => [item]
++  services.call = args => { calls.push(args); item.State.Running = false; item.HostConfig.Dns = ['9.9.9.9']; return '' }
++  mkdirSync(state.directory, { recursive: true })
++  writeFileSync(services.file, JSON.stringify({ version: 1, project: 'exwebsite-runtime', proofs: [containerProof(item)], newlyStarted: ['owned'] }))
++  const saved = readFileSync(services.file, 'utf8')
++  await assert.rejects(services.stop({ lock: false }), /STOP_OWNERSHIP_CONFLICT/)
++  assert.deepEqual(calls, [['stop', '--time', '10', 'owned']])
++  assert.equal(readFileSync(services.file, 'utf8'), saved)
++})
++
+ test('dependency stop refuses an application listener before inspecting or mutating dependencies', async t => {
+   const listener = createServer()
+   await new Promise(resolve => listener.listen(0, '127.0.0.1', resolve))
+diff --git a/tests/auth/deployment-binding.test.ts b/tests/auth/deployment-binding.test.ts
+index 8e03250..6a437a1 100644
+--- a/tests/auth/deployment-binding.test.ts
++++ b/tests/auth/deployment-binding.test.ts
+@@ -3,9 +3,33 @@ import { tmpdir } from 'node:os'
+ import { join } from 'node:path'
+ import { createHash } from 'node:crypto'
+ import { expect, it } from 'vitest'
++import { createIdentityBinding } from '@workspace/common/node/identity-config'
+ import { parseIdentityConfig } from '@server/src/modules/identity/config'
+ import { assertDeploymentBinding } from '@server/src/modules/identity/deployment-binding'
+ 
++const oldServerEmptyV2 = '{"version":2,"websiteTarget":{"host":"postgres","port":5432,"user":"website","database":"exre","verifiedDatabase":"exre"},"issuer":"https://issuer.example/","publicOrigin":"https://site.example","hydraAdminUrl":"http://hydra:4445/","clients":[],"cleanupTargets":[],"flowKeyFingerprint":"ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb","bootstrapKeyFingerprint":"a0fab1377f49a759b57f63318262ebe89fabfc990e8e93ceac2984561482b9d4"}'
++const oldServerFilledV2 = '{"version":2,"websiteTarget":{"host":"postgres","port":5432,"user":"website","database":"exre","verifiedDatabase":"exre"},"issuer":"https://issuer.example/","publicOrigin":"https://site.example","hydraAdminUrl":"http://hydra:4445/","clients":[{"clientId":"test-app","name":"Test App","redirectUri":"https://app.example/callback?exact=true","postLogoutRedirectUri":"https://app.example/out","scopes":["email","openid"],"clientSecretFingerprint":"7977fd45a6717b935cec23e7ec648eda6033ad70b4f1d27033a631df59b0184d","integrationKeyFingerprint":"52b6419d27bd7f547cee3b92f8c17a908b8a49601ecbec161e5030de1dfe9e0a","revocation":{"url":"https://app.example/revoke","keyFingerprint":"d91323a5298f3b9f814db29efaa271f24fbdccedfdd062491b8abc8e07b7fb69"}}],"cleanupTargets":[{"clientId":"old-app","hydraAdminUrl":"http://old-hydra:4445/","revocation":null}],"flowKeyFingerprint":"ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb","bootstrapKeyFingerprint":"a0fab1377f49a759b57f63318262ebe89fabfc990e8e93ceac2984561482b9d4"}'
++
++it('keeps Server binding bytes equal to the pre-change empty and approved-client v2 receipts', () => {
++  const app = { clientId: 'test-app', name: 'Test App', redirectUri: 'https://app.example/callback?exact=true',
++    postLogoutRedirectUri: 'https://app.example/out', scopes: ['openid', 'email'], clientSecret: 'existing non-hex secret',
++    integrationKey: 'c'.repeat(64), revocation: { url: 'https://app.example/revoke', key: 'd'.repeat(64) } }
++  const env = { IDENTITY_ENABLED: 'true', IDENTITY_MODE: 'deployment', SERVER_PUBLIC_WEB_BASE_URL: 'https://site.example',
++    HYDRA_PUBLIC_URL: 'https://issuer.example/', HYDRA_ADMIN_URL: 'http://hydra:4445/',
++    IDENTITY_FLOW_KEY: 'a'.repeat(64), IDENTITY_BOOTSTRAP_KEY: 'b'.repeat(64) }
++  for (const [extra, expected] of [[{}, oldServerEmptyV2], [
++    { IDENTITY_CLIENTS_JSON: JSON.stringify([app]), IDENTITY_OUTBOX_TARGETS_JSON: JSON.stringify({ 'old-app': { hydraAdminUrl: 'http://old-hydra:4445/' } }) }, oldServerFilledV2]] as const) {
++    const identity = parseIdentityConfig({ ...env, ...extra })
++    if (!identity.enabled) throw new Error('expected enabled')
++    const binding = createIdentityBinding({ websiteTarget: { host: 'postgres', port: 5432, user: 'website', database: 'exre', verifiedDatabase: 'exre' },
++      issuer: identity.issuer, publicOrigin: identity.publicOrigin, hydraAdminUrl: identity.hydraAdminUrl,
++      clients: identity.approvedClients, cleanupTargets: identity.cleanupTargets,
++      flowKey: identity.keys.flow, bootstrapKey: identity.keys.bootstrap })
++    expect(JSON.stringify(binding)).toBe(expected)
++    expect(JSON.stringify(binding)).not.toContain(app.clientSecret)
++  }
++})
++
+ it('pins every deployment route, capability and secret before outbox startup, without disclosing secrets', () => {
+   const directory = mkdtempSync(join(tmpdir(), 'website-deployment-')), file = join(directory, 'identity.json')
+   const hash = (value: string) => createHash('sha256').update(value).digest('hex')
+diff --git a/tests/auth/identity-config.test.ts b/tests/auth/identity-config.test.ts
+index 4067346..7257754 100644
+--- a/tests/auth/identity-config.test.ts
++++ b/tests/auth/identity-config.test.ts
+@@ -1,6 +1,9 @@
+ import { expect, it } from 'vitest'
+ import { IdentityConfigError, parseIdentityConfig } from '@server/src/modules/identity/config'
+-import { parseIdentityClients, parseIdentityDeliveryTargets } from '@workspace/common/node/identity-config'
++import { createIdentityBinding, parseIdentityClients, parseIdentityDeliveryTargets } from '@workspace/common/node/identity-config'
++import { readRuntimeConfiguration } from '../../scripts/runtime/settings.mjs'
++import { deploymentBinding } from '../../scripts/runtime/deployment.mjs'
++import { digest } from '../../scripts/runtime/local-config.mjs'
+ 
+ const local = { IDENTITY_ENABLED: 'true', IDENTITY_MODE: 'local',
+   SERVER_PUBLIC_WEB_BASE_URL: 'http://127.0.0.1:8080', HYDRA_PUBLIC_URL: 'http://127.0.0.1:4444/',
+@@ -42,6 +45,11 @@ it('requires an identical target when active and cleanup-only IDs overlap', () =
+     expect(() => parseIdentityConfig({ ...env, IDENTITY_OUTBOX_TARGETS_JSON: JSON.stringify({ 'test-app': target }) })).toThrow('IDENTITY_CONFIG_INVALID:IDENTITY_OUTBOX_TARGETS_JSON')
+   }
+ })
++it('reports local origin collisions through IDENTITY_MODE for each pair', () => {
++  for (const [left, right] of [['SERVER_PUBLIC_WEB_BASE_URL', 'HYDRA_PUBLIC_URL'],
++    ['SERVER_PUBLIC_WEB_BASE_URL', 'HYDRA_ADMIN_URL'], ['HYDRA_PUBLIC_URL', 'HYDRA_ADMIN_URL']] as const)
++    expect(() => parseIdentityConfig({ ...local, [left]: local[right] })).toThrow('IDENTITY_CONFIG_INVALID:IDENTITY_MODE')
++})
+ it.each([
+   ['IDENTITY_ENABLED', 'yes'], ['IDENTITY_MODE', undefined], ['IDENTITY_MODE', 'dev'], ['IDENTITY_MODE', 'full'],
+   ['IDENTITY_FLOW_KEY', 'private'], ['IDENTITY_BOOTSTRAP_KEY', undefined], ['HYDRA_ADMIN_URL', undefined],
+@@ -56,3 +64,39 @@ it('retains deployment HTTPS issuer boundaries and private HTTP Hydra admin rout
+   expect(parseIdentityConfig(deployment)).toMatchObject({ enabled: true, publicOrigin: 'https://site.example', issuer: 'https://issuer.example/' })
+   for (const variable of ['HYDRA_PUBLIC_URL', 'SERVER_PUBLIC_WEB_BASE_URL']) expect(() => parseIdentityConfig({ ...deployment, [variable]: 'http://insecure.example/' })).toThrow(IdentityConfigError)
+ })
++it.each(['local', 'deployment'] as const)('projects the same identity and binding through runtime and Server in %s mode', mode => {
++  const endpoint = mode === 'local' ? 'http://127.0.0.1:9000' : 'https://app.example'
++  const configured = { ...client, redirectUri: `${endpoint}/callback?exact=true`, postLogoutRedirectUri: `${endpoint}/signed-out`,
++    revocation: { ...client.revocation, url: `${endpoint}/internal/revoke` } }
++  const sourceValues = { RUNTIME_PROFILE: mode, AUTH_CODE_HMAC_KEY: 'a'.repeat(64), HYDRA_SYSTEM_SECRET: 'b'.repeat(64),
++    IDENTITY_BOOTSTRAP_KEY: 'c'.repeat(64), IDENTITY_FLOW_KEY: 'd'.repeat(64),
++    IDENTITY_CLIENTS_JSON: JSON.stringify([configured]),
++    IDENTITY_OUTBOX_TARGETS_JSON: JSON.stringify({ 'old-app': { hydraAdminUrl: mode === 'local' ? 'http://127.0.0.1:5555/' : 'http://old-hydra:4445/' } }),
++    DATABASE_HOST: 'postgres', DATABASE_NAME: 'exre', DATABASE_USER: 'website', DATABASE_PASSWORD: 'fixture',
++    HYDRA_DATABASE_HOST: 'postgres', HYDRA_DATABASE_NAME: 'hydra', HYDRA_DATABASE_USER: 'hydra', HYDRA_DATABASE_PASSWORD: 'fixture',
++    ...(mode === 'deployment' ? { PUBLIC_ORIGIN: 'https://site.example', HYDRA_PUBLIC_URL: 'https://issuer.example/',
++      HYDRA_ADMIN_URL: 'http://127.0.0.1:4445/', WEBSITE_INTERNAL_URL: 'http://127.0.0.1:8082/' } : {}) }
++  const state = readRuntimeConfiguration({ sourceValues, inherited: {} })
++  const server = parseIdentityConfig(state.environments.server)
++  if (!server.enabled) throw new Error('expected enabled')
++  expect(state.config.mode).toBe(server.mode)
++  expect(state.config.publicOrigin).toBe(server.publicOrigin)
++  expect(state.config.issuer).toBe(server.issuer)
++  expect(state.internal.hydra).toBe(server.hydraAdminUrl)
++  expect(state.secrets.IDENTITY_BOOTSTRAP_KEY).toBe(server.keys.bootstrap)
++  expect(state.secrets.IDENTITY_FLOW_KEY).toBe(server.keys.flow)
++  expect(state.clients).toEqual(server.approvedClients)
++  expect(state.cleanupTargets).toEqual(server.cleanupTargets)
++  expect(state.identity.integrationClients).toEqual(server.integrationClients)
++  expect(state.identity.deliveryTargets).toEqual(server.deliveryTargets)
++  const database = new URL(state.databases.DATABASE)
++  const serverBinding = createIdentityBinding({ websiteTarget: { host: database.hostname.toLowerCase(), port: Number(database.port || 5432),
++    user: decodeURIComponent(database.username), database: 'exre', verifiedDatabase: 'exre' },
++    issuer: server.issuer, publicOrigin: server.publicOrigin, hydraAdminUrl: server.hydraAdminUrl,
++    clients: server.approvedClients, cleanupTargets: server.cleanupTargets,
++    flowKey: server.keys.flow, bootstrapKey: server.keys.bootstrap })
++  expect(deploymentBinding(state)).toEqual(serverBinding)
++  expect(digest(deploymentBinding(state))).toBe(digest(serverBinding))
++  for (const key of ['IDENTITY_BOOTSTRAP_KEY', 'IDENTITY_FLOW_KEY', 'IDENTITY_CLIENTS_JSON', 'IDENTITY_OUTBOX_TARGETS_JSON'])
++    expect(state.environments.web[key]).toBeUndefined()
++})
+diff --git a/tests/runtime/native-health.test.ts b/tests/runtime/native-health.test.ts
+index f8a4738..7cba5a7 100644
+--- a/tests/runtime/native-health.test.ts
++++ b/tests/runtime/native-health.test.ts
+@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
+ import { join } from 'node:path'
+ import { afterEach, expect, test, vi } from 'vitest'
+ import { deploymentBinding } from '../../scripts/runtime/deployment.mjs'
++import { HydraClientCheckError } from '../../scripts/runtime/hydra-client.mjs'
+ import { verifyNativeHealth } from '../../scripts/runtime/native.mjs'
+ 
+ const probes = vi.hoisted(() => ({
+@@ -96,7 +97,7 @@ test('native health accepts zero configured clients while still checking Website
+ 
+ test('native health rejects a missing explicitly configured client before the Website check CLI', async () => {
+   const state = nativeState()
+-  probes.client.mockRejectedValueOnce(new Error('Hydra client initialization failed (HTTP 404)'))
++  probes.client.mockRejectedValueOnce(new HydraClientCheckError('CLIENT_MISSING'))
+   await expect(verifyNativeHealth(state)).rejects.toMatchObject({ code: 'HYDRA_CLIENT_MISSING' })
+   expect(probes.execute).not.toHaveBeenCalled()
+ })

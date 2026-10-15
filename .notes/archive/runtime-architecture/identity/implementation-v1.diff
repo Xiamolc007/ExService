@@ -1,0 +1,504 @@
+diff --git a/apps/server/src/modules/identity/config.ts b/apps/server/src/modules/identity/config.ts
+index e1cd08e..da25a44 100644
+--- a/apps/server/src/modules/identity/config.ts
++++ b/apps/server/src/modules/identity/config.ts
+@@ -1,36 +1,18 @@
+-import { IdentityConfigError, composeIdentityClients, parseIdentityClients, parseIdentityDeliveryTargets,
+-  parseIdentityKey, parseIdentityUrl, type IdentityClient, type IdentityDeliveryTarget, type IdentityMode } from '@workspace/common/node/identity-config'
++import { IdentityConfigError, parseIdentityConfiguration, type IdentityConfiguration } from '@workspace/common/node/identity-config'
+ export { IdentityConfigError, isIdentityClientId } from '@workspace/common/node/identity-config'
+ export type { IdentityClientId, IdentityDeliveryTarget, IdentityMode } from '@workspace/common/node/identity-config'
+ 
+-export interface IdentityConfig {
++export interface IdentityConfig extends IdentityConfiguration {
+   readonly enabled: true
+-  readonly mode: IdentityMode
+-  readonly issuer: string
+-  readonly publicOrigin: string
+-  readonly hydraAdminUrl: string
+-  readonly keys: Readonly<{ bootstrap: string; flow: string }>
+-  readonly approvedClients: Readonly<Record<string, Readonly<IdentityClient>>>
+-  readonly integrationClients: Readonly<Record<string, string>>
+-  readonly cleanupTargets: Readonly<Record<string, Readonly<IdentityDeliveryTarget>>>
+-  readonly deliveryTargets: Readonly<Record<string, Readonly<IdentityDeliveryTarget>>>
+ }
+ 
+ /** Independent identity configuration; no implicit application or legacy mode. */
+ export function parseIdentityConfig(env: NodeJS.ProcessEnv = process.env): IdentityConfig | Readonly<{ enabled: false }> {
+   if (env.IDENTITY_ENABLED !== undefined && !['true', 'false'].includes(env.IDENTITY_ENABLED)) throw new IdentityConfigError('IDENTITY_ENABLED')
+   if (env.IDENTITY_ENABLED !== 'true') return Object.freeze({ enabled: false })
+-  if (env.IDENTITY_MODE !== 'local' && env.IDENTITY_MODE !== 'deployment') throw new IdentityConfigError('IDENTITY_MODE')
+-  const mode = env.IDENTITY_MODE
+-  const publicOrigin = new URL(parseIdentityUrl(env.SERVER_PUBLIC_WEB_BASE_URL, mode, 'SERVER_PUBLIC_WEB_BASE_URL', { root: true })).origin
+-  const issuer = parseIdentityUrl(env.HYDRA_PUBLIC_URL, mode, 'HYDRA_PUBLIC_URL', { root: true })
+-  const hydraAdminUrl = parseIdentityUrl(env.HYDRA_ADMIN_URL, mode, 'HYDRA_ADMIN_URL', { root: true, admin: true })
+-  if (mode === 'local' && new Set([publicOrigin, new URL(issuer).origin, new URL(hydraAdminUrl).origin]).size !== 3) throw new IdentityConfigError('IDENTITY_MODE')
+-  const keys = Object.freeze({ bootstrap: parseIdentityKey(env.IDENTITY_BOOTSTRAP_KEY, 'IDENTITY_BOOTSTRAP_KEY'),
+-    flow: parseIdentityKey(env.IDENTITY_FLOW_KEY, 'IDENTITY_FLOW_KEY') })
+-  const approvedClients = parseIdentityClients(env.IDENTITY_CLIENTS_JSON, mode)
+-  const cleanupTargets = parseIdentityDeliveryTargets(env.IDENTITY_OUTBOX_TARGETS_JSON, mode)
+-  const { integrationClients, deliveryTargets } = composeIdentityClients(approvedClients, cleanupTargets, hydraAdminUrl)
+-  return Object.freeze({ enabled: true, mode, issuer, publicOrigin, hydraAdminUrl, keys, approvedClients,
+-    integrationClients, cleanupTargets, deliveryTargets })
++  const identity = parseIdentityConfiguration({ mode: env.IDENTITY_MODE, publicOrigin: env.SERVER_PUBLIC_WEB_BASE_URL,
++    publicOriginVariable: 'SERVER_PUBLIC_WEB_BASE_URL', issuer: env.HYDRA_PUBLIC_URL, hydraAdminUrl: env.HYDRA_ADMIN_URL,
++    bootstrapKey: env.IDENTITY_BOOTSTRAP_KEY, flowKey: env.IDENTITY_FLOW_KEY,
++    clientsJson: env.IDENTITY_CLIENTS_JSON, cleanupTargetsJson: env.IDENTITY_OUTBOX_TARGETS_JSON })
++  return Object.freeze({ enabled: true, ...identity })
+ }
+diff --git a/packages/common/src/node/identity-config/index.d.mts b/packages/common/src/node/identity-config/index.d.mts
+index dd4216a..9edea96 100644
+--- a/packages/common/src/node/identity-config/index.d.mts
++++ b/packages/common/src/node/identity-config/index.d.mts
+@@ -31,6 +31,29 @@ export function composeIdentityClients(clients: Readonly<Record<string, Readonly
+     integrationClients: Readonly<Record<string, string>>
+     deliveryTargets: Readonly<Record<string, Readonly<IdentityDeliveryTarget>>>
+   }>
++export interface IdentityConfigurationInput {
++  readonly mode: unknown
++  readonly publicOrigin: unknown
++  readonly publicOriginVariable: 'SERVER_PUBLIC_WEB_BASE_URL' | 'PUBLIC_ORIGIN'
++  readonly issuer: unknown
++  readonly hydraAdminUrl: unknown
++  readonly bootstrapKey: unknown
++  readonly flowKey: unknown
++  readonly clientsJson?: string
++  readonly cleanupTargetsJson?: string
++}
++export interface IdentityConfiguration {
++  readonly mode: IdentityMode
++  readonly publicOrigin: string
++  readonly issuer: string
++  readonly hydraAdminUrl: string
++  readonly keys: Readonly<{ bootstrap: string; flow: string }>
++  readonly approvedClients: Readonly<Record<string, Readonly<IdentityClient>>>
++  readonly cleanupTargets: Readonly<Record<string, Readonly<IdentityDeliveryTarget>>>
++  readonly integrationClients: Readonly<Record<string, string>>
++  readonly deliveryTargets: Readonly<Record<string, Readonly<IdentityDeliveryTarget>>>
++}
++export function parseIdentityConfiguration(input: IdentityConfigurationInput): Readonly<IdentityConfiguration>
+ export interface IdentityWebsiteTarget {
+   readonly host: string
+   readonly port: number
+diff --git a/packages/common/src/node/identity-config/index.mjs b/packages/common/src/node/identity-config/index.mjs
+index 1d9e267..9692242 100644
+--- a/packages/common/src/node/identity-config/index.mjs
++++ b/packages/common/src/node/identity-config/index.mjs
+@@ -234,6 +234,31 @@ export function composeIdentityClients(clients, cleanupTargets, hydraAdminUrl) {
+   });
+ }
+ 
++/** Parse one explicit identity configuration without reading its source or runtime state. */
++export function parseIdentityConfiguration(input) {
++  if (!record(input)) fail('IDENTITY_MODE');
++  const { mode, publicOrigin, publicOriginVariable, issuer, hydraAdminUrl,
++    bootstrapKey, flowKey, clientsJson, cleanupTargetsJson } = input;
++  modeCheck(mode);
++  if (!['SERVER_PUBLIC_WEB_BASE_URL', 'PUBLIC_ORIGIN'].includes(publicOriginVariable))
++    fail('IDENTITY_MODE');
++  const parsedPublicOrigin = new URL(parseIdentityUrl(publicOrigin, mode, publicOriginVariable, { root: true })).origin;
++  const parsedIssuer = parseIdentityUrl(issuer, mode, 'HYDRA_PUBLIC_URL', { root: true });
++  const parsedHydraAdminUrl = parseIdentityUrl(hydraAdminUrl, mode, 'HYDRA_ADMIN_URL', { root: true, admin: true });
++  if (mode === 'local' && new Set([parsedPublicOrigin, new URL(parsedIssuer).origin,
++    new URL(parsedHydraAdminUrl).origin]).size !== 3) fail('IDENTITY_MODE');
++  const keys = Object.freeze({
++    bootstrap: parseIdentityKey(bootstrapKey, 'IDENTITY_BOOTSTRAP_KEY'),
++    flow: parseIdentityKey(flowKey, 'IDENTITY_FLOW_KEY'),
++  });
++  const approvedClients = parseIdentityClients(clientsJson, mode);
++  const cleanupTargets = parseIdentityDeliveryTargets(cleanupTargetsJson, mode);
++  const { integrationClients, deliveryTargets } = composeIdentityClients(approvedClients, cleanupTargets, parsedHydraAdminUrl);
++  return Object.freeze({ mode, publicOrigin: parsedPublicOrigin, issuer: parsedIssuer,
++    hydraAdminUrl: parsedHydraAdminUrl, keys, approvedClients, cleanupTargets,
++    integrationClients, deliveryTargets });
++}
++
+ /** Project already-validated configuration into the shared, secret-free v2 receipt. */
+ export function createIdentityBinding({
+   websiteTarget,
+diff --git a/packages/common/test/config.test.mjs b/packages/common/test/config.test.mjs
+index d28368c..a891504 100644
+--- a/packages/common/test/config.test.mjs
++++ b/packages/common/test/config.test.mjs
+@@ -5,6 +5,58 @@ const client = { clientId: 'test-app', name: 'Test App', redirectUri: 'http://12
+   postLogoutRedirectUri: 'http://127.0.0.1:9000/signed-out', scopes: ['openid', 'profile', 'email'], clientSecret: 'non-hex existing secret',
+   integrationKey: 'a'.repeat(64), revocation: { url: 'http://127.0.0.1:9000/revoke/session', key: 'b'.repeat(64) } }
+ const parse = value => parseIdentityClients(JSON.stringify(value), 'local')
++test('explicit identity configuration parses and freezes an empty local allowlist', async () => {
++  const module = await import('@workspace/common/node/identity-config')
++  assert.equal(typeof module.parseIdentityConfiguration, 'function')
++  const configuration = module.parseIdentityConfiguration({ mode: 'local', publicOrigin: 'http://127.0.0.1:8080',
++    publicOriginVariable: 'SERVER_PUBLIC_WEB_BASE_URL', issuer: 'http://127.0.0.1:4444/',
++    hydraAdminUrl: 'http://127.0.0.1:4445/', bootstrapKey: 'a'.repeat(64), flowKey: 'b'.repeat(64) })
++  assert.deepEqual(configuration.approvedClients, {})
++  assert.deepEqual(configuration.cleanupTargets, {})
++  assert.deepEqual(configuration.integrationClients, {})
++  assert.deepEqual(configuration.deliveryTargets, {})
++  assert.equal(configuration.publicOrigin, 'http://127.0.0.1:8080')
++  for (const value of [configuration, configuration.keys, configuration.approvedClients,
++    configuration.cleanupTargets, configuration.integrationClients, configuration.deliveryTargets]) assert.ok(Object.isFrozen(value))
++})
++test('explicit identity configuration rejects invalid input shape with a fixed diagnostic', async () => {
++  const { parseIdentityConfiguration } = await import('@workspace/common/node/identity-config')
++  for (const input of [null, undefined, []]) assert.throws(() => parseIdentityConfiguration(input), error => {
++    assert.ok(error instanceof IdentityConfigError)
++    assert.equal(error.message, 'IDENTITY_CONFIG_INVALID:IDENTITY_MODE')
++    return true
++  })
++})
++test('explicit identity configuration keeps historical delivery routes separate from client permissions', async () => {
++  const { parseIdentityConfiguration } = await import('@workspace/common/node/identity-config')
++  const values = { mode: 'local', publicOrigin: 'http://127.0.0.1:8080/', publicOriginVariable: 'PUBLIC_ORIGIN',
++    issuer: 'http://127.0.0.1:4444/', hydraAdminUrl: 'http://127.0.0.1:4445/',
++    bootstrapKey: 'c'.repeat(64), flowKey: 'd'.repeat(64), clientsJson: JSON.stringify([client]),
++    cleanupTargetsJson: JSON.stringify({ 'old-app': { hydraAdminUrl: 'http://127.0.0.1:5555/' } }) }
++  const parsed = parseIdentityConfiguration(values)
++  assert.equal(parsed.publicOrigin, 'http://127.0.0.1:8080')
++  assert.deepEqual(Object.keys(parsed.approvedClients), ['test-app'])
++  assert.deepEqual(parsed.integrationClients, { 'test-app': client.integrationKey })
++  assert.deepEqual(Object.keys(parsed.deliveryTargets), ['old-app', 'test-app'])
++  assert.equal(parsed.approvedClients['old-app'], undefined)
++  assert.equal(parsed.integrationClients['old-app'], undefined)
++  for (const value of [parsed.approvedClients['test-app'], parsed.approvedClients['test-app'].scopes,
++    parsed.approvedClients['test-app'].revocation, parsed.cleanupTargets['old-app'],
++    parsed.deliveryTargets['test-app'], parsed.deliveryTargets['test-app'].revocation]) assert.ok(Object.isFrozen(value))
++  const same = { hydraAdminUrl: values.hydraAdminUrl, revocation: client.revocation }
++  assert.deepEqual(parseIdentityConfiguration({ ...values, cleanupTargetsJson: JSON.stringify({ 'test-app': same }) }).deliveryTargets['test-app'], same)
++  for (const conflicting of [{ hydraAdminUrl: values.hydraAdminUrl },
++    { ...same, revocation: { ...client.revocation, key: 'e'.repeat(64) } }])
++    assert.throws(() => parseIdentityConfiguration({ ...values, cleanupTargetsJson: JSON.stringify({ 'test-app': conflicting }) }),
++      { message: 'IDENTITY_CONFIG_INVALID:IDENTITY_OUTBOX_TARGETS_JSON' })
++  assert.throws(() => parseIdentityConfiguration({ ...values, hydraAdminUrl: values.issuer }),
++    { message: 'IDENTITY_CONFIG_INVALID:IDENTITY_MODE' })
++  assert.throws(() => parseIdentityConfiguration({ ...values, publicOriginVariable: 'secret-value' }), error => {
++    assert.equal(error.message, 'IDENTITY_CONFIG_INVALID:IDENTITY_MODE')
++    assert.doesNotMatch(error.message, /secret-value/)
++    return true
++  })
++})
+ test('defaults are empty, clients immutable, query exact and cleanup does not grant authorization', () => {
+   assert.deepEqual(parseIdentityClients(undefined, 'local'), {})
+   assert.deepEqual(parseIdentityDeliveryTargets(undefined, 'local'), {})
+diff --git a/packages/common/test/entry.test.mjs b/packages/common/test/entry.test.mjs
+index 89d3102..55c1873 100644
+--- a/packages/common/test/entry.test.mjs
++++ b/packages/common/test/entry.test.mjs
+@@ -18,6 +18,7 @@ function importWithConditions(specifier, conditions = []) {
+ test('Node exposes only the identity configuration subpath', async () => {
+   const imported = await import(publicEntry)
+   assert.equal(typeof imported.parseIdentityClients, 'function')
++  assert.equal(typeof imported.parseIdentityConfiguration, 'function')
+   assert.deepEqual(imported.parseIdentityClients(undefined, 'local'), {})
+   for (const specifier of ['@workspace/common', '@workspace/common/src/node/identity-config/index.mjs']) {
+     const result = importWithConditions(specifier)
+@@ -49,7 +50,7 @@ test('Vite browser build rejects the Node identity configuration subpath', async
+     })
+     await build(settings(control))
+     const entry = join(source, 'entry.js')
+-    await writeFile(entry, `import { parseIdentityClients } from '${publicEntry}'\nconsole.log(parseIdentityClients)\n`)
++    await writeFile(entry, `import { parseIdentityConfiguration } from '${publicEntry}'\nconsole.log(parseIdentityConfiguration)\n`)
+     await assert.rejects(build(settings(entry)), error => {
+       assert.match(String(error), /"\.\/node\/identity-config" is not exported under the conditions \[[^\]]*"browser"/)
+       assert.match(String(error), /packages[\\/]common/)
+diff --git a/scripts/runtime/deployment.test.mjs b/scripts/runtime/deployment.test.mjs
+index bfa1757..0e8cefb 100644
+--- a/scripts/runtime/deployment.test.mjs
++++ b/scripts/runtime/deployment.test.mjs
+@@ -3,7 +3,30 @@ import assert from 'node:assert/strict'
+ import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
+ import { tmpdir } from 'node:os'
+ import { join } from 'node:path'
+-import { validateDeployment, convertLegacyBinding } from './deployment.mjs'
++import { validateDeployment, convertLegacyBinding, deploymentBinding } from './deployment.mjs'
++import { readRuntimeConfiguration } from './settings.mjs'
++
++const oldEmptyV2 = '{"version":2,"websiteTarget":{"host":"postgres","port":5432,"database":"exre","user":"website","verifiedDatabase":"exre"},"issuer":"https://issuer.example/","publicOrigin":"https://site.example","hydraAdminUrl":"http://hydra:4445/","clients":[],"cleanupTargets":[],"flowKeyFingerprint":"ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb","bootstrapKeyFingerprint":"a0fab1377f49a759b57f63318262ebe89fabfc990e8e93ceac2984561482b9d4"}'
++const oldFilledV2 = '{"version":2,"websiteTarget":{"host":"postgres","port":5432,"database":"exre","user":"website","verifiedDatabase":"exre"},"issuer":"https://issuer.example/","publicOrigin":"https://site.example","hydraAdminUrl":"http://hydra:4445/","clients":[{"clientId":"test-app","name":"Test App","redirectUri":"https://app.example/callback?exact=true","postLogoutRedirectUri":"https://app.example/out","scopes":["email","openid"],"clientSecretFingerprint":"7977fd45a6717b935cec23e7ec648eda6033ad70b4f1d27033a631df59b0184d","integrationKeyFingerprint":"52b6419d27bd7f547cee3b92f8c17a908b8a49601ecbec161e5030de1dfe9e0a","revocation":{"url":"https://app.example/revoke","keyFingerprint":"d91323a5298f3b9f814db29efaa271f24fbdccedfdd062491b8abc8e07b7fb69"}}],"cleanupTargets":[{"clientId":"old-app","hydraAdminUrl":"http://old-hydra:4445/","revocation":null}],"flowKeyFingerprint":"ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb","bootstrapKeyFingerprint":"a0fab1377f49a759b57f63318262ebe89fabfc990e8e93ceac2984561482b9d4"}'
++
++test('runtime binding matches fixed pre-change v2 bytes with empty and approved clients', () => {
++  const app = { clientId: 'test-app', name: 'Test App', redirectUri: 'https://app.example/callback?exact=true',
++    postLogoutRedirectUri: 'https://app.example/out', scopes: ['openid', 'email'], clientSecret: 'existing non-hex secret',
++    integrationKey: 'c'.repeat(64), revocation: { url: 'https://app.example/revoke', key: 'd'.repeat(64) } }
++  const values = { RUNTIME_PROFILE: 'deployment', PUBLIC_ORIGIN: 'https://site.example', HYDRA_PUBLIC_URL: 'https://issuer.example/',
++    HYDRA_ADMIN_URL: 'http://hydra:4445/', WEBSITE_INTERNAL_URL: 'http://127.0.0.1:8082/',
++    AUTH_CODE_HMAC_KEY: 'e'.repeat(64), HYDRA_SYSTEM_SECRET: 'f'.repeat(64),
++    IDENTITY_FLOW_KEY: 'a'.repeat(64), IDENTITY_BOOTSTRAP_KEY: 'b'.repeat(64),
++    DATABASE_HOST: 'postgres', DATABASE_NAME: 'exre', DATABASE_USER: 'website', DATABASE_PASSWORD: 'fixture',
++    HYDRA_DATABASE_HOST: 'postgres', HYDRA_DATABASE_NAME: 'hydra', HYDRA_DATABASE_USER: 'hydra', HYDRA_DATABASE_PASSWORD: 'fixture' }
++  for (const [extra, expected] of [[{}, oldEmptyV2], [
++    { IDENTITY_CLIENTS_JSON: JSON.stringify([app]), IDENTITY_OUTBOX_TARGETS_JSON: JSON.stringify({ 'old-app': { hydraAdminUrl: 'http://old-hydra:4445/' } }) }, oldFilledV2]]) {
++    const state = readRuntimeConfiguration({ sourceValues: { ...values, ...extra }, inherited: {} })
++    const receipt = JSON.stringify(deploymentBinding(state))
++    assert.equal(receipt, expected)
++    assert.ok(!receipt.includes(app.clientSecret))
++  }
++})
+ 
+ function fixture(t, pending = false) {
+   const workspace = mkdtempSync(join(tmpdir(), 'exwebsite-deployment-'))
+diff --git a/scripts/runtime/settings.mjs b/scripts/runtime/settings.mjs
+index e6d55b3..387cf45 100644
+--- a/scripts/runtime/settings.mjs
++++ b/scripts/runtime/settings.mjs
+@@ -4,7 +4,7 @@ import { parseEnv } from 'node:util'
+ import { root } from './shared.mjs'
+ import { RuntimeError } from './output.mjs'
+ import { digest } from './local-config.mjs'
+-import { parseIdentityClients, parseIdentityDeliveryTargets, composeIdentityClients, parseIdentityKey, parseIdentityUrl } from '@workspace/common/node/identity-config'
++import { IdentityConfigError, parseIdentityConfiguration, parseIdentityKey } from '@workspace/common/node/identity-config'
+ 
+ export const defaults = Object.freeze({ public: 8080, web: 8081, api: 8082, postgres: 5432, hydraPublic: 4444, hydraAdmin: 4445 })
+ export const portKeys = Object.freeze({ public: 'LOCAL_PUBLIC_PORT', web: 'LOCAL_WEB_PORT', api: 'LOCAL_API_PORT',
+@@ -92,7 +92,10 @@ export function readRuntimeConfiguration({ workspace = root, inherited = process
+     throw new RuntimeError('LAYOUT_CONFLICT', { keys: ['PUBLIC_ORIGIN', 'HYDRA_PUBLIC_URL'] })
+   for (const key of cryptoKeys) {
+     const value = required(values[key], key)
+-    if (!/^[0-9a-f]{64}$/i.test(value)) throw new RuntimeError('CRYPTO_KEY_INVALID', { keys: [key] })
++    if (key === 'IDENTITY_BOOTSTRAP_KEY' || key === 'IDENTITY_FLOW_KEY') {
++      try { parseIdentityKey(value, key) }
++      catch { throw new RuntimeError('CRYPTO_KEY_INVALID', { keys: [key] }) }
++    } else if (!/^[0-9a-f]{64}$/i.test(value)) throw new RuntimeError('CRYPTO_KEY_INVALID', { keys: [key] })
+   }
+   for (const key of ['STORAGE_UPLOAD_HMAC_KEY', 'SERVER_NOTIFICATION_TOKEN_KEY']) if (values[key] !== undefined && !/^[0-9a-f]{64}$/i.test(values[key]))
+     throw new RuntimeError('CRYPTO_KEY_INVALID', { keys: [key] })
+@@ -112,17 +115,17 @@ export function readRuntimeConfiguration({ workspace = root, inherited = process
+     }
+   }
+   const target = new URL(databases.DATABASE)
+-  let clients, cleanupTargets, identity
++  let parsedIdentity
+   try {
+-    parseIdentityUrl(publicOrigin, values.RUNTIME_PROFILE, 'PUBLIC_ORIGIN', { root: true })
+-    parseIdentityUrl(issuer, values.RUNTIME_PROFILE, 'HYDRA_PUBLIC_URL', { root: true })
+-    parseIdentityUrl(internal.hydra, values.RUNTIME_PROFILE, 'HYDRA_ADMIN_URL', { root: true, admin: true })
+-    clients = parseIdentityClients(values.IDENTITY_CLIENTS_JSON, values.RUNTIME_PROFILE)
+-    cleanupTargets = parseIdentityDeliveryTargets(values.IDENTITY_OUTBOX_TARGETS_JSON, values.RUNTIME_PROFILE)
+-    identity = composeIdentityClients(clients, cleanupTargets, internal.hydra)
+-    parseIdentityKey(values.IDENTITY_FLOW_KEY, 'IDENTITY_FLOW_KEY'); parseIdentityKey(values.IDENTITY_BOOTSTRAP_KEY, 'IDENTITY_BOOTSTRAP_KEY')
+-  } catch (error) { throw new RuntimeError('IDENTITY_CONFIG_INVALID', { keys: [error.variable ?? 'IDENTITY_CLIENTS_JSON'] }) }
+-  const config = { version: 2, mode: values.RUNTIME_PROFILE, project: 'exwebsite-runtime', ports, publicOrigin, issuer,
++    parsedIdentity = parseIdentityConfiguration({ mode: values.RUNTIME_PROFILE, publicOrigin, publicOriginVariable: 'PUBLIC_ORIGIN',
++      issuer, hydraAdminUrl: internal.hydra, bootstrapKey: values.IDENTITY_BOOTSTRAP_KEY, flowKey: values.IDENTITY_FLOW_KEY,
++      clientsJson: values.IDENTITY_CLIENTS_JSON, cleanupTargetsJson: values.IDENTITY_OUTBOX_TARGETS_JSON })
++  } catch (error) { throw new RuntimeError('IDENTITY_CONFIG_INVALID', { keys: [error instanceof IdentityConfigError ? error.variable : 'IDENTITY_CLIENTS_JSON'] }) }
++  const { approvedClients: clients, cleanupTargets, integrationClients, deliveryTargets } = parsedIdentity
++  const identity = Object.freeze({ integrationClients, deliveryTargets })
++  internal.hydra = parsedIdentity.hydraAdminUrl
++  const config = { version: 2, mode: parsedIdentity.mode, project: 'exwebsite-runtime', ports,
++    publicOrigin: parsedIdentity.publicOrigin, issuer: parsedIdentity.issuer,
+     websiteTarget: { host: target.hostname, port: Number(target.port), database: 'exre', user: decodeURIComponent(target.username), verifiedDatabase: 'exre' } }
+   const state = { workspace, directory: join(workspace, '.local/runtime'), profile: values.RUNTIME_PROFILE, values,
+     databases, internal, config, clients, cleanupTargets, identity, secrets: pick(values, cryptoKeys),
+diff --git a/scripts/runtime/settings.test.mjs b/scripts/runtime/settings.test.mjs
+index 93568ca..694c678 100644
+--- a/scripts/runtime/settings.test.mjs
++++ b/scripts/runtime/settings.test.mjs
+@@ -7,8 +7,9 @@ import { join } from 'node:path'
+ import { createServer } from 'node:net'
+ import { readRuntimeConfiguration, databaseUrl, defaults } from './settings.mjs'
+ import { convertValues, convertConfiguration, serializeEnvironment, verifyOriginalTargets } from './convert.mjs'
+-import { redact, diagnostic, reporter, runtimeFailure } from './output.mjs'
++import { redact, diagnostic, reporter, runtimeFailure, RuntimeError } from './output.mjs'
+ import { verifyApplications, verifyRuntimeHydraClient } from './applications.mjs'
++import { HydraClientCheckError } from './hydra-client.mjs'
+ import { composeEnvironment, Services } from './services.mjs'
+ import { root } from './shared.mjs'
+ import { NativeApplications, verifyNativeClient } from './native.mjs'
+@@ -95,18 +96,58 @@ test('startup diagnostics name the failed check and corrective step without refe
+ 
+ test('Hydra startup separates missing clients, configuration conflicts and network failures', async t => {
+   const state = fixture(t).read()
+-  for (const [error, code] of [
+-    [new Error('Hydra client initialization failed (HTTP 404)'), 'HYDRA_CLIENT_MISSING'],
+-    [new Error('Existing Hydra client configuration conflict; explicit operator repair is required'), 'HYDRA_CLIENT_CONFLICT'],
+-    [new Error('Existing Hydra client secret conflict or protocol service unavailable'), 'HYDRA_CLIENT_CONFLICT'],
+-    [new Error('Invalid Hydra bootstrap configuration'), 'HYDRA_CONFIG_INVALID'],
+-    [Object.assign(new Error('private-token'), { cause: { code: 'ECONNREFUSED' } }), 'ECONNREFUSED (连接被拒绝)'],
++  for (const [kind, code] of [
++    ['CLIENT_MISSING', 'HYDRA_CLIENT_MISSING'], ['CLIENT_CONFLICT', 'HYDRA_CLIENT_CONFLICT'],
++    ['CREDENTIAL_PROBE_FAILED', 'HYDRA_CLIENT_CONFLICT'], ['INVALID_CONFIG', 'HYDRA_CONFIG_INVALID'],
++    ['CHECK_FAILED', 'HYDRA_CLIENT_CHECK_FAILED'],
++  ]) {
++    const error = new HydraClientCheckError(kind)
++    Object.defineProperty(error, 'message', { value: 'changed Bearer private-token' })
++    await assert.rejects(verifyRuntimeHydraClient(state, async () => { throw error }, { ready: async () => {} }), failure => {
++      assert.equal(failure.code, code)
++      assert.match(failure.message, /Hydra/)
++      assert.doesNotMatch(failure.message, /private-token|docs\/runtime\.md/)
++      return true
++    })
++  }
++  for (const error of [
++    { kind: 'CLIENT_MISSING', message: 'Hydra client initialization failed (HTTP 404)' },
++    { kind: 'CLIENT_MISSING', cause: { code: 'ECONNREFUSED' } },
++    Object.assign(new Error('private-token'), { kind: 'FUTURE_KIND' }),
++    Object.assign(new Error('private-token'), { code: 'UNSAFE_PRIVATE_CODE' }),
+   ]) await assert.rejects(verifyRuntimeHydraClient(state, async () => { throw error }, { ready: async () => {} }), failure => {
+-    assert.equal(failure.code, code)
+-    assert.match(failure.message, /Hydra/)
+-    assert.doesNotMatch(failure.message, /private-token|docs\/runtime\.md/)
++    assert.equal(failure.code, 'HYDRA_CLIENT_CHECK_FAILED')
++    assert.doesNotMatch(failure.message, /private-token|UNSAFE_PRIVATE_CODE/)
+     return true
+   })
++  for (const error of [new HydraClientCheckError('NETWORK_FAILURE', { cause: { code: 'ECONNREFUSED', message: 'Bearer private-token' } }),
++    Object.assign(new Error('private-token'), { cause: { code: 'ECONNREFUSED' } })]) {
++    await assert.rejects(verifyRuntimeHydraClient(state, async () => { throw error }, { ready: async () => {} }), failure => {
++      assert.equal(failure.code, 'ECONNREFUSED (连接被拒绝)')
++      assert.doesNotMatch(failure.message, /private-token/)
++      return true
++    })
++  }
++  for (const cause of [{ code: 'UNSAFE_PRIVATE_CODE', message: 'Bearer private-token' },
++    { cause: { code: 'UNSAFE_PRIVATE_CODE' }, errors: [{ code: 'UNSAFE_PRIVATE_CODE' }] },
++    new Error('postgres://private:credential@host/exre')]) {
++    await assert.rejects(verifyRuntimeHydraClient(state, async () => {
++      throw new HydraClientCheckError('NETWORK_FAILURE', { cause })
++    }, { ready: async () => {} }), failure => {
++      assert.equal(failure.code, 'HYDRA_CLIENT_CHECK_FAILED')
++      assert.doesNotMatch(failure.message, /private-token|credential|UNSAFE_PRIVATE_CODE/)
++      return true
++    })
++  }
++  const terminal = [], persisted = []
++  const unsafe = new HydraClientCheckError('NETWORK_FAILURE', { cause: new Error('Bearer private-token response-secret http://secret.invalid/') })
++  await assert.rejects(verifyRuntimeHydraClient(state, async () => { throw unsafe }, { ready: async () => {} }), failure => {
++    reporter({ write: line => terminal.push(line), persist: line => persisted.push(line) }).failure(failure)
++    for (const line of [...terminal, ...persisted]) assert.doesNotMatch(line, /private-token|response-secret|secret\.invalid/)
++    return true
++  })
++  await assert.rejects(verifyRuntimeHydraClient(state, async () => {}, { ready: async () => { throw new RuntimeError('DEPLOYMENT_HYDRA_NOT_READY') } }),
++    { code: 'DEPLOYMENT_HYDRA_NOT_READY' })
+   const calls = []
+   await verifyApplications(state, { tools: { node: process.execPath }, verifySchemas: async () => {},
+     execute: async (spec, options) => { calls.push(spec.name); options.onLog(spec.name, '检查完成') }, verifyClient: async () => {}, ready: async () => {}, onLog: () => {} })
+@@ -166,6 +207,24 @@ test('invalid profile, old sources, duplicate ports, names and cryptographic key
+   }
+ })
+ 
++test('identity key diagnostics retain missing and format priority before client parsing', t => {
++  const f = fixture(t)
++  for (const key of ['IDENTITY_BOOTSTRAP_KEY', 'IDENTITY_FLOW_KEY']) {
++    for (const [value, code] of [['', 'CONFIG_REQUIRED'], ['not-a-key', 'CRYPTO_KEY_INVALID']]) {
++      assert.throws(() => f.read({ [key]: value, IDENTITY_CLIENTS_JSON: 'private malformed JSON' }), error => {
++        assert.equal(error.code, code)
++        assert.deepEqual(error.keys, [key])
++        assert.doesNotMatch(error.message, /private malformed JSON|not-a-key/)
++        return true
++      })
++    }
++  }
++  const state = f.read({ IDENTITY_CLIENTS_JSON: '[]' })
++  assert.deepEqual(state.clients, {})
++  assert.equal(state.environments.server.IDENTITY_CLIENTS_JSON, '[]')
++  assert.equal(state.environments.web.IDENTITY_CLIENTS_JSON, undefined)
++})
++
+ test('deployment uses independently configured database hosts and explicit application ports', t => {
+   const f = fixture(t, 'deployment')
+   const state = f.read({ OUTLINE_DATABASE_HOST: 'outline-db.example', HYDRA_DATABASE_HOST: 'hydra-db.example', SERVER_PORT: '18080', OUTLINE_PORT: '13000',
+diff --git a/tests/auth/deployment-binding.test.ts b/tests/auth/deployment-binding.test.ts
+index 8e03250..6a437a1 100644
+--- a/tests/auth/deployment-binding.test.ts
++++ b/tests/auth/deployment-binding.test.ts
+@@ -3,9 +3,33 @@ import { tmpdir } from 'node:os'
+ import { join } from 'node:path'
+ import { createHash } from 'node:crypto'
+ import { expect, it } from 'vitest'
++import { createIdentityBinding } from '@workspace/common/node/identity-config'
+ import { parseIdentityConfig } from '@server/src/modules/identity/config'
+ import { assertDeploymentBinding } from '@server/src/modules/identity/deployment-binding'
+ 
++const oldServerEmptyV2 = '{"version":2,"websiteTarget":{"host":"postgres","port":5432,"user":"website","database":"exre","verifiedDatabase":"exre"},"issuer":"https://issuer.example/","publicOrigin":"https://site.example","hydraAdminUrl":"http://hydra:4445/","clients":[],"cleanupTargets":[],"flowKeyFingerprint":"ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb","bootstrapKeyFingerprint":"a0fab1377f49a759b57f63318262ebe89fabfc990e8e93ceac2984561482b9d4"}'
++const oldServerFilledV2 = '{"version":2,"websiteTarget":{"host":"postgres","port":5432,"user":"website","database":"exre","verifiedDatabase":"exre"},"issuer":"https://issuer.example/","publicOrigin":"https://site.example","hydraAdminUrl":"http://hydra:4445/","clients":[{"clientId":"test-app","name":"Test App","redirectUri":"https://app.example/callback?exact=true","postLogoutRedirectUri":"https://app.example/out","scopes":["email","openid"],"clientSecretFingerprint":"7977fd45a6717b935cec23e7ec648eda6033ad70b4f1d27033a631df59b0184d","integrationKeyFingerprint":"52b6419d27bd7f547cee3b92f8c17a908b8a49601ecbec161e5030de1dfe9e0a","revocation":{"url":"https://app.example/revoke","keyFingerprint":"d91323a5298f3b9f814db29efaa271f24fbdccedfdd062491b8abc8e07b7fb69"}}],"cleanupTargets":[{"clientId":"old-app","hydraAdminUrl":"http://old-hydra:4445/","revocation":null}],"flowKeyFingerprint":"ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb","bootstrapKeyFingerprint":"a0fab1377f49a759b57f63318262ebe89fabfc990e8e93ceac2984561482b9d4"}'
++
++it('keeps Server binding bytes equal to the pre-change empty and approved-client v2 receipts', () => {
++  const app = { clientId: 'test-app', name: 'Test App', redirectUri: 'https://app.example/callback?exact=true',
++    postLogoutRedirectUri: 'https://app.example/out', scopes: ['openid', 'email'], clientSecret: 'existing non-hex secret',
++    integrationKey: 'c'.repeat(64), revocation: { url: 'https://app.example/revoke', key: 'd'.repeat(64) } }
++  const env = { IDENTITY_ENABLED: 'true', IDENTITY_MODE: 'deployment', SERVER_PUBLIC_WEB_BASE_URL: 'https://site.example',
++    HYDRA_PUBLIC_URL: 'https://issuer.example/', HYDRA_ADMIN_URL: 'http://hydra:4445/',
++    IDENTITY_FLOW_KEY: 'a'.repeat(64), IDENTITY_BOOTSTRAP_KEY: 'b'.repeat(64) }
++  for (const [extra, expected] of [[{}, oldServerEmptyV2], [
++    { IDENTITY_CLIENTS_JSON: JSON.stringify([app]), IDENTITY_OUTBOX_TARGETS_JSON: JSON.stringify({ 'old-app': { hydraAdminUrl: 'http://old-hydra:4445/' } }) }, oldServerFilledV2]] as const) {
++    const identity = parseIdentityConfig({ ...env, ...extra })
++    if (!identity.enabled) throw new Error('expected enabled')
++    const binding = createIdentityBinding({ websiteTarget: { host: 'postgres', port: 5432, user: 'website', database: 'exre', verifiedDatabase: 'exre' },
++      issuer: identity.issuer, publicOrigin: identity.publicOrigin, hydraAdminUrl: identity.hydraAdminUrl,
++      clients: identity.approvedClients, cleanupTargets: identity.cleanupTargets,
++      flowKey: identity.keys.flow, bootstrapKey: identity.keys.bootstrap })
++    expect(JSON.stringify(binding)).toBe(expected)
++    expect(JSON.stringify(binding)).not.toContain(app.clientSecret)
++  }
++})
++
+ it('pins every deployment route, capability and secret before outbox startup, without disclosing secrets', () => {
+   const directory = mkdtempSync(join(tmpdir(), 'website-deployment-')), file = join(directory, 'identity.json')
+   const hash = (value: string) => createHash('sha256').update(value).digest('hex')
+diff --git a/tests/auth/identity-config.test.ts b/tests/auth/identity-config.test.ts
+index 4067346..7257754 100644
+--- a/tests/auth/identity-config.test.ts
++++ b/tests/auth/identity-config.test.ts
+@@ -1,6 +1,9 @@
+ import { expect, it } from 'vitest'
+ import { IdentityConfigError, parseIdentityConfig } from '@server/src/modules/identity/config'
+-import { parseIdentityClients, parseIdentityDeliveryTargets } from '@workspace/common/node/identity-config'
++import { createIdentityBinding, parseIdentityClients, parseIdentityDeliveryTargets } from '@workspace/common/node/identity-config'
++import { readRuntimeConfiguration } from '../../scripts/runtime/settings.mjs'
++import { deploymentBinding } from '../../scripts/runtime/deployment.mjs'
++import { digest } from '../../scripts/runtime/local-config.mjs'
+ 
+ const local = { IDENTITY_ENABLED: 'true', IDENTITY_MODE: 'local',
+   SERVER_PUBLIC_WEB_BASE_URL: 'http://127.0.0.1:8080', HYDRA_PUBLIC_URL: 'http://127.0.0.1:4444/',
+@@ -42,6 +45,11 @@ it('requires an identical target when active and cleanup-only IDs overlap', () =
+     expect(() => parseIdentityConfig({ ...env, IDENTITY_OUTBOX_TARGETS_JSON: JSON.stringify({ 'test-app': target }) })).toThrow('IDENTITY_CONFIG_INVALID:IDENTITY_OUTBOX_TARGETS_JSON')
+   }
+ })
++it('reports local origin collisions through IDENTITY_MODE for each pair', () => {
++  for (const [left, right] of [['SERVER_PUBLIC_WEB_BASE_URL', 'HYDRA_PUBLIC_URL'],
++    ['SERVER_PUBLIC_WEB_BASE_URL', 'HYDRA_ADMIN_URL'], ['HYDRA_PUBLIC_URL', 'HYDRA_ADMIN_URL']] as const)
++    expect(() => parseIdentityConfig({ ...local, [left]: local[right] })).toThrow('IDENTITY_CONFIG_INVALID:IDENTITY_MODE')
++})
+ it.each([
+   ['IDENTITY_ENABLED', 'yes'], ['IDENTITY_MODE', undefined], ['IDENTITY_MODE', 'dev'], ['IDENTITY_MODE', 'full'],
+   ['IDENTITY_FLOW_KEY', 'private'], ['IDENTITY_BOOTSTRAP_KEY', undefined], ['HYDRA_ADMIN_URL', undefined],
+@@ -56,3 +64,39 @@ it('retains deployment HTTPS issuer boundaries and private HTTP Hydra admin rout
+   expect(parseIdentityConfig(deployment)).toMatchObject({ enabled: true, publicOrigin: 'https://site.example', issuer: 'https://issuer.example/' })
+   for (const variable of ['HYDRA_PUBLIC_URL', 'SERVER_PUBLIC_WEB_BASE_URL']) expect(() => parseIdentityConfig({ ...deployment, [variable]: 'http://insecure.example/' })).toThrow(IdentityConfigError)
+ })
++it.each(['local', 'deployment'] as const)('projects the same identity and binding through runtime and Server in %s mode', mode => {
++  const endpoint = mode === 'local' ? 'http://127.0.0.1:9000' : 'https://app.example'
++  const configured = { ...client, redirectUri: `${endpoint}/callback?exact=true`, postLogoutRedirectUri: `${endpoint}/signed-out`,
++    revocation: { ...client.revocation, url: `${endpoint}/internal/revoke` } }
++  const sourceValues = { RUNTIME_PROFILE: mode, AUTH_CODE_HMAC_KEY: 'a'.repeat(64), HYDRA_SYSTEM_SECRET: 'b'.repeat(64),
++    IDENTITY_BOOTSTRAP_KEY: 'c'.repeat(64), IDENTITY_FLOW_KEY: 'd'.repeat(64),
++    IDENTITY_CLIENTS_JSON: JSON.stringify([configured]),
++    IDENTITY_OUTBOX_TARGETS_JSON: JSON.stringify({ 'old-app': { hydraAdminUrl: mode === 'local' ? 'http://127.0.0.1:5555/' : 'http://old-hydra:4445/' } }),
++    DATABASE_HOST: 'postgres', DATABASE_NAME: 'exre', DATABASE_USER: 'website', DATABASE_PASSWORD: 'fixture',
++    HYDRA_DATABASE_HOST: 'postgres', HYDRA_DATABASE_NAME: 'hydra', HYDRA_DATABASE_USER: 'hydra', HYDRA_DATABASE_PASSWORD: 'fixture',
++    ...(mode === 'deployment' ? { PUBLIC_ORIGIN: 'https://site.example', HYDRA_PUBLIC_URL: 'https://issuer.example/',
++      HYDRA_ADMIN_URL: 'http://127.0.0.1:4445/', WEBSITE_INTERNAL_URL: 'http://127.0.0.1:8082/' } : {}) }
++  const state = readRuntimeConfiguration({ sourceValues, inherited: {} })
++  const server = parseIdentityConfig(state.environments.server)
++  if (!server.enabled) throw new Error('expected enabled')
++  expect(state.config.mode).toBe(server.mode)
++  expect(state.config.publicOrigin).toBe(server.publicOrigin)
++  expect(state.config.issuer).toBe(server.issuer)
++  expect(state.internal.hydra).toBe(server.hydraAdminUrl)
++  expect(state.secrets.IDENTITY_BOOTSTRAP_KEY).toBe(server.keys.bootstrap)
++  expect(state.secrets.IDENTITY_FLOW_KEY).toBe(server.keys.flow)
++  expect(state.clients).toEqual(server.approvedClients)
++  expect(state.cleanupTargets).toEqual(server.cleanupTargets)
++  expect(state.identity.integrationClients).toEqual(server.integrationClients)
++  expect(state.identity.deliveryTargets).toEqual(server.deliveryTargets)
++  const database = new URL(state.databases.DATABASE)
++  const serverBinding = createIdentityBinding({ websiteTarget: { host: database.hostname.toLowerCase(), port: Number(database.port || 5432),
++    user: decodeURIComponent(database.username), database: 'exre', verifiedDatabase: 'exre' },
++    issuer: server.issuer, publicOrigin: server.publicOrigin, hydraAdminUrl: server.hydraAdminUrl,
++    clients: server.approvedClients, cleanupTargets: server.cleanupTargets,
++    flowKey: server.keys.flow, bootstrapKey: server.keys.bootstrap })
++  expect(deploymentBinding(state)).toEqual(serverBinding)
++  expect(digest(deploymentBinding(state))).toBe(digest(serverBinding))
++  for (const key of ['IDENTITY_BOOTSTRAP_KEY', 'IDENTITY_FLOW_KEY', 'IDENTITY_CLIENTS_JSON', 'IDENTITY_OUTBOX_TARGETS_JSON'])
++    expect(state.environments.web[key]).toBeUndefined()
++})

@@ -1,0 +1,474 @@
+diff --git a/scripts/runtime/retire-outline.mjs b/scripts/runtime/retire-outline.mjs
+index 0fdbae6..5617a6a 100644
+--- a/scripts/runtime/retire-outline.mjs
++++ b/scripts/runtime/retire-outline.mjs
+@@ -12,7 +12,7 @@ import { verifyHydraClient, hydraClientBasic } from './hydra-client.mjs'
+ import { connectDatabase, convertLegacyBinding, validateLegacyBinding, deploymentBinding } from './deployment.mjs'
+ import { serializeEnvironment, convertValues } from './convert.mjs'
+ import { acquireApplicationLock } from './application-lock.mjs'
+-import { Services } from './services.mjs'
++import { containerProof } from './container-proof.mjs'
+ import { identityAlive, acquireLock } from './ownership.mjs'
+ 
+ const environmentFingerprint = path => createHash('sha256').update(readFileSync(path)).digest('hex')
+@@ -88,7 +88,6 @@ function docker(args) {
+ }
+ const containerExists = id => docker(['ps','-a','--no-trunc','--format','{{.ID}}']).trim().split(/\r?\n/).includes(id)
+ const inspectContainer = id => JSON.parse(docker(['inspect',id]))[0]
+-const containerProof = item => Services.prototype.proof.call({}, item)
+ function assertInside(workspace, target) {
+   const checkout=resolve(workspace),base=resolve(checkout,'.local'),path=resolve(target),rel=relative(base,path)
+   if(!rel||rel==='..'||rel.startsWith(`..${sep}`)||isAbsolute(rel))fail('RETIREMENT_STORAGE_OWNERSHIP_CONFLICT')
+diff --git a/scripts/runtime/retire-outline.test.mjs b/scripts/runtime/retire-outline.test.mjs
+index cd85bbe..0d5d3e5 100644
+--- a/scripts/runtime/retire-outline.test.mjs
++++ b/scripts/runtime/retire-outline.test.mjs
+@@ -120,7 +120,7 @@ import { tmpdir } from 'node:os'
+ import { join, resolve } from 'node:path'
+ import { digest } from './local-config.mjs'
+ import { serializeEnvironment } from './convert.mjs'
+-import { Services } from './services.mjs'
++import { containerProof } from './container-proof.mjs'
+ import { readRuntimeConfiguration, environmentFile } from './settings.mjs'
+ import { deploymentBinding } from './deployment.mjs'
+ import { createHash } from 'node:crypto'
+@@ -132,11 +132,12 @@ function applyFixture(t) {
+  mkdirSync(join(workspace,'.local/runtime'),{recursive:true})
+  const source=serializeEnvironment(values);writeFileSync(join(workspace,'.env.local'),source)
+  assert.equal(typeof retirement.retirementDatabaseTargets,'function')
+- const targets=retirement.retirementDatabaseTargets(values),containers=Object.fromEntries(['postgres','hydra'].map(name=>[name,{Id:`${name}-exact`,Image:`${name}-image`,Config:{Labels:{'com.docker.compose.service':name}},HostConfig:{},Mounts:[]}]))
+- const preserved=Object.fromEntries(Object.entries(containers).map(([name,item])=>[name,Services.prototype.proof.call({},item)]))
++  const targets=retirement.retirementDatabaseTargets(values),containers=Object.fromEntries(['postgres','hydra'].map(name=>[name,{Id:`${name}-exact`,Image:`${name}-image`,Config:{Labels:{'com.docker.compose.service':name}},
++    HostConfig:{Dns:null,DnsOptions:null,DnsSearch:null,Privileged:false},Mounts:[{Type:'bind',Source:`/${name}/b`,Destination:'/b',Mode:'rw',RW:true},{Type:'bind',Source:`/${name}/a`,Destination:'/a',Mode:'ro',RW:false}]}]))
++ const preserved=Object.fromEntries(Object.entries(containers).map(([name,item])=>[name,containerProof(item)]))
+  const identities={exre:{name:'exre',user:'site',owner:'site',oid:'123'},hydra:{name:'hydra',user:'hydra',owner:'hydra',oid:'124'},outline:{name:'outline',user:'outline',owner:'outline',oid:'125'},postgres:{name:'postgres',user:'admin',owner:'postgres-owner',oid:'126'}}
+  const databases=Object.fromEntries(['exre','hydra','outline'].map(name=>[name,{...identities[name],targetFingerprint:digest(targets[name])}]))
+- const calls=[],mutations=[]
++  const calls=[],mutations=[],dockerMutations=[]
+  const plan={version:1,workspace:resolve(workspace),sourceFingerprint:digest(source),receiptFingerprint:null,preserved,databases,outlineAdmin:{...identities.postgres,targetFingerprint:digest(targets.outlineAdmin)},retired:{redis:null,storage:join(workspace,'.local/attachments')},completed:['stop','clients','resources','configuration'],progress:{}}
+  let mismatchPurpose,mismatchField='user'
+  const connect=async(url,options={})=>{
+@@ -149,11 +150,76 @@ function applyFixture(t) {
+     return {rows:[]}
+    },end:async()=>{}}
+  }
+- const dockerCall=args=>{calls.push({docker:args});if(args[0]==='inspect'){const item=Object.values(containers).find(item=>item.Id===args[1]);assert.ok(item);return JSON.stringify([item])}throw Error('unexpected Docker mutation')}
++  const dockerCall=args=>{calls.push({docker:args});if(args[0]==='inspect'){const item=Object.entries(containers).find(([name])=>`${name}-exact`===args[1])?.[1];assert.ok(item);return JSON.stringify([item])}
++    if(args[0]==='ps')return Object.keys(containers).map(name=>`${name}-exact`).join('\n')
++    if(args[0]==='rm'){dockerMutations.push(args);return ''}
++    throw Error('unexpected Docker mutation')}
+  const acquire=()=>{calls.push({lock:true});return {release(){}}}
+- return {workspace,values,targets,identities,plan,calls,mutations,connect,dockerCall,acquire,applicationAcquire:acquire,mismatch:(purpose,field='user')=>{mismatchPurpose=purpose;mismatchField=field}}
++  return {workspace,values,targets,identities,containers,plan,calls,mutations,dockerMutations,connect,dockerCall,acquire,applicationAcquire:acquire,mismatch:(purpose,field='user')=>{mismatchPurpose=purpose;mismatchField=field}}
+ }
+ 
++function saveApplyProofEvidence(f) {
++  const directory=join(f.workspace,'.local/runtime'),dependencies=join(directory,'dependencies.json'),path=join(directory,'outline-retirement-plan.json')
++  const record={version:1,project:'exwebsite-runtime',proofs:[...Object.values(f.plan.preserved),...(f.plan.retired.redis?[f.plan.retired.redis]:[])],newlyStarted:[]}
++  writeFileSync(dependencies,JSON.stringify(record))
++  f.plan.dependencyFingerprint=digest(record)
++  writeFileSync(path,JSON.stringify(f.plan))
++  return {dependencies,path,dependencyBytes:readFileSync(dependencies),planBytes:readFileSync(path)}
++}
++
++test('apply rechecks original preserved proofs despite Docker mount and unset DNS presentation changes',async t=>{
++  const f=applyFixture(t),original=structuredClone(f.plan.preserved)
++  saveApplyProofEvidence(f)
++  for(const item of Object.values(f.containers)){
++    item.Mounts.reverse()
++    Object.assign(item.HostConfig,{Dns:[],DnsOptions:[],DnsSearch:[]})
++  }
++  await retirement.applyRetirementPlan(f.plan,f)
++  assert.ok(f.mutations.some(call=>call.sql.startsWith('DELETE')))
++  assert.deepEqual(f.dockerMutations,[])
++  assert.deepEqual(f.plan.preserved,original)
++  assert.deepEqual(JSON.parse(readFileSync(join(f.workspace,'.local/runtime/outline-retirement-plan.json'),'utf8')).preserved,original)
++})
++
++test('apply refuses each preserved container drift before any mutation and leaves proofs and plan unchanged',async t=>{
++  const changes=[
++    ['Dns',item=>{item.HostConfig.Dns=['1.1.1.1']}],
++    ['DnsOptions',item=>{item.HostConfig.DnsOptions=['ndots:2']}],
++    ['DnsSearch',item=>{item.HostConfig.DnsSearch=['example.test']}],
++    ['HostConfig',item=>{item.HostConfig.Privileged=true}],
++    ['Config',item=>{item.Config.WorkingDir='/changed'}],
++    ['Image',item=>{item.Image='replacement-image'}],
++    ['Id',item=>{item.Id='replacement-exact'}],
++  ]
++  const mountFields=Object.keys(applyFixture(t).containers.postgres.Mounts[0])
++  for(const key of mountFields)changes.push([`Mounts.${key}`,item=>{item.Mounts[0][key]=typeof item.Mounts[0][key]==='boolean'?!item.Mounts[0][key]:'changed'}])
++  for(const [name,change] of changes){
++    const f=applyFixture(t),evidence=saveApplyProofEvidence(f),original=structuredClone(f.plan.preserved)
++    change(f.containers.postgres)
++    await assert.rejects(retirement.applyRetirementPlan(f.plan,f),/RETIREMENT_PRESERVED_PROOF_CHANGED/,name)
++    assert.deepEqual(f.mutations,[],name)
++    assert.deepEqual(f.dockerMutations,[],name)
++    assert.deepEqual(f.plan.preserved,original,name)
++    assert.deepEqual(readFileSync(evidence.dependencies),evidence.dependencyBytes,name)
++    assert.deepEqual(readFileSync(evidence.path),evidence.planBytes,name)
++  }
++})
++
++test('apply rejects Redis proof drift before Docker rm or any retirement mutation',async t=>{
++  const f=applyFixture(t),redis={Id:'redis-exact',Image:'redis-image',Config:{Labels:{'com.docker.compose.service':'redis'}},
++    HostConfig:{Dns:null,DnsOptions:null,DnsSearch:null},Mounts:[]}
++  f.containers.redis=redis
++  f.plan.retired={...f.plan.retired,redis:containerProof(redis),redisMounts:[],redisVolumes:[]}
++  f.plan.completed=['stop','clients','website']
++  const evidence=saveApplyProofEvidence(f)
++  redis.Image='replacement-image'
++  await assert.rejects(retirement.applyRetirementPlan(f.plan,f),/RETIREMENT_REDIS_PROOF_CHANGED/)
++  assert.deepEqual(f.mutations,[])
++  assert.deepEqual(f.dockerMutations,[])
++  assert.deepEqual(readFileSync(evidence.dependencies),evidence.dependencyBytes)
++  assert.deepEqual(readFileSync(evidence.path),evidence.planBytes)
++})
++
+ test('apply writes Website only on the verified nondefault cluster and preserves original connection options',async t=>{
+  const f=applyFixture(t)
+  await retirement.applyRetirementPlan(f.plan,f)
+diff --git a/scripts/runtime/services.mjs b/scripts/runtime/services.mjs
+index 96ed1f5..088326f 100644
+--- a/scripts/runtime/services.mjs
++++ b/scripts/runtime/services.mjs
+@@ -6,6 +6,7 @@ import { acquireLock } from './ownership.mjs'
+ import { assertPortFree, httpReady } from './local-dev.mjs'
+ import { RuntimeError, reporter, diagnostic } from './output.mjs'
+ import { acquireApplicationLock } from './application-lock.mjs'
++import { containerProof } from './container-proof.mjs'
+ 
+ export const serviceNames = Object.freeze(['postgres', 'hydra'])
+ const project = 'exwebsite-runtime'
+@@ -85,14 +86,6 @@ export class Services {
+     } else log.next(items.every(item => item.State.Running && (!item.State.Health || item.State.Health.Status === 'healthy'))
+       && items.length === serviceNames.length ? 'pnpm dev' : '检查 pnpm service:logs；依赖尚未运行时执行 pnpm service:start')
+   }
+-  proof(item) {
+-    const host = { ...item.HostConfig }
+-    // Docker normalizes unset DNS lists between null and [] after a restart.
+-    for (const key of ['Dns', 'DnsOptions', 'DnsSearch']) if (host[key] === null) host[key] = []
+-    return { id: item.Id, service: item.Config.Labels['com.docker.compose.service'],
+-      digest: digest({ image: item.Image, config: item.Config, host,
+-        mounts: [...item.Mounts].sort((left, right) => left.Destination.localeCompare(right.Destination)) }) }
+-  }
+   verify(items) {
+     const configuration = JSON.parse(this.compose(['config', '--format', 'json']))
+     for (const item of items) {
+@@ -148,7 +141,7 @@ export class Services {
+     return record
+   }
+   verifyProofs(items, proofs, code, phase) {
+-    for (const item of items) if (!proofs.some(proof => proof?.id === item.Id && digest(proof) === digest(this.proof(item))))
++    for (const item of items) if (!proofs.some(proof => proof?.id === item.Id && digest(proof) === digest(containerProof(item))))
+       throw new RuntimeError(code, context('Docker', phase))
+   }
+   async start({ ready = verifyDependencyHealth, assertFree = assertPortFree, log = reporter({ environment: this.state.values }), selectedServices = serviceNames } = {}) {
+@@ -161,7 +154,7 @@ export class Services {
+       if (!record && previous.length) throw new RuntimeError('OWNERSHIP_RECORD_MISSING', context('Docker', '启动前归属核验'))
+       if (record) this.verifyProofs(previous, record.proofs, 'START_OWNERSHIP_CONFLICT', '启动前归属核验')
+       this.verifyVolumes()
+-      const priorProofs = previous.map(item => this.proof(item))
++      const priorProofs = previous.map(containerProof)
+       const p = this.state.config.ports
+       for (const [service, ports] of [['postgres', [p.postgres]], ['hydra', [p.hydraPublic, p.hydraAdmin]]].filter(([service]) => selectedServices.includes(service))) {
+         if (!previous.some(item => item.Config.Labels['com.docker.compose.service'] === service && item.State.Running))
+@@ -175,7 +168,7 @@ export class Services {
+         const existing = items.filter(item => previous.some(prior => prior.Config.Labels['com.docker.compose.service'] === item.Config.Labels['com.docker.compose.service']))
+         this.verifyProofs(existing, priorProofs, 'START_OWNERSHIP_CONFLICT', '启动后归属核验')
+         atomicJson(this.file, { version: 1, project, proofs: items.map(item =>
+-          record?.proofs.find(proof => proof.id === item.Id) ?? priorProofs.find(proof => proof.id === item.Id) ?? this.proof(item)),
++          record?.proofs.find(proof => proof.id === item.Id) ?? priorProofs.find(proof => proof.id === item.Id) ?? containerProof(item)),
+           newlyStarted: items.filter(item => !original.has(item.Id)).map(item => item.Id) })
+         saved = true
+       }
+@@ -210,7 +203,7 @@ export class Services {
+       const actual = this.inventory()
+       this.verifyProofs(actual, record.proofs, 'STOP_OWNERSHIP_CONFLICT', '停止后归属核验')
+       if (actual.some(item => selected.some(prior => prior.Id === item.Id) && item.State.Running)) throw new RuntimeError('STOP_INCOMPLETE')
+-      atomicJson(this.file, { ...record, proofs: actual.map(item => this.proof(item)) })
++      atomicJson(this.file, { ...record, proofs: actual.map(containerProof) })
+     } finally { lock?.release(); applicationLock?.release() }
+   }
+ }
+diff --git a/scripts/runtime/settings.test.mjs b/scripts/runtime/settings.test.mjs
+index 93568ca..ad0f3b6 100644
+--- a/scripts/runtime/settings.test.mjs
++++ b/scripts/runtime/settings.test.mjs
+@@ -7,9 +7,11 @@ import { join } from 'node:path'
+ import { createServer } from 'node:net'
+ import { readRuntimeConfiguration, databaseUrl, defaults } from './settings.mjs'
+ import { convertValues, convertConfiguration, serializeEnvironment, verifyOriginalTargets } from './convert.mjs'
+-import { redact, diagnostic, reporter, runtimeFailure } from './output.mjs'
++import { redact, diagnostic, reporter, runtimeFailure, RuntimeError } from './output.mjs'
+ import { verifyApplications, verifyRuntimeHydraClient } from './applications.mjs'
++import { HydraClientCheckError } from './hydra-client.mjs'
+ import { composeEnvironment, Services } from './services.mjs'
++import { containerProof } from './container-proof.mjs'
+ import { root } from './shared.mjs'
+ import { NativeApplications, verifyNativeClient } from './native.mjs'
+ import { processSpecification, processRecord } from './pm2-process.mjs'
+@@ -24,6 +26,65 @@ import { verifyHydraBinary, initializeHydraDatabase } from './infrastructure.mjs
+ const { parseRuntimeArguments } = runtimeEntry
+ const { testSpecifications, runTests } = runtimeTests
+ 
++test('container proof preserves the legacy literal digest and its input', () => {
++  const item = {
++    Id: 'container-1', Image: 'sha256:img',
++    Config: { Image: 'repo@sha256:manifest', Labels: { 'com.docker.compose.service': 'hydra' }, Env: ['A=1'] },
++    HostConfig: { Dns: null, DnsOptions: null, DnsSearch: null, Privileged: false,
++      PortBindings: { '5432/tcp': [{ HostIp: '127.0.0.1', HostPort: '15432' }] } },
++    Mounts: [
++      { Type: 'volume', Name: 'vol-b', Source: '/var/lib/docker/volumes/vol-b/_data', Destination: '/b', Driver: 'local', Mode: 'rw', RW: true, Propagation: '' },
++      { Type: 'bind', Source: '/host/a', Destination: '/a', Mode: 'ro', RW: false, Propagation: 'rprivate' },
++    ],
++  }
++  const original = structuredClone(item)
++  assert.deepEqual(containerProof(item), {
++    id: 'container-1', service: 'hydra',
++    digest: 'ac4538fe791ed70f9571fb6c45be27b6ad87adb867433971f1b979998d2f52cf',
++  })
++  assert.deepEqual(item, original)
++})
++
++test('container proof accepts Docker presentation changes and detects every substantive inspect field', () => {
++  const item = { Id: 'owned', Image: 'sha256:image',
++    Config: { Image: 'image:tag', Env: ['A=1'], Labels: { 'com.docker.compose.service': 'hydra' } },
++    HostConfig: { Dns: null, DnsOptions: null, DnsSearch: null, Privileged: false },
++    Mounts: [
++      { Type: 'volume', Name: 'data', Source: '/data', Destination: '/b', Driver: 'local', Mode: 'rw', RW: true, Propagation: '' },
++      { Type: 'bind', Name: 'bind', Source: '/host', Destination: '/a', Driver: '', Mode: 'ro', RW: false, Propagation: 'rprivate' },
++    ],
++  }
++  const before = structuredClone(item), expected = containerProof(item)
++  const equivalent = structuredClone(item)
++  equivalent.Mounts.reverse()
++  Object.assign(equivalent.HostConfig, { Dns: [], DnsOptions: [], DnsSearch: [] })
++  assert.deepEqual(containerProof(equivalent), expected)
++  assert.deepEqual(item, before)
++
++  for (const key of ['Dns', 'DnsOptions', 'DnsSearch']) {
++    const changed = structuredClone(item)
++    changed.HostConfig[key] = ['changed']
++    assert.notEqual(containerProof(changed).digest, expected.digest, key)
++  }
++  for (const key of Object.keys(item.Mounts[0])) {
++    const changed = structuredClone(item)
++    changed.Mounts[0][key] = typeof changed.Mounts[0][key] === 'boolean' ? !changed.Mounts[0][key] : 'changed'
++    assert.notEqual(containerProof(changed).digest, expected.digest, `Mounts.${key}`)
++  }
++  for (const change of [
++    value => { value.HostConfig.Privileged = true },
++    value => { value.Config.Env = ['A=2'] },
++    value => { value.Image = 'sha256:replacement' },
++  ]) {
++    const changed = structuredClone(item)
++    change(changed)
++    assert.notEqual(containerProof(changed).digest, expected.digest)
++  }
++  const replaced = { ...structuredClone(item), Id: 'replacement' }
++  assert.equal(containerProof(replaced).digest, expected.digest)
++  assert.notDeepEqual(containerProof(replaced), expected)
++})
++
+ function fixture(t, profile = 'local') {
+   const workspace = mkdtempSync(join(tmpdir(), 'runtime-fields-'))
+   t.after(() => rmSync(workspace, { recursive: true, force: true }))
+@@ -95,18 +156,58 @@ test('startup diagnostics name the failed check and corrective step without refe
+ 
+ test('Hydra startup separates missing clients, configuration conflicts and network failures', async t => {
+   const state = fixture(t).read()
+-  for (const [error, code] of [
+-    [new Error('Hydra client initialization failed (HTTP 404)'), 'HYDRA_CLIENT_MISSING'],
+-    [new Error('Existing Hydra client configuration conflict; explicit operator repair is required'), 'HYDRA_CLIENT_CONFLICT'],
+-    [new Error('Existing Hydra client secret conflict or protocol service unavailable'), 'HYDRA_CLIENT_CONFLICT'],
+-    [new Error('Invalid Hydra bootstrap configuration'), 'HYDRA_CONFIG_INVALID'],
+-    [Object.assign(new Error('private-token'), { cause: { code: 'ECONNREFUSED' } }), 'ECONNREFUSED (连接被拒绝)'],
++  for (const [kind, code] of [
++    ['CLIENT_MISSING', 'HYDRA_CLIENT_MISSING'], ['CLIENT_CONFLICT', 'HYDRA_CLIENT_CONFLICT'],
++    ['CREDENTIAL_PROBE_FAILED', 'HYDRA_CLIENT_CONFLICT'], ['INVALID_CONFIG', 'HYDRA_CONFIG_INVALID'],
++    ['CHECK_FAILED', 'HYDRA_CLIENT_CHECK_FAILED'],
++  ]) {
++    const error = new HydraClientCheckError(kind)
++    Object.defineProperty(error, 'message', { value: 'changed Bearer private-token' })
++    await assert.rejects(verifyRuntimeHydraClient(state, async () => { throw error }, { ready: async () => {} }), failure => {
++      assert.equal(failure.code, code)
++      assert.match(failure.message, /Hydra/)
++      assert.doesNotMatch(failure.message, /private-token|docs\/runtime\.md/)
++      return true
++    })
++  }
++  for (const error of [
++    { kind: 'CLIENT_MISSING', message: 'Hydra client initialization failed (HTTP 404)' },
++    { kind: 'CLIENT_MISSING', cause: { code: 'ECONNREFUSED' } },
++    Object.assign(new Error('private-token'), { kind: 'FUTURE_KIND' }),
++    Object.assign(new Error('private-token'), { code: 'UNSAFE_PRIVATE_CODE' }),
+   ]) await assert.rejects(verifyRuntimeHydraClient(state, async () => { throw error }, { ready: async () => {} }), failure => {
+-    assert.equal(failure.code, code)
+-    assert.match(failure.message, /Hydra/)
+-    assert.doesNotMatch(failure.message, /private-token|docs\/runtime\.md/)
++    assert.equal(failure.code, 'HYDRA_CLIENT_CHECK_FAILED')
++    assert.doesNotMatch(failure.message, /private-token|UNSAFE_PRIVATE_CODE/)
++    return true
++  })
++  for (const error of [new HydraClientCheckError('NETWORK_FAILURE', { cause: { code: 'ECONNREFUSED', message: 'Bearer private-token' } }),
++    Object.assign(new Error('private-token'), { cause: { code: 'ECONNREFUSED' } })]) {
++    await assert.rejects(verifyRuntimeHydraClient(state, async () => { throw error }, { ready: async () => {} }), failure => {
++      assert.equal(failure.code, 'ECONNREFUSED (连接被拒绝)')
++      assert.doesNotMatch(failure.message, /private-token/)
++      return true
++    })
++  }
++  for (const cause of [{ code: 'UNSAFE_PRIVATE_CODE', message: 'Bearer private-token' },
++    { cause: { code: 'UNSAFE_PRIVATE_CODE' }, errors: [{ code: 'UNSAFE_PRIVATE_CODE' }] },
++    new Error('postgres://private:credential@host/exre')]) {
++    await assert.rejects(verifyRuntimeHydraClient(state, async () => {
++      throw new HydraClientCheckError('NETWORK_FAILURE', { cause })
++    }, { ready: async () => {} }), failure => {
++      assert.equal(failure.code, 'HYDRA_CLIENT_CHECK_FAILED')
++      assert.doesNotMatch(failure.message, /private-token|credential|UNSAFE_PRIVATE_CODE/)
++      return true
++    })
++  }
++  const terminal = [], persisted = []
++  const unsafe = new HydraClientCheckError('NETWORK_FAILURE', { cause: new Error('Bearer private-token response-secret http://secret.invalid/') })
++  await assert.rejects(verifyRuntimeHydraClient(state, async () => { throw unsafe }, { ready: async () => {} }), failure => {
++    reporter({ write: line => terminal.push(line), persist: line => persisted.push(line) }).failure(failure)
++    for (const line of [...terminal, ...persisted]) assert.doesNotMatch(line, /private-token|response-secret|secret\.invalid/)
+     return true
+   })
++  await assert.rejects(verifyRuntimeHydraClient(state, async () => {}, { ready: async () => { throw new RuntimeError('DEPLOYMENT_HYDRA_NOT_READY') } }),
++    { code: 'DEPLOYMENT_HYDRA_NOT_READY' })
+   const calls = []
+   await verifyApplications(state, { tools: { node: process.execPath }, verifySchemas: async () => {},
+     execute: async (spec, options) => { calls.push(spec.name); options.onLog(spec.name, '检查完成') }, verifyClient: async () => {}, ready: async () => {}, onLog: () => {} })
+@@ -166,6 +267,24 @@ test('invalid profile, old sources, duplicate ports, names and cryptographic key
+   }
+ })
+ 
++test('identity key diagnostics retain missing and format priority before client parsing', t => {
++  const f = fixture(t)
++  for (const key of ['IDENTITY_BOOTSTRAP_KEY', 'IDENTITY_FLOW_KEY']) {
++    for (const [value, code] of [['', 'CONFIG_REQUIRED'], ['not-a-key', 'CRYPTO_KEY_INVALID']]) {
++      assert.throws(() => f.read({ [key]: value, IDENTITY_CLIENTS_JSON: 'private malformed JSON' }), error => {
++        assert.equal(error.code, code)
++        assert.deepEqual(error.keys, [key])
++        assert.doesNotMatch(error.message, /private malformed JSON|not-a-key/)
++        return true
++      })
++    }
++  }
++  const state = f.read({ IDENTITY_CLIENTS_JSON: '[]' })
++  assert.deepEqual(state.clients, {})
++  assert.equal(state.environments.server.IDENTITY_CLIENTS_JSON, '[]')
++  assert.equal(state.environments.web.IDENTITY_CLIENTS_JSON, undefined)
++})
++
+ test('deployment uses independently configured database hosts and explicit application ports', t => {
+   const f = fixture(t, 'deployment')
+   const state = f.read({ OUTLINE_DATABASE_HOST: 'outline-db.example', HYDRA_DATABASE_HOST: 'hydra-db.example', SERVER_PORT: '18080', OUTLINE_PORT: '13000',
+@@ -255,10 +374,18 @@ test('owned stop validates the whole inventory before mutation and refuses unkno
+   service.inventory = () => [item]
+   service.call = args => { changes.push(args); item.State.Running = false; return '' }
+   service.file = join(f.workspace, 'dependencies.json')
+-  writeFileSync(service.file, JSON.stringify({ version: 1, project: 'exwebsite-runtime', proofs: [{ ...service.proof(item), digest: 'changed' }], newlyStarted: ['owned'] }))
++  writeFileSync(service.file, JSON.stringify({ version: 1, project: 'exwebsite-runtime', proofs: [{ ...containerProof(item), digest: 'changed' }], newlyStarted: ['owned'] }))
+   await assert.rejects(service.stop({ lock: false }), /STOP_OWNERSHIP_CONFLICT/); assert.deepEqual(changes, [])
+-  writeFileSync(service.file, JSON.stringify({ version: 1, project: 'exwebsite-runtime', proofs: [service.proof(item)], newlyStarted: ['owned'] }))
++  writeFileSync(service.file, JSON.stringify({ version: 1, project: 'exwebsite-runtime', proofs: [containerProof(item)], newlyStarted: ['owned'] }))
++  const saved = readFileSync(service.file, 'utf8')
++  const unknown = { ...structuredClone(item), Id: 'unknown' }
++  service.inventory = () => [item, unknown]
++  await assert.rejects(service.stop({ lock: false }), /STOP_OWNERSHIP_CONFLICT/)
++  assert.equal(readFileSync(service.file, 'utf8'), saved)
++  assert.deepEqual(changes, [])
++  service.inventory = () => [item]
+   await service.stop({ lock: false }); assert.deepEqual(changes, [['stop', '--time', '10', 'owned']])
++  assert.deepEqual(JSON.parse(readFileSync(service.file, 'utf8')).proofs, [containerProof(item)])
+ })
+ 
+ test('start cannot replace a saved proof after DNS drift to make a later stop succeed', async t => {
+@@ -269,7 +396,8 @@ test('start cannot replace a saved proof after DNS drift to make a later stop su
+       'com.docker.compose.service': 'hydra', 'com.docker.compose.project': 'exwebsite-runtime',
+       'com.docker.compose.oneoff': 'false', 'com.docker.compose.config-hash': 'hydra-hash',
+       'dev.exwebsite.runtime': 'dependencies',
+-    } }, HostConfig: { Dns: [], PortBindings: {} }, Mounts: [], State: { Running: false } }
++    } }, HostConfig: { Dns: null, DnsOptions: null, DnsSearch: null, PortBindings: {} },
++    Mounts: [{ Name: 'first', Destination: '/a', Mode: 'rw' }, { Name: 'second', Destination: '/b', Mode: 'ro' }], State: { Running: false } }
+   const services = new Services(state, { run: (_command, args) => {
+     let stdout = ''
+     if (args[0] === 'ps') stdout = present ? item.Id : ''
+@@ -283,7 +411,7 @@ test('start cannot replace a saved proof after DNS drift to make a later stop su
+     return { status: 0, stdout }
+   } })
+   mkdirSync(state.directory, { recursive: true })
+-  const saved = JSON.stringify({ version: 1, project: 'exwebsite-runtime', proofs: [services.proof(item)], newlyStarted: [] })
++  const saved = JSON.stringify({ version: 1, project: 'exwebsite-runtime', proofs: [containerProof(item)], newlyStarted: [] })
+   writeFileSync(services.file, saved)
+   item.HostConfig.Dns = ['1.1.1.1']
+   await assert.rejects(services.stop({ lock: false }), /STOP_OWNERSHIP_CONFLICT/)
+@@ -293,10 +421,12 @@ test('start cannot replace a saved proof after DNS drift to make a later stop su
+   await assert.rejects(services.stop({ lock: false }), /STOP_OWNERSHIP_CONFLICT/)
+   assert.deepEqual(mutations, [])
+ 
+-  item.HostConfig.Dns = []
++  Object.assign(item.HostConfig, { Dns: [], DnsOptions: [], DnsSearch: [] })
++  item.Mounts.reverse()
+   const originalItem = structuredClone(item)
+-  for (const change of [value => { value.HostConfig.Privileged = true }, value => { value.Mounts = [{ Name: 'foreign', Destination: '/extra' }] },
+-    value => { value.Image = 'replacement-image-id' }, value => { value.Id = 'b'.repeat(64) }]) {
++  for (const change of [value => { value.HostConfig.Privileged = true }, value => { value.Mounts[0].Mode = 'changed' },
++    value => { value.Config.WorkingDir = '/changed' }, value => { value.Image = 'replacement-image-id' },
++    value => { value.Id = 'b'.repeat(64) }]) {
+     Object.assign(item, structuredClone(originalItem)); change(item)
+     await assert.rejects(services.start({ selectedServices: ['hydra'], assertFree: async () => {}, ready: async () => {},
+       log: reporter({ write() {} }) }), /START_OWNERSHIP_CONFLICT/)
+@@ -321,6 +451,7 @@ test('start cannot replace a saved proof after DNS drift to make a later stop su
+   assert.deepEqual(JSON.parse(readFileSync(services.file, 'utf8')).proofs, JSON.parse(saved).proofs)
+   await services.stop({ lock: false })
+   assert.equal(item.State.Running, false)
++  assert.deepEqual(JSON.parse(readFileSync(services.file, 'utf8')).proofs, JSON.parse(saved).proofs)
+ 
+   // A change during Compose must not overwrite proof or trigger an unsafe rollback stop.
+   const beforeStart = readFileSync(services.file, 'utf8')
+@@ -345,7 +476,7 @@ test('owned stop tolerates Docker mount ordering and unset DNS normalization but
+   const item = { Id: 'owned', Config: { Labels: { 'com.docker.compose.service': 'hydra' } }, Image: 'image',
+     HostConfig: { Dns: null, DnsOptions: null, DnsSearch: null },
+     Mounts: [{ Name: 'first', Destination: '/a' }, { Name: 'second', Destination: '/b' }], State: { Running: true } }
+-  const record = { version: 1, project: 'exwebsite-runtime', proofs: [services.proof(item)], newlyStarted: ['owned'] }
++  const record = { version: 1, project: 'exwebsite-runtime', proofs: [containerProof(item)], newlyStarted: ['owned'] }
+   mkdirSync(state.directory, { recursive: true })
+   services.file = join(state.directory, 'dependencies.json'); writeFileSync(services.file, JSON.stringify(record))
+   services.inventory = () => [item]
+@@ -354,15 +485,32 @@ test('owned stop tolerates Docker mount ordering and unset DNS normalization but
+   await services.stop({ lock: false })
+   assert.deepEqual(calls, [['stop', '--time', '10', 'owned']])
+   const valid = structuredClone(item)
++  const saved = readFileSync(services.file, 'utf8')
+   for (const mutation of [value => { value.HostConfig.Dns = ['1.1.1.1'] }, value => { value.Mounts[0].Name = 'foreign' },
+     value => { value.Config.Env = ['PASSWORD=changed'] }, value => { value.Image = 'replacement' }]) {
+     Object.assign(item, structuredClone(valid)); item.State.Running = true; mutation(item)
+     calls.length = 0
+     await assert.rejects(services.stop({ lock: false }), /STOP_OWNERSHIP_CONFLICT/)
+     assert.deepEqual(calls, [])
++    assert.equal(readFileSync(services.file, 'utf8'), saved)
+   }
+ })
+ 
++test('owned stop refuses post-stop inspect drift without rewriting the old proof', async t => {
++  const state = fixture(t).read(); state.workspace = root
++  const services = new Services(state), calls = []
++  const item = { Id: 'owned', Image: 'image', Config: { Labels: { 'com.docker.compose.service': 'hydra' } },
++    HostConfig: { Dns: null }, Mounts: [], State: { Running: true } }
++  services.inventory = () => [item]
++  services.call = args => { calls.push(args); item.State.Running = false; item.HostConfig.Dns = ['9.9.9.9']; return '' }
++  mkdirSync(state.directory, { recursive: true })
++  writeFileSync(services.file, JSON.stringify({ version: 1, project: 'exwebsite-runtime', proofs: [containerProof(item)], newlyStarted: ['owned'] }))
++  const saved = readFileSync(services.file, 'utf8')
++  await assert.rejects(services.stop({ lock: false }), /STOP_OWNERSHIP_CONFLICT/)
++  assert.deepEqual(calls, [['stop', '--time', '10', 'owned']])
++  assert.equal(readFileSync(services.file, 'utf8'), saved)
++})
++
+ test('dependency stop refuses an application listener before inspecting or mutating dependencies', async t => {
+   const listener = createServer()
+   await new Promise(resolve => listener.listen(0, '127.0.0.1', resolve))
