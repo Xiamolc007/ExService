@@ -6,7 +6,7 @@ _最后更新：2026-10-16_
 
 ## 组合与依赖
 
-`apps/server/src/server.ts` 连接独立的 PostgreSQL `exre`，检查迁移和必需结构，显式传入可信 public origin，再注入认证、资料、注册、社区、通知、存储与支持中心业务对象。`apps/server/src/create-services.ts` 先组装共享 PasswordHasher 与 AuthService，再由 `createRegistrationServices` 组合 Cfx、通知、IdentityLinkService、RegistrationService、CommunityService 和 JoinService。公共能力属于 `apps/server/src/modules/`，社区申请与支持中心业务属于 `apps/server/src/domains/`；运行时不再注入 InvitationService。密码计算和邮件发送在事务外执行。显式 `IDENTITY_ENABLED=true` 时另行组装 Hydra OIDC、内部身份调用方密钥及撤销 outbox worker；未启用时身份 operation 不可用。启动只检查，不迁移或登记客户端。跨服务边界见 `.ai/architectures/identity/integration-boundaries.md`。
+`apps/server/src/server.ts` 连接独立的 PostgreSQL `exre`，检查迁移和必需结构，显式传入可信 public origin，再注入认证、资料、注册、社区、通知、存储与支持中心业务对象。`apps/server/src/create-services.ts` 先组装共享 PasswordHasher 与 AuthService，再由 `createRegistrationServices` 创建单个 ExternalAccountService，交给 IdentityLinkService 和 RegistrationService 共用，并组合 Cfx、通知、CommunityService 和 JoinService。`apps/server/src/modules/external-accounts/plugin.ts` 将同一个实例注册为 `externalAccountServices`；关联与注册插件显式依赖它。公共能力属于 `apps/server/src/modules/`，社区申请与支持中心业务属于 `apps/server/src/domains/`；运行时不再注入 InvitationService。密码计算和邮件发送在事务外执行。显式 `IDENTITY_ENABLED=true` 时另行组装 Hydra OIDC、内部身份调用方密钥及撤销 outbox worker；未启用时身份 operation 不可用。启动只检查，不迁移或登记客户端。跨服务边界见 `.ai/architectures/identity/integration-boundaries.md`。
 
 业务插件的依赖与构造依赖对应，各模块只声明自己的 decorator。RegistrationService 与 IdentityLinkService 的 start/close 由所属插件绑定；工厂不启动计时器。服务关闭先等待实际邮件、密码及关联写入 settle，再由应用所有者关闭数据库；模块不关闭注入的其他服务。注册启动恢复遗留 pending 投递，不创建数据库、不隐式 migration 或 reset。
 
@@ -14,11 +14,11 @@ _最后更新：2026-10-16_
 
 ## 注册与关联
 
-邮箱路径验证六位码后取得浏览器绑定 grant，强制设置密码再建号；注册不签发会话。Cfx sign-in 消费真实一次性 ticket：已有外部关联登录当前 UUID，重复邮箱返回 account-exists 并要求先登录再主动关联，其余返回短期注册 grant。Cfx 邮箱在注册界面只读，不据此声称本站邮箱已验证。
+邮箱路径验证六位码后取得浏览器绑定 grant，强制设置密码再建号；注册不签发会话。Cfx ticket 只由 `apps/server/src/modules/external-accounts/cfx-adapter.ts` 经 Cfx 基础服务消费并转换为服务端可信证明；账户规则不接受浏览器提交的身份资料。`ExternalAccountService` 按 provider 与 subject 查当前关联，已有关系时锁账户并复核关联行与 subject 后签发本站会话；未关联时先检查本站邮箱，重复则返回 account-exists 并要求先登录再主动关联，否则签发带持久外部身份快照的短期注册 grant。Cfx 邮箱在注册界面只读，不据此声称本站邮箱已验证。当前可信 provider 仍仅有 Cfx。
 
-完善在事务外哈希密码，在事务内复核 grant、邮箱唯一及外部身份关系；成功重读返回原结果。主动关联要求当前账号、会话、浏览器和真实 attempt/ticket；解绑使旧关联意图失效，保留账号与密码。Cfx 基础消费约束见 `.ai/knowledge/cfx/identity-lifecycle.md`，浏览器与异步资源陷阱见 `.ai/knowledge/registration/browser-credentials-and-settlement.md`。
+完善在事务外哈希密码，在事务内锁定并复核持久 grant 与邮箱；Cfx grant 从锁定的服务器端快照恢复外部身份，由 ExternalAccountService 在同一事务内建链和映射唯一冲突，不再次消费 ticket。成功重读返回原结果。主动关联要求当前账号、会话、浏览器和真实 attempt/ticket；可信证明之后的建链规则也由 ExternalAccountService 执行。解绑使旧关联意图失效，保留账号与密码。关联列表按 provider 匹配当前关系，再按 Contract 顺序返回 Cfx、Google、QQ；后两者仍禁用，未知 provider 不伪装成 Cfx。Cfx 基础消费约束见 `.ai/knowledge/cfx/identity-lifecycle.md`，浏览器与异步资源陷阱见 `.ai/knowledge/registration/browser-credentials-and-settlement.md`。
 
-关联 API 插件在 `cancelCfxAttempt` 成功返回 cancelled、failed 或 expired 时，按 attempt 与浏览器绑定失效对应关联意图；未消费的意图立即释放容量。错误来源或绑定的取消不能释放他人容量。返回 consumed 表示证明已移交给关联事务，取消不撤回该写入；正在消费的意图保留容量直到事务结束。基础 Cfx 模块不反向依赖关联业务。
+`apps/server/src/modules/identity-links/api/operations.ts` 的 `cancelCfxAttempt` handler 显式调用关联服务协调取消；关联 API 插件不再通过 `preSerialization` 观察响应。Cfx 取消成功返回 cancelled、failed 或 expired 时，关联服务按 attempt 与浏览器绑定失效对应关联意图；未消费的意图立即释放容量。错误来源或绑定的取消不能释放他人容量。返回 consumed 表示证明已移交给关联事务，取消不撤回该写入；正在消费的意图保留容量直到事务结束。基础 Cfx 模块不反向依赖关联业务。
 
 ## 社区申请与决定
 

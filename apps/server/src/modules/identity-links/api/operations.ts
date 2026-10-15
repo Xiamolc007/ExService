@@ -2,6 +2,7 @@ import type { FastifyReply } from 'fastify'
 import type { ApiRequest, ApiJsonResult } from '../../../http/handler-types.js'
 import { requireSession } from '../../auth/api/handlers.js'
 import { browserContext, browserToken, cookieName } from '../../cfx/api/browser-context.js'
+import { CfxError } from '../../cfx/errors.js'
 export async function getMyIdentityLinks(
   request: ApiRequest<'getMyIdentityLinks'>,
 ): Promise<ApiJsonResult<'getMyIdentityLinks'>> {
@@ -56,9 +57,16 @@ export async function unlinkMyCfxIdentity(
 ): Promise<ApiJsonResult<'unlinkMyCfxIdentity'>> {
   return request.server.identityLinkServices.unlink(requireSession(request))
 }
+export async function cancelCfxAttempt(
+  request: ApiRequest<'cancelCfxAttempt'>,
+): Promise<ApiJsonResult<'cancelCfxAttempt'>> {
+  if (!request.cfxContext) throw new CfxError('CFX_ATTEMPT_NOT_FOUND')
+  return request.server.identityLinkServices.cancelCfxAttempt(request.cfxContext, request.params.id)
+}
 export const operations = {
   getMyIdentityLinks,
   createMyCfxLinkAttempt,
   linkMyCfxIdentity,
   unlinkMyCfxIdentity,
+  cancelCfxAttempt,
 } as const

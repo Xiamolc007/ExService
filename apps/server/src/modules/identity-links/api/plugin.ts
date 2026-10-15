@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync, onRequestHookHandler, preSerializationHookHandler } from 'fastify'
+import type { FastifyPluginAsync, onRequestHookHandler } from 'fastify'
 import fp from 'fastify-plugin'
 import { browserContext, browserToken } from '../../cfx/api/browser-context.js'
 import { CfxError } from '../../cfx/errors.js'
@@ -13,24 +13,6 @@ const plugin: FastifyPluginAsync<TrustedBrowserOptions> = async (app, options) =
   validateOrigin(options)
   app.addHook('onRoute', (route) => {
     const id = (route.schema as { operationId?: string } | undefined)?.operationId
-    if (id === 'cancelCfxAttempt') {
-      const releaseIntent: preSerializationHookHandler = async (request, reply, payload) => {
-        if (reply.statusCode === 200 && request.cfxContext &&
-          typeof payload === 'object' && payload !== null && 'state' in payload &&
-          'attemptId' in payload && typeof payload.attemptId === 'string' &&
-          (payload.state === 'cancelled' || payload.state === 'failed' || payload.state === 'expired')) {
-          app.identityLinkServices.invalidateCfxAttempt(request.cfxContext, payload.attemptId)
-        }
-        // A consumed attempt has already transferred its proof to the linking transaction.
-        return payload
-      }
-      route.preSerialization = [
-        ...(route.preSerialization === undefined ? [] : Array.isArray(route.preSerialization)
-          ? route.preSerialization : [route.preSerialization]),
-        releaseIntent,
-      ]
-      return
-    }
     if (!id || !ids.has(id)) return
     if (route.method === 'POST') route.bodyLimit = 4096
     const guard: onRequestHookHandler = async (request, reply) => {

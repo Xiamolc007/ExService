@@ -10,6 +10,7 @@ import type { CfxServices } from './modules/cfx/types.js'
 import type { IdentityLinkService } from './modules/identity-links/service.js'
 import type { RegistrationService } from './modules/registration/service.js'
 import type { CommunityService } from './modules/communities/service.js'
+import type { ExternalAccountService } from './modules/external-accounts/service.js'
 
 /** Application-owned services; freezing the snapshot never freezes these instances. */
 export interface BusinessServices {
@@ -23,6 +24,7 @@ export interface BusinessServices {
   readonly supportServices: SupportServices
   readonly cfxServices?: CfxServices
   readonly identityLinkServices: IdentityLinkService
+  readonly externalAccountServices?: ExternalAccountService
   readonly registrationServices: RegistrationService
   readonly communityServices: CommunityService
 }

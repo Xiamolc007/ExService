@@ -1,5 +1,6 @@
 import { afterEach, expect, it } from 'vitest'
 import { fixture, deferred } from '../registration/fixture'
+import type { SqlExecutor } from '@server/src/db/client'
 const clean: Array<() => Promise<void>> = []
 afterEach(async () => {
   for (const close of clean.splice(0).reverse()) await close()
@@ -25,6 +26,25 @@ it('binds a real Cfx proof despite different emails and preserves password/sessi
   await expect(f.auth.login({ email: f.user.email, password: 'password123' })).resolves.toHaveProperty(
     'token',
   )
+})
+it('explicitly cancels an owned attempt and releases its link reservation', async () => {
+  const f = await setup()
+  const attempt = await f.links.begin(f.session, { clientIp: '127.0.0.1' })
+  const context = f.cfx.resolveBrowserContext({ bindingToken: attempt.cookieValue, clientIp: '127.0.0.1' })
+  expect(f.links.cancelCfxAttempt(context, attempt.response.attemptId)).toMatchObject({ state: 'cancelled' })
+  await expect(f.links.link(f.session, context, attempt.response.attemptId, 'invalid')).rejects.toMatchObject({
+    code: 'IDENTITY_LINK_ATTEMPT_INVALID',
+  })
+})
+it('rejects an unexpected stored provider instead of exposing it as a Cfx link', async () => {
+  const f = await setup()
+  const invalidStorage: SqlExecutor = {
+    query: async () => ({ rows: [{
+      id: 'unexpected', user_id: f.user.id, provider: 'google', external_user_id: 'external',
+      external_username: 'Unexpected', provider_email: 'unexpected@example.com', linked_at: 1,
+    }], rowCount: 1 }),
+  } as unknown as SqlExecutor
+  await expect(f.links.listInside(invalidStorage, f.user.id)).rejects.toThrow('Unexpected identity provider')
 })
 it('rejects another attempt ticket without consuming it and permanently ends the mismatched intent', async () => {
   const f = await setup(),

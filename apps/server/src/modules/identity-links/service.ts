@@ -1,9 +1,9 @@
-import { randomUUID } from 'node:crypto'
 import type { components } from '@workspace/api-client/types'
 import type { AppDatabase, SqlExecutor } from '../../db/client.js'
 import { AuthError } from '../auth/errors.js'
 import type { AuthService, SessionIdentity } from '../auth/service.js'
-import type { CfxBrowserContext, CfxIdentity, CfxServices } from '../cfx/types.js'
+import type { CfxBrowserContext, CfxCancellation, CfxIdentity, CfxServices } from '../cfx/types.js'
+import { ExternalAccountService } from '../external-accounts/service.js'
 import { IdentityLinkError } from './errors.js'
 
 export type IdentityLink = components['schemas']['IdentityLink']
@@ -29,6 +29,7 @@ export interface IdentityLinkServiceDependencies {
   db: AppDatabase
   auth: AuthService
   cfx: CfxServices
+  externalAccounts?: ExternalAccountService
   now?: () => number
 }
 export class IdentityLinkService {
@@ -38,8 +39,10 @@ export class IdentityLinkService {
   private timer?: ReturnType<typeof setInterval>
   private closed = false
   private closing?: Promise<void>
+  readonly externalAccounts: ExternalAccountService
   constructor(private readonly d: IdentityLinkServiceDependencies) {
     this.now = d.now ?? Date.now
+    this.externalAccounts = d.externalAccounts ?? new ExternalAccountService(d)
   }
   async start() {
     if (!this.closed && !this.timer) {
@@ -58,13 +61,7 @@ export class IdentityLinkService {
     return this.closing
   }
   async findBySubjectInside(tx: SqlExecutor, provider: 'cfx', subject: string) {
-    const row = (
-      await tx.query<LinkRow>('SELECT * FROM auth_identity_links WHERE provider=$1 AND external_user_id=$2', [
-        provider,
-        subject,
-      ])
-    ).rows[0]
-    return row ? { ...project(row), userId: row.user_id } : undefined
+    return this.externalAccounts.findBySubjectInside(tx, provider, subject)
   }
   async listInside(tx: SqlExecutor, userId: string): Promise<IdentityLink[]> {
     return (
@@ -78,35 +75,17 @@ export class IdentityLinkService {
     identity: Pick<CfxIdentity, 'id' | 'username' | 'email'>,
     userId: string,
   ): Promise<IdentityLink> {
-    const id = randomUUID(),
-      now = this.now()
-    try {
-      await tx.query(
-        `INSERT INTO auth_identity_links (id,user_id,provider,external_user_id,external_username,provider_email,linked_at)
-        VALUES ($1,$2,'cfx',$3,$4,$5,$6)`,
-        [id, userId, identity.id, identity.username, identity.email, now],
-      )
-    } catch (error) {
-      if (uniqueViolation(error)) throw new IdentityLinkError('IDENTITY_LINK_CONFLICT')
-      throw error
-    }
-    return {
-      id,
-      provider: 'cfx',
-      externalUserId: identity.id,
-      externalUsername: identity.username,
-      providerEmail: identity.email,
-      linkedAt: now,
-    }
+    return this.externalAccounts.createSeedLinkInside(tx, identity, userId)
   }
   async list(session: SessionIdentity): Promise<components['schemas']['IdentityLinksResponse']> {
     return this.track(async () =>
       this.d.db.transaction(async (tx) => {
         await this.lockOwner(tx, session)
         const links = await this.listInside(tx, session.userId)
+        const byProvider = new Map(links.map((link) => [link.provider, link]))
         return {
           providers: [
-            { provider: 'cfx', available: this.d.cfx.config.enabled, link: links[0] ?? null },
+            { provider: 'cfx', available: this.d.cfx.config.enabled, link: byProvider.get('cfx') ?? null },
             { provider: 'google', available: false, link: null },
             { provider: 'qq', available: false, link: null },
           ],
@@ -175,15 +154,11 @@ export class IdentityLinkService {
         )
           throw new IdentityLinkError('IDENTITY_LINK_ATTEMPT_INVALID')
         intent.consuming = true
-        const identity = this.d.cfx.consumeIdentity({
-          context,
-          identityTicket,
-          expectedAttemptId: intent.attemptId,
-        })
+        const identity = this.externalAccounts.consumeCfx(context, identityTicket, intent.attemptId)
         return await this.d.db.transaction(async (tx) => {
           await this.lockOwner(tx, session)
           this.assertIntent(intent)
-          return this.createInside(tx, identity, session.userId)
+          return this.externalAccounts.createLinkInside(tx, identity, session.userId)
         })
       } finally {
         intent.invalid = true
@@ -211,6 +186,12 @@ export class IdentityLinkService {
       // In-flight consumption owns its reservation until the transaction settles.
       if (!intent.consuming) this.intents.delete(intent)
     }
+  }
+  cancelCfxAttempt(context: CfxBrowserContext, attemptId: string): CfxCancellation {
+    const result = this.d.cfx.cancel(context, attemptId)
+    if (result.state === 'cancelled' || result.state === 'failed' || result.state === 'expired')
+      this.invalidateCfxAttempt(context, result.attemptId)
+    return result
   }
   private async lockOwner(tx: SqlExecutor, session: SessionIdentity) {
     const row = (
@@ -243,6 +224,7 @@ export class IdentityLinkService {
   }
 }
 function project(row: LinkRow): IdentityLink {
+  if (row.provider !== 'cfx') throw new Error('Unexpected identity provider')
   if (row.provider_email === null) throw new Error('Identity link email missing')
   return {
     id: row.id,
@@ -252,7 +234,4 @@ function project(row: LinkRow): IdentityLink {
     providerEmail: row.provider_email,
     linkedAt: row.linked_at,
   }
-}
-export function uniqueViolation(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505'
 }

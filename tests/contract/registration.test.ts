@@ -8,6 +8,7 @@ import { registerErrorHandlers } from '@server/src/errors'
 import { authenticateBearer } from '@server/src/modules/auth/api/security'
 import registrationPlugin from '@server/src/modules/registration/plugin'
 import linksPlugin from '@server/src/modules/identity-links/plugin'
+import externalAccountsPlugin from '@server/src/modules/external-accounts/plugin'
 import registrationApi from '@server/src/modules/registration/api/plugin'
 import linksApi from '@server/src/modules/identity-links/api/plugin'
 import { operations as registrationOperations } from '@server/src/modules/registration/api/operations'
@@ -41,6 +42,7 @@ async function appFixture(disabled = true, production = false) {
       { name: 'business-cfx' },
     ),
   )
+  await app.register(externalAccountsPlugin, { externalAccountServices: f.links.externalAccounts })
   await app.register(linksPlugin, { identityLinkServices: f.links })
   await app.register(registrationPlugin, { registrationServices: f.registration })
   const origin = production ? 'https://website.example' : 'http://127.0.0.1:8080'

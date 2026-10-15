@@ -22,7 +22,4 @@ export async function receiveCfxCallback(request: ApiRequest<'receiveCfxCallback
 export async function getCfxAttempt(request: ApiRequest<'getCfxAttempt'>): Promise<ApiJsonResult<'getCfxAttempt'>> {
   return request.server.cfxServices.inspect(context(request), request.params.id)
 }
-export async function cancelCfxAttempt(request: ApiRequest<'cancelCfxAttempt'>): Promise<ApiJsonResult<'cancelCfxAttempt'>> {
-  return request.server.cfxServices.cancel(context(request), request.params.id)
-}
-export const operations = { createCfxAttempt, completeCfxManualAttempt, receiveCfxCallback, getCfxAttempt, cancelCfxAttempt } as const
+export const operations = { createCfxAttempt, completeCfxManualAttempt, receiveCfxCallback, getCfxAttempt } as const

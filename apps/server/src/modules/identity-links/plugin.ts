@@ -12,6 +12,6 @@ const plugin: FastifyPluginAsync<{ identityLinkServices: IdentityLinkService }> 
 export default fp(plugin, {
   name: 'business-identity-links',
   fastify: '5.x',
-  dependencies: ['business-auth', 'business-cfx'],
-  decorators: { fastify: ['authServices', 'cfxServices'] },
+  dependencies: ['business-auth', 'business-cfx', 'business-external-accounts'],
+  decorators: { fastify: ['authServices', 'cfxServices', 'externalAccountServices'] },
 })

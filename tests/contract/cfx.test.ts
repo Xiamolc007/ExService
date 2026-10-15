@@ -3,6 +3,7 @@ import { createApp, serviceHandlers } from '@workspace/server'
 import { createTestAuth, type TestAuth } from '@tests/helpers/auth'
 import { createCfxServices, type CfxDependencies } from '@server/src/modules/cfx/service'
 import { parseCfxConfig } from '@server/src/modules/cfx/config'
+import { IdentityLinkService } from '@server/src/modules/identity-links/service'
 import { constants, createPublicKey, publicEncrypt } from 'node:crypto'
 import { Writable } from 'node:stream'
 import { compileComponentSchema, listOperations, readContract } from '@tests/helpers/contract'
@@ -19,7 +20,8 @@ async function enabled(production = false, logger: Parameters<typeof createApp>[
   const cfxServices = createCfxServices({ config: parseCfxConfig({ CFX_ENABLED: 'true', NODE_ENV: production ? 'production' : 'development',
     SERVER_PUBLIC_WEB_BASE_URL: production ? 'https://website.example' : 'http://127.0.0.1:8080' }),
     fetch: async url => Response.json(url.includes('/session/') ? { current_user: { id: 1, username: 'Member', avatar_template: '/avatar/{size}.png' } } : { email: 'private@example.com' }), ...dependencies })
-  const app = createApp({ ...fixture, cfxServices, logger }); apps.push(app)
+  const identityLinkServices = new IdentityLinkService({ db: fixture.db, auth: fixture.authServices, cfx: cfxServices, now: fixture.now })
+  const app = createApp({ ...fixture, cfxServices, identityLinkServices, logger }); apps.push(app)
   const origin = production ? 'https://website.example' : 'http://127.0.0.1:8080'
   const created = await app.inject({ method: 'POST', url: '/api/auth/cfx/attempts', headers: { origin }, payload: {} })
   expect(created.statusCode).toBe(201)

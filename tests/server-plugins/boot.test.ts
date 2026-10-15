@@ -169,3 +169,24 @@ it.each(['authServices', 'profileServices', 'storageServices', 'notifications', 
     )
   },
 )
+
+it('reports a missing identity-link service before deriving its account-rule service', async () => {
+  const { externalAccountServices: _unused, ...services } = fixture()
+  const app = createApp({ ...services, identityLinkServices: undefined } as unknown as Parameters<typeof createApp>[0])
+  apps.push(app)
+  let error: unknown
+  try { await app.ready() } catch (failure) { error = failure }
+  expect(error).toBeInstanceOf(BusinessPluginLoadError)
+  expect(error).toMatchObject({ code: 'BUSINESS_PLUGIN_BOOT_FAILED', context: { missingServiceFields: ['identityLinkServices'] } })
+})
+
+it('reports a missing account-rule service through the business plugin diagnostic', async () => {
+  const { externalAccountServices: _unused, ...services } = fixture()
+  Object.defineProperty(services.identityLinkServices, 'externalAccounts', { value: undefined })
+  const app = createApp(services)
+  apps.push(app)
+  let error: unknown
+  try { await app.ready() } catch (failure) { error = failure }
+  expect(error).toBeInstanceOf(BusinessPluginLoadError)
+  expect(error).toMatchObject({ code: 'BUSINESS_PLUGIN_BOOT_FAILED', context: { missingServiceFields: ['externalAccountServices'] } })
+})

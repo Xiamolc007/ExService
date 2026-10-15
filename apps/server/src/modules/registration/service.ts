@@ -5,8 +5,8 @@ import { AuthError } from '../auth/errors.js'
 import type { PasswordHasher } from '../auth/crypto.js'
 import type { AuthService } from '../auth/service.js'
 import type { CfxBrowserContext, CfxIdentity, CfxServices } from '../cfx/types.js'
-import { IdentityLinkError } from '../identity-links/errors.js'
-import { uniqueViolation, type IdentityLinkService } from '../identity-links/service.js'
+import type { IdentityLinkService } from '../identity-links/service.js'
+import { ExternalAccountService, uniqueViolation } from '../external-accounts/service.js'
 import { RegistrationError } from './errors.js'
 
 export interface RegistrationMailer {
@@ -22,7 +22,9 @@ export interface RegistrationServiceDependencies {
   db: AppDatabase
   auth: AuthService
   identityLinks: IdentityLinkService
-  cfx: CfxServices
+  externalAccounts?: ExternalAccountService
+  /** Retained for direct service consumers; ticket consumption is owned by externalAccounts. */
+  cfx?: CfxServices
   passwordHasher: PasswordHasher
   codeHmacKey: Buffer
   mailer?: RegistrationMailer
@@ -69,8 +71,10 @@ export class RegistrationService {
   private starting?: Promise<void>
   private timer?: ReturnType<typeof setInterval>
   private cleaning = false
+  private readonly externalAccounts: ExternalAccountService
   constructor(private readonly d: RegistrationServiceDependencies) {
     this.now = d.now ?? Date.now
+    this.externalAccounts = d.externalAccounts ?? d.identityLinks.externalAccounts
     if (d.codeHmacKey.length !== 32) throw new Error('Invalid registration HMAC key')
   }
   start(): Promise<void> {
@@ -292,7 +296,7 @@ export class RegistrationService {
             passwordHash,
           )
           if (current!.kind === 'cfx')
-            await this.d.identityLinks.createInside(tx, grantIdentity(current!), user.id)
+            await this.externalAccounts.createLinkFromGrantInside(tx, current!, user.id)
           await tx.query(
             `UPDATE auth_registration_grants SET state='completed',completed_at=$2,completed_user_id=$3 WHERE id=$1`,
             [row.id, this.now(), user.id],
@@ -320,57 +324,16 @@ export class RegistrationService {
   ): Promise<components['schemas']['CfxSignInResult']> {
     return this.track(async () => {
       // No await before proof consumption: Cfx transitions ready -> consumed atomically.
-      const identity = this.d.cfx.consumeIdentity({ context, identityTicket })
-      const candidate = await this.d.identityLinks.findBySubjectInside(this.d.db, 'cfx', identity.id)
-      if (candidate)
-        return this.d.db.transaction(async (tx) => {
-          const user = (
-            await tx.query<{ disabled_at: number | null }>(
-              'SELECT disabled_at FROM auth_users WHERE id=$1 FOR NO KEY UPDATE',
-              [candidate.userId],
-            )
-          ).rows[0]
-          if (!user || user.disabled_at !== null) throw new AuthError('SESSION_INVALID')
-          const row = (
-            await tx.query<{ id: string; external_user_id: string }>(
-              'SELECT id,external_user_id FROM auth_identity_links WHERE user_id=$1 AND provider=$2 FOR UPDATE',
-              [candidate.userId, 'cfx'],
-            )
-          ).rows[0]
-          if (!row || row.id !== candidate.id || row.external_user_id !== identity.id)
-            throw new IdentityLinkError('IDENTITY_LINK_CONFLICT')
-          return {
-            kind: 'signed-in' as const,
-            ...(await this.d.auth.createSessionInside(tx, candidate.userId)),
-          }
-        })
-      return this.d.db.transaction(async (tx) => {
-        await capacityLock(tx)
-        if (await this.d.identityLinks.findBySubjectInside(tx, 'cfx', identity.id))
-          throw new IdentityLinkError('IDENTITY_LINK_CONFLICT')
-        if ((await tx.query('SELECT id FROM auth_users WHERE email=$1', [identity.email])).rows.length)
-          return {
-            kind: 'account-exists' as const,
-            email: identity.email,
-            nextAction: 'login_then_link' as const,
-          }
-        const grant = await this.insertGrantInside(tx, identity.email, bindingHash, identity)
-        return {
-          kind: 'registration-required' as const,
-          ...grant,
-          suggestedNickname:
-            !/[\u0000-\u001f\u007f-\u009f]/u.test(identity.username)
-              ? [...identity.username.trim()].slice(0, 32).join('') || null
-              : null,
-        }
-      })
+      const identity = this.externalAccounts.consumeCfx(context, identityTicket)
+      return this.externalAccounts.signInVerified(identity, bindingHash,
+        (tx, email, binding, snapshot) => this.insertGrantInside(tx, email, binding, snapshot))
     })
   }
   private async insertGrantInside(
     tx: SqlExecutor,
     email: string,
     bindingHash: string,
-    identity?: CfxIdentity,
+    identity?: Pick<CfxIdentity, 'id' | 'username' | 'email'>,
   ) {
     await this.assertCount(tx, 'auth_registration_grants', 1024)
     const now = this.now(),
@@ -551,7 +514,4 @@ function seconds(ms: number) {
 }
 function registrationResult(row: GrantRow): Result {
   return { status: 'registered', userId: row.completed_user_id!, email: row.email }
-}
-function grantIdentity(row: GrantRow): Pick<CfxIdentity, 'id' | 'username' | 'email'> {
-  return { id: row.external_user_id!, username: row.external_username!, email: row.provider_email! }
 }

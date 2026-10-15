@@ -31,7 +31,7 @@ export interface CreateAppOptions extends BusinessServices {
 
 /** Create synchronously; service decorators and API routes become available after Fastify boot. */
 export function createApp({
-  authServices, profileServices, joinServices, identityLinkServices, registrationServices, communityServices, storageServices, notifications, clickupServices, supportServices,
+  authServices, profileServices, joinServices, identityLinkServices, externalAccountServices, registrationServices, communityServices, storageServices, notifications, clickupServices, supportServices,
   cfxServices = createCfxServices({ config: { enabled: false } }),
   identityKeys, oidcServices, publicOrigin = 'http://127.0.0.1:8080', production = false, logger = false, trustProxy = false, corsAllowedOrigins = new Set(), genReqId,
 }: CreateAppOptions): FastifyInstance {
@@ -40,7 +40,9 @@ export function createApp({
     ajv: { customOptions: { coerceTypes: false, removeAdditional: false } },
   })
   app.register(businessPlugins, Object.freeze({
-    authServices, profileServices, joinServices, identityLinkServices, registrationServices, communityServices, storageServices, notifications, clickupServices, supportServices, oidcServices, cfxServices,
+    authServices, profileServices, joinServices, identityLinkServices,
+    externalAccountServices: externalAccountServices ?? identityLinkServices?.externalAccounts,
+    registrationServices, communityServices, storageServices, notifications, clickupServices, supportServices, oidcServices, cfxServices,
   }))
   app.register(httpFoundation, { origins: corsAllowedOrigins })
   app.register(websiteApi, { identityKeys, publicOrigin, production })

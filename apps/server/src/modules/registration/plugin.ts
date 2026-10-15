@@ -12,6 +12,6 @@ const plugin: FastifyPluginAsync<{ registrationServices: RegistrationService }> 
 export default fp(plugin, {
   name: 'business-registration',
   fastify: '5.x',
-  dependencies: ['business-auth', 'business-cfx', 'business-identity-links'],
-  decorators: { fastify: ['authServices', 'cfxServices', 'identityLinkServices'] },
+  dependencies: ['business-auth', 'business-cfx', 'business-identity-links', 'business-external-accounts'],
+  decorators: { fastify: ['authServices', 'cfxServices', 'identityLinkServices', 'externalAccountServices'] },
 })
