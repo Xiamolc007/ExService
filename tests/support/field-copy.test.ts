@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
 import { copySupportFields } from '../../scripts/copy-support-fields.mjs'
+import { FIELD_DEFINITIONS, parseSupportField } from '../../scripts/support-field-definition.mjs'
+import { parseFieldDefinition } from '@server/src/domains/support/field-config'
 
 const temps: string[] = []
 afterEach(() => { for (const dir of temps.splice(0)) rmSync(dir, { recursive: true, force: true }) })
@@ -28,4 +30,15 @@ it('validates every option before copying any packaged field', () => {
   writeFileSync(file, JSON.stringify(valid))
   copySupportFields(source, target)
   expect(readdirSync(target).sort()).toEqual(readdirSync(source).sort())
+})
+
+it('uses one normalized field definition for packaging and server loading', () => {
+  for (const { id, type } of FIELD_DEFINITIONS) {
+    const raw = JSON.parse(readFileSync(resolve('apps/web/public/clickups/fields', `${id}.json`), 'utf8'))
+    expect(parseSupportField(raw, id, type)).toEqual(parseFieldDefinition(raw, id, type))
+    for (const invalid of [{ ...raw, type: 'wrong' }, { ...raw, id: 'wrong' }]) {
+      expect(() => parseSupportField(invalid, id, type)).toThrow('Invalid support field')
+      expect(() => parseFieldDefinition(invalid, id, type)).toThrow('Invalid support field')
+    }
+  }
 })

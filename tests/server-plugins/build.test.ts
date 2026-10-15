@@ -15,7 +15,7 @@ const compiler = require.resolve('typescript/bin/tsc'), tsx = pathToFileURL(requ
 const runner = join(root, 'tests/server-plugins/fixtures/boot-in-environment.mjs')
 cpSync(join(root, 'apps/server/src'), source, { recursive: true })
 mkdirSync(join(workspace, 'scripts'), { recursive: true })
-for (const file of ['clean-server-build.mjs', 'rewrite-server-imports.mjs']) cpSync(join(root, 'scripts', file), join(workspace, 'scripts', file))
+for (const file of ['clean-server-build.mjs', 'rewrite-server-imports.mjs', 'support-field-definition.mjs', 'support-field-definition.d.mts']) cpSync(join(root, 'scripts', file), join(workspace, 'scripts', file))
 cpSync(join(root, 'apps/server/package.json'), join(server, 'package.json'))
 cpSync(join(root, 'tsconfig.base.json'), join(workspace, 'tsconfig.base.json'))
 cpSync(join(root, 'apps/server/tsconfig.json'), join(server, 'tsconfig.json'))
