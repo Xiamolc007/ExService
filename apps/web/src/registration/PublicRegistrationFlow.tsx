@@ -5,7 +5,7 @@ import {RegistrationEmailForm,InvitationCodeForm,InvitationProfileForm,type Invi
 import type {components} from '@workspace/api-client'
 import {api} from '@web/src/api/client'
 import {ExAxiosError} from '@workspace/sdk/http/browser'
-import {installBrowserSession} from '@web/src/auth/session-install'
+import {useThirdPartySignIn,type ThirdPartySignInPresentation} from '@web/src/auth/useThirdPartySignIn'
 import {CfxAuthorization} from './CfxAuthorization'
 type CfxRegistration=Extract<components['schemas']['CfxSignInResult'],{kind:'registration-required'}>
 type Grant=components['schemas']['RegistrationGrant']
@@ -17,10 +17,24 @@ export function PublicRegistrationFlow({presentation,initialEmail='',initialGran
   const [resendUntil,setResendUntil]=useState(0),[lockedUntil,setLockedUntil]=useState(0),[clock,setClock]=useState(Date.now())
   const [notice,setNotice]=useState<string|null>(null),[error,setError]=useState<string|null>(null)
   const [cfxActive,setCfxActive]=useState(false)
+  const [cfxEpoch,setCfxEpoch]=useState(0)
   const mounted=useRef(false),generation=useRef(0),pending=useRef(false),grant=useRef<Grant|null>(initialGrant??null),challenge=useRef<string|null>(null)
+  const cfxVersion=useRef(0)
   const emailForm=useRef<InvitationFormHandle>(null),codeForm=useRef<InvitationFormHandle>(null),profileForm=useRef<InvitationFormHandle>(null)
   const controller=useRef<AbortController|null>(null),finished=useRef(false)
+  const thirdParty=useThirdPartySignIn(()=>{
+    invalidate(false)
+    setEmail('');setNickname('');setLockedUntil(0);setResendUntil(0)
+    setStep('email');setCfxEpoch(value=>value+1)
+    setNotice('登录状态已变化，请重新开始注册')
+  })
   const current=(version:number)=>mounted.current&&generation.current===version
+  const cfxPresentation:ThirdPartySignInPresentation={
+    onSignedIn:finishInstalledSession,
+    onRegistrationRequired:result=>{grant.current=result;setEmail(result.email);setNickname(result.suggestedNickname??'');setStep('profile')},
+    onAccountExists:targetEmail=>{setEmail(targetEmail);setNotice('该邮箱已有账号，请登录后在设置中主动关联 Cfx。')},
+    onFailure:setError,
+  }
   const form=()=>step==='email'?emailForm.current:step==='code'?codeForm.current:profileForm.current
   useEffect(()=>{
     mounted.current=true
@@ -31,7 +45,7 @@ export function PublicRegistrationFlow({presentation,initialEmail='',initialGran
     const timer=setInterval(()=>setClock(Date.now()),1000)
     return()=>{mounted.current=false;clearInterval(timer);controller.current?.abort();generation.current++;queueMicrotask(()=>{if(!mounted.current)grant.current=null})}
   },[])
-  function invalidate() {generation.current++;controller.current?.abort();controller.current=null;grant.current=null;challenge.current=null;pending.current=false;setBusy(false);setCfxActive(false);setRetry(false);setError(null);form()?.clearServerErrors()}
+  function invalidate(invalidateThirdParty=true) {generation.current++;if(invalidateThirdParty)thirdParty.invalidate();controller.current?.abort();controller.current=null;grant.current=null;challenge.current=null;pending.current=false;setBusy(false);setCfxActive(false);setRetry(false);setError(null);form()?.clearServerErrors()}
   function back(){invalidate();setNickname('');setLockedUntil(0);setResendUntil(0);setStep('email')}
   function fail(version:number,issue:unknown,target:'email'|'code'|'profile',operation:'send'|'verify'|'complete') {
     if(!current(version))return
@@ -56,6 +70,7 @@ export function PublicRegistrationFlow({presentation,initialEmail='',initialGran
   function cooldown(data:components['schemas']['RegistrationCodeRequested']) {challenge.current=data.challengeId;setResendUntil(Date.now()+Math.max(0,data.resendAvailableAt-data.serverTime))}
   async function send(targetEmail:string,resending=false):Promise<boolean> {
     if(pending.current||Date.now()<lockedUntil||(resending&&Date.now()<resendUntil))return false
+    thirdParty.invalidate()
     const version=++generation.current;pending.current=true;setBusy(true);setError(null);form()?.clearServerErrors()
     const abort=new AbortController();controller.current=abort
     try {
@@ -66,6 +81,7 @@ export function PublicRegistrationFlow({presentation,initialEmail='',initialGran
   }
   async function verify(code:string) {
     if(pending.current||challenge.current===null||Date.now()<lockedUntil)return
+    thirdParty.invalidate()
     const version=generation.current;pending.current=true;setBusy(true);setError(null);codeForm.current?.clearServerErrors()
     try {
       const result=await api.POST('/auth/registration/verify',{body:{challengeId:challenge.current,code},signal:controller.current?.signal,alert:false})
@@ -82,6 +98,7 @@ export function PublicRegistrationFlow({presentation,initialEmail='',initialGran
   async function complete(values:InvitationProfileValues) {
     const active=grant.current
     if(pending.current||!active)return
+    thirdParty.invalidate()
     const version=generation.current;pending.current=true;setBusy(true);setError(null);profileForm.current?.clearServerErrors()
     try {
       await api.POST('/auth/registrations',{body:{registrationToken:active.registrationToken,...values},signal:controller.current?.signal,alert:false})
@@ -90,30 +107,29 @@ export function PublicRegistrationFlow({presentation,initialEmail='',initialGran
     }catch(issue){fail(version,issue,'profile','complete')}finally{if(current(version)){pending.current=false;setBusy(false)}}
   }
   async function cfx(ticket:string,_attemptId:string,signal:AbortSignal) {
-    const version=++generation.current;setError(null)
-    const result=await api.POST('/auth/cfx/sign-in',{body:{identityTicket:ticket},signal,alert:false})
-    if(!current(version)||signal.aborted)return
-    if(result.kind==='registration-required'){grant.current=result;setEmail(result.email);setNickname(result.suggestedNickname??'');setStep('profile')}
-    else if(result.kind==='account-exists'){setEmail(result.email);setNotice('该邮箱已有账号，请登录后在设置中主动关联 Cfx。')}
-    else {
-      const installed=await installBrowserSession(result.token,()=>current(version)&&!signal.aborted)
-      if(installed.status==='failed'){setError(installed.message);return}
-      if(installed.status!=='installed')return
-      if(onSessionCreated)onSessionCreated(result.token)
-      else if(presentation==='modal')window.location.reload()
-      else window.location.replace('/')
-    }
+    const version=++generation.current;cfxVersion.current=version;setError(null)
+    await thirdParty.runCfxTicket(ticket,signal,()=>current(version),cfxPresentation)
+  }
+  function finishInstalledSession(token:string){
+    if(onSessionCreated)onSessionCreated(token)
+    else if(presentation==='modal')window.location.reload()
+    else window.location.replace('/')
+  }
+  async function retryCfxInstallation(){
+    const version=cfxVersion.current
+    await thirdParty.retrySessionInstallation(()=>current(version),cfxPresentation)
   }
   useEffect(()=>{if(step!=='registered')return;const timer=setTimeout(login,1500);return()=>clearTimeout(timer)},[step])
   return <>
     {notice&&<p role="status">{notice}</p>}
     {step==='email'&&<>
-      <RegistrationEmailForm ref={emailForm} initialEmail={email} busy={busy||cfxActive} onSubmit={async value=>{await send(value)}} onEmailChange={invalidate} onLogin={login}/>
-      <CfxAuthorization disabled={busy} onActiveChange={setCfxActive} onTicket={cfx}/><Button type="button" disabled>Google 暂未开放</Button><Button type="button" disabled>QQ 暂未开放</Button>
+      <RegistrationEmailForm ref={emailForm} initialEmail={email} busy={busy||cfxActive||thirdParty.busy} onSubmit={async value=>{await send(value)}} onEmailChange={invalidate} onLogin={login}/>
+      <CfxAuthorization key={cfxEpoch} disabled={busy||thirdParty.busy} onActiveChange={setCfxActive} onTicket={cfx}/><Button type="button" disabled>Google 暂未开放</Button><Button type="button" disabled>QQ 暂未开放</Button>
     </>}
     {step==='code'&&<InvitationCodeForm ref={codeForm} email={email} busy={busy} retry={retry} resendSeconds={Math.max(0,Math.ceil((resendUntil-clock)/1000))} lockedSeconds={Math.max(0,Math.ceil((lockedUntil-clock)/1000))} onVerify={verify} onResend={()=>send(email,true)} onBack={back}/>}
     {step==='profile'&&<InvitationProfileForm key={email} ref={profileForm} email={email} nickname={nickname} busy={busy} onSubmit={complete} onBack={back}/>}
     {step==='registered'&&<section aria-live="polite"><h2>注册成功</h2><p>账号已创建，即将前往登录。</p><Button type="button" onClick={login}>前往登录</Button></section>}
     {error&&<p role="alert">{error}</p>}
+    {thirdParty.outcome?.kind==='failed'&&thirdParty.outcome.retryInstallation&&<Button type="button" disabled={thirdParty.busy} onClick={()=>void retryCfxInstallation()}>重试完成登录</Button>}
   </>
 }

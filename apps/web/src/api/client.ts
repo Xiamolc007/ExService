@@ -28,3 +28,19 @@ export const http = createExAxios({
 })
 bindSessionHttp(token => http.setToken(token))
 export const api = createApiClient({ baseUrl, transport: request => http(request) })
+
+/** Revoke only the session being replaced without redirecting the caller's in-place flow. */
+export async function revokePreviousSessionForReplacement(oldToken: string): Promise<void> {
+  const replacementHttp = createExAxios({
+    baseUrl,
+    websiteBaseUrl: baseUrl,
+    sameOriginCookies: true,
+    onSessionExpired: () => { syncSessionToken() },
+  })
+  replacementHttp.setToken(oldToken)
+  const replacementApi = createApiClient({ baseUrl, transport: request => replacementHttp(request) })
+  await replacementApi.POST('/auth/logout', {
+    headers: { Authorization: `Bearer ${oldToken}` },
+    alert: false,
+  })
+}

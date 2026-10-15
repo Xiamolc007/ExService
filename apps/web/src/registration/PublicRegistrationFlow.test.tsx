@@ -7,8 +7,9 @@ import {ExMessage} from '@exre/exui'
 import {StrictMode} from 'react'
 import {act} from '@testing-library/react'
 import {ExAxiosError} from '@workspace/sdk/http/browser'
+import {AUTH_TOKEN_KEY,syncSessionToken} from '@web/src/auth/storage'
 const api=vi.hoisted(()=>({POST:vi.fn(),GET:vi.fn(),DELETE:vi.fn()}))
-vi.mock('@web/src/api/client',()=>({api}))
+vi.mock('@web/src/api/client',()=>({api,revokePreviousSessionForReplacement:(token:string)=>api.POST('/auth/logout',{headers:{Authorization:`Bearer ${token}`},alert:false})}))
 class Resize {observe(){}unobserve(){}disconnect(){}}
 vi.stubGlobal('ResizeObserver',Resize)
 Object.defineProperty(document,'elementFromPoint',{configurable:true,value:()=>document.body})
@@ -104,6 +105,15 @@ it('Cfx profile completion survives StrictMode, keeps email immutable and perfor
   expect(api.POST.mock.calls[0]![1].body).toEqual({registrationToken:grant.registrationToken,nickname:'CfxMember',password:'valid password'})
   expect(window.localStorage.length).toBe(0)
 })
+it('drops an initial Cfx grant and its profile when another tab changes the session owner',async()=>{
+  const Flow=await component()
+  render(<MemoryRouter><Flow presentation="page" initialGrant={{kind:'registration-required',...grant,suggestedNickname:'Old'}}/></MemoryRouter>)
+  expect(screen.getByLabelText('密码')).toBeTruthy()
+  await act(async()=>{window.localStorage.setItem(AUTH_TOKEN_KEY,'other-owner');syncSessionToken('storage')})
+  expect(screen.queryByLabelText('密码')).toBeNull()
+  expect(screen.getByRole('button',{name:'继续'})).toBeTruthy()
+  expect(api.POST).not.toHaveBeenCalled()
+})
 it('closing after completion cancels the automatic login timer and cannot reopen the closed modal',async()=>{
   const Flow=await component(),user=userEvent.setup(),onLogin=vi.fn();vi.spyOn(ExMessage,'info').mockReturnValue('info')
   api.POST.mockResolvedValue({status:'registered',userId:'20000000-0000-4000-8000-000000000001',email:grant.email})
@@ -111,4 +121,26 @@ it('closing after completion cancels the automatic login timer and cannot reopen
   await user.type(screen.getByLabelText('密码'),'valid password');await user.click(screen.getByRole('button',{name:'完成注册'}))
   expect(await screen.findByRole('heading',{name:'注册成功'})).toBeTruthy()
   view.unmount();await new Promise(resolve=>setTimeout(resolve,1600));expect(onLogin).not.toHaveBeenCalled()
+})
+
+it.each([
+  {result:{kind:'account-exists',email:'existing@example.com',nextAction:'login_then_link'},expected:'该邮箱已有账号，请登录后在设置中主动关联 Cfx。'},
+  {result:{kind:'signed-in',token:'new-token',expiresAt:Date.now()+600_000},expected:'new-token'},
+])('routes a $result.kind Cfx result through public registration',async ({result,expected})=>{
+  const Flow=await component(),user=userEvent.setup(),onSessionCreated=vi.fn()
+  api.POST.mockImplementation((path:string)=>Promise.resolve(path==='/auth/cfx/attempts'
+    ? {attemptId:'a'.repeat(43),mode:'manual',authorizationUrl:'https://forum.cfx.re/user-api-key/new',expiresAt:Date.now()+600_000}
+    : path.endsWith('/complete')?{state:'ready'}:result))
+  api.GET.mockResolvedValue({state:'ready',attemptId:'a'.repeat(43),identityTicket:'t'.repeat(43),ticketExpiresAt:Date.now()+30_000})
+  render(<MemoryRouter><Flow presentation="modal" onSessionCreated={onSessionCreated}/></MemoryRouter>)
+  await user.click(screen.getByRole('button',{name:'使用 Cfx'}))
+  await user.type(await screen.findByLabelText('加密授权结果'),'encrypted')
+  await user.click(screen.getByRole('button',{name:'完成 Cfx 授权'}))
+  if(result.kind==='signed-in'){
+    await waitFor(()=>expect(onSessionCreated).toHaveBeenCalledExactlyOnceWith(expected))
+    expect(window.localStorage.getItem(AUTH_TOKEN_KEY)).toBe(expected)
+  }else{
+    expect(await screen.findByText(expected)).toBeTruthy()
+    expect(onSessionCreated).not.toHaveBeenCalled()
+  }
 })
