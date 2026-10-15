@@ -13,6 +13,18 @@
   position: sticky;
   top: 0;
   z-index: 10;
+  box-shadow: inset 0 -1px 0 transparent;
+  transition:
+    background-color 200ms ease-out,
+    box-shadow 200ms ease-out,
+    backdrop-filter 200ms ease-out,
+    -webkit-backdrop-filter 200ms ease-out;
+
+  // Glass 默认包含四周描边和顶部高光；站点顶栏只保留底部分隔线。
+  &:global(.ex-glass) {
+    box-shadow: inset 0 -1px 0 var(--exui-glass-border);
+  }
+
   &:not(:global(.ex-glass)) {
     background: transparent;
   }
@@ -25,6 +37,12 @@
   display: flex;
   box-sizing: border-box;
   min-height: var(--site-header-height);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .header {
+    transition: none;
+  }
 }
 
 .inner {

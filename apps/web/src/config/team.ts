@@ -1,14 +1,7 @@
 import { z } from 'zod'
+import { shaderThemeSchema } from './shader-theme.ts'
 
 const text = z.string().trim().min(1)
-const opaqueColor = z.string().regex(/^#[\da-f]{6}$/i)
-const dotColor = z.string().regex(/^#[\da-f]{6}(?:[\da-f]{2})?$/i)
-function whiteContrast(color: string) {
-  const channels = [1, 3, 5].map(index => parseInt(color.slice(index, index + 2), 16) / 255)
-    .map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
-  return 1.05 / (0.2126 * channels[0]! + 0.7152 * channels[1]! + 0.0722 * channels[2]! + 0.05)
-}
-const readableColor = opaqueColor.refine(value => whiteContrast(value) >= 4.5, 'White text requires contrast of at least 4.5:1')
 export const teamImageSchema = z.strictObject({
   src: text.refine(value => value.startsWith('/images/team/') && !/[\\?#%\u0000-\u001f\u007f]/.test(value) && value.slice('/images/team/'.length).split('/').every(part => part !== '' && part !== '.' && part !== '..'), 'Expected a plain /images/team/ image path without traversal'),
   alt: text,
@@ -19,7 +12,7 @@ export const teamMemberSchema = z.strictObject({
   id: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/), name: text, role: text, bio: text,
   avatar: teamImageSchema.optional(), portrait: teamImageSchema.optional(),
   strengths: z.array(z.strictObject({ title: text, description: text })),
-  theme: z.strictObject({ colorBack: readableColor, accent: readableColor, colorFill: dotColor.default('#ffffff7d'), colorStroke: dotColor.default('#ffffff') }),
+  theme: shaderThemeSchema,
 })
 export type TeamMember = z.infer<typeof teamMemberSchema>
 export type TeamImage = z.infer<typeof teamImageSchema>
