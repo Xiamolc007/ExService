@@ -25,6 +25,7 @@
     "@fastify/autoload": "6.5.1",
     "@fastify/multipart": "10.1.2",
     "@workspace/api-client": "workspace:*",
+    "@workspace/common": "workspace:*",
     "ajv": "8.20.0",
     "cos-nodejs-sdk-v5": "^3.0.0",
     "drizzle-orm": "^0.45.2",
