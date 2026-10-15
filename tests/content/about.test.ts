@@ -15,6 +15,41 @@ async function fixture() {
   await cp(aboutDefinition.root, root, { recursive: true })
   return { ...aboutDefinition, root }
 }
+it('publishes independent community palettes and rejects unreadable shader colors', async () => {
+  const definition = await fixture()
+  const path = join(definition.root, 'communities/rifling-911.mdx')
+  const source = parse((await readFile(path, 'utf8')).split('---')[1]!)
+  const writeTheme = async (color: string) => writeFile(path, `---\n${stringify({ ...source, theme: { colorBack: color, accent: '#065ed1' } })}---\nCommunity story`)
+  await writeTheme('#0868de')
+  const result = await readContent(definition)
+  const community = (result.data as AboutRegistry).pages.find(page => page.kind === 'community' && page.slug === 'rifling-911')
+  expect(community && 'theme' in community ? community.theme : undefined).toEqual({ colorBack: '#0868de', accent: '#065ed1', colorFill: '#ffffff7d', colorStroke: '#ffffff' })
+  await writeTheme('#ffffff')
+  await expect(readContent(definition)).rejects.toThrow(/contrast/)
+})
+it('publishes chapter photo assets and retains milestone references through chapter grouping', async () => {
+  const definition = await fixture()
+  await mkdir(join(definition.root, 'assets'), { recursive: true })
+  await writeFile(join(definition.root, 'assets/story.png'), Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64'))
+  await writeFile(join(definition.root, 'story.mdx'), '---\ntitle: Story\ndescription: Intro\n---\n<Timeline headline="A story"><StoryChapter yearLabel="2016" photos={[{src:"assets/story.png",alt:"Photo",width:1,height:1}]}><Milestone id="creating" title="Event" dateLabel="Example">Story</Milestone></StoryChapter></Timeline>')
+  const result = await readContent(definition)
+  expect((result.data as AboutRegistry).milestones).toEqual(['creating'])
+  expect(Object.keys(result.assets)).toContain('assets/story.png')
+})
+it.each(['placeholderPhotos={0}', 'placeholderPhotos={3}', 'photos={[]}'])('rejects unsupported chapter photo counts: %s', async props => {
+  const definition = await fixture()
+  await writeFile(join(definition.root, 'story.mdx'), `---\ntitle: Story\ndescription: Intro\n---\n<Timeline><StoryChapter yearLabel="2016" ${props}>Story</StoryChapter></Timeline>`)
+  await expect(readContent(definition)).rejects.toThrow(/story.mdx/)
+})
+it.each([
+  '<Milestone id="beginning" title="起点" dateLabel="示例">正文</Milestone>',
+  '<Timeline><Callout title="说明" kind="note"><StoryChapter yearLabel="2016"><Milestone id="creating" title="起点" dateLabel="示例">正文</Milestone></StoryChapter></Callout></Timeline>',
+  '<Timeline><StoryChapter yearLabel="2016"><Callout title="说明" kind="note"><Milestone id="creating" title="起点" dateLabel="示例">正文</Milestone></Callout></StoryChapter></Timeline>',
+])('rejects chapter nesting that the Story renderer cannot display', async body => {
+  const definition = await fixture()
+  await writeFile(join(definition.root, 'story.mdx'), `---\ntitle: Story\ndescription: Intro\n---\n${body}`)
+  await expect(readContent(definition)).rejects.toThrow(/story.mdx/)
+})
 async function homeFields(definition: typeof aboutDefinition, fields: Record<string, unknown>) {
   const path = join(definition.root, 'index.mdx')
   const source = await readFile(path, 'utf8')
@@ -106,6 +141,7 @@ it('projects the real published pages and keeps member bodies separate from rout
   const registry = data as { pages: { url: string }[]; members: { id: string }[] }
   expect(registry.pages.map(page => page.url)).toContain('/aboutus/communities/caep')
   expect(registry.pages.some(page => page.url.includes('members'))).toBe(false)
+  expect(registry.pages.some(page => page.url.startsWith('/aboutus/projects'))).toBe(false)
   expect(registry.members[0]?.id).toBe('members/example-contributor.mdx')
 })
 it('rejects a missing fixed page', async () => {
@@ -116,11 +152,12 @@ it('rejects a missing fixed page', async () => {
 it('rejects a public reference to a draft member', async () => {
   const definition = await fixture()
   await writeFile(join(definition.root, 'members/example-contributor.mdx'), '---\ntitle: Private\nslug: example-contributor\nrole: Design\nsummary: Draft\nkind: contributor\ndraft: true\n---\nText')
+  await writeFile(join(definition.root, 'communities/example-community.mdx'), '---\ntitle: Example\ndescription: Intro\nslug: example-community\nstatus: unknown\nrelated:\n  members: [example-contributor]\n---\nText')
   await expect(readContent(definition)).rejects.toThrow('unpublished members:example-contributor')
 })
 it('rejects duplicate milestone ids', async () => {
   const definition = await fixture()
-  await writeFile(join(definition.root, 'story.mdx'), '---\ntitle: Story\ndescription: Intro\n---\n<Timeline>\n<Milestone id="same" title="A" dateLabel="Unknown">A</Milestone>\n<Milestone id="same" title="B" dateLabel="Unknown">B</Milestone>\n</Timeline>')
+  await writeFile(join(definition.root, 'story.mdx'), '---\ntitle: Story\ndescription: Intro\n---\n<Timeline>\n<Milestone id="same" title="A" dateLabel="Unknown">\nA\n</Milestone>\n<Milestone id="same" title="B" dateLabel="Unknown">\nB\n</Milestone>\n</Timeline>')
   await expect(readContent(definition)).rejects.toThrow('Duplicate milestones id: same')
 })
 it('does not export resources used only by a draft media item', async () => {
@@ -135,13 +172,13 @@ it('does not export resources used only by a draft media item', async () => {
 })
 it('rejects unresolved author and markdown links', async () => {
   const definition = await fixture()
-  await writeFile(join(definition.root, 'projects/example-project.mdx'), '---\ntitle: Example\ndescription: Intro\nslug: example-project\nstatus: unknown\n---\n<AboutLink target="community:no-such-community">Read</AboutLink>')
+  await writeFile(join(definition.root, 'communities/example-community.mdx'), '---\ntitle: Example\ndescription: Intro\nslug: example-community\nstatus: unknown\n---\n<AboutLink target="community:no-such-community">Read</AboutLink>')
   await expect(readContent(definition)).rejects.toThrow('communities:no-such-community')
-  await writeFile(join(definition.root, 'projects/example-project.mdx'), '---\ntitle: Example\ndescription: Intro\nslug: example-project\nstatus: unknown\n---\n[Read](/aboutus/story#no-such-anchor)')
+  await writeFile(join(definition.root, 'communities/example-community.mdx'), '---\ntitle: Example\ndescription: Intro\nslug: example-community\nstatus: unknown\n---\n[Read](/aboutus/story#no-such-anchor)')
   await expect(readContent(definition)).rejects.toThrow('Unknown anchor')
 })
 it.each([
-  '<Milestone id="creating" title="Example" dateLabel="Unknown" related={{projects:[" example-project "]}}>Text</Milestone>',
+  '<Milestone id="creating" title="Example" dateLabel="Unknown" related={{communities:[" example-community "]}}>Text</Milestone>',
   '<Milestone id=" creating " title="Example" dateLabel="Unknown">Text</Milestone>',
 ])('rejects non-canonical static slugs before publishing broken links or anchors', async body => {
   const definition = await fixture()
@@ -150,12 +187,12 @@ it.each([
 })
 it('checks the complete fragment instead of discarding an extra hash', async () => {
   const definition = await fixture()
-  await writeFile(join(definition.root, 'projects/example-project.mdx'), '---\ntitle: Example\ndescription: Intro\nslug: example-project\nstatus: unknown\n---\n[Read](/aboutus/story#milestone-creating#junk)')
+  await writeFile(join(definition.root, 'communities/example-community.mdx'), '---\ntitle: Example\ndescription: Intro\nslug: example-community\nstatus: unknown\n---\n[Read](/aboutus/story#milestone-creating#junk)')
   await expect(readContent(definition)).rejects.toThrow('Unknown anchor')
 })
 it('accepts an encoded fragment using the same decoded anchor as the browser', async () => {
   const definition = await fixture()
   await writeFile(join(definition.root, 'story.mdx'), '---\ntitle: Story\ndescription: Intro\n---\n## 开始\n\n故事正文')
-  await writeFile(join(definition.root, 'projects/example-project.mdx'), '---\ntitle: Example\ndescription: Intro\nslug: example-project\nstatus: unknown\n---\n[Read](/aboutus/story#%E5%BC%80%E5%A7%8B)')
+  await writeFile(join(definition.root, 'communities/example-community.mdx'), '---\ntitle: Example\ndescription: Intro\nslug: example-community\nstatus: unknown\n---\n[Read](/aboutus/story#%E5%BC%80%E5%A7%8B)')
   await expect(readContent(definition)).resolves.toBeDefined()
 })

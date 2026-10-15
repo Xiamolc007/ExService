@@ -1,4 +1,6 @@
 .about { width: min(calc(100% - 3rem), 72rem); margin-inline: auto; color: var(--exui-text-primary); }
+.communities { width: min(calc(100% - 3rem), 84rem); }
+.communities > .navigation { width: min(100%, 72rem); margin-inline: auto; }
 .home { width: 100%; color: var(--exui-text-primary); }
 .about :is(h1, h2, h3, h4, h5, h6), .home :is(h1, h2, h3, h4, h5, h6), .body :is(h2, h3, h4, h5, h6) { font-weight: var(--exui-font-weight-bold); }
 .homeMain { min-width: 0; padding-bottom: 5rem; }

@@ -32,9 +32,9 @@ it('builds real About donation metadata without draft donor details or QR assets
   const forcedConfig = {
     aboutHome: defineCollections({ type: 'doc', dir: content, ...aboutCollections.aboutHome }),
     aboutTeam: defineCollections({ type: 'doc', dir: content, ...aboutCollections.aboutTeam }),
+    aboutMediaPage: defineCollections({ type: 'doc', dir: content, ...aboutCollections.aboutMediaPage }),
     aboutSections: defineCollections({ type: 'doc', dir: content, ...aboutCollections.aboutSections }),
     aboutCommunities: defineCollections({ type: 'doc', dir: content, ...aboutCollections.aboutCommunities }),
-    aboutProjects: defineCollections({ type: 'doc', dir: content, ...aboutCollections.aboutProjects }),
     aboutMembers: defineCollections({ type: 'doc', dir: content, ...aboutCollections.aboutMembers }),
     aboutMedia: defineCollections({ type: 'meta', dir: content, ...aboutCollections.aboutMedia }),
     aboutDonationCatalog: defineCollections({ type: 'meta', dir: content, ...aboutCollections.aboutDonationCatalog }),

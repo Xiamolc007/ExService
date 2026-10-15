@@ -11,8 +11,8 @@ import styles from './AboutHome.module.scss'
 
 type HomePage = Extract<AboutPage, { kind: 'home' }>
 type EntryKey = Exclude<AboutSection, 'home'>
-const entries = { communities: '走进我们的社区', projects: '探索项目', team: '认识团队与贡献者', media: '探索音乐与影像', story: '回看 Exre 历程', donations: '查看捐赠信息' }
-const imageLabels = { projects: '项目影像', team: '团队影像', media: '音乐与影像', story: '历程影像', donations: '捐赠图片' }
+const entries = { communities: '走进我们的社区', team: '认识团队与贡献者', media: '探索音乐和影像', story: '回看 Exre 历程', donations: '查看捐赠信息' }
+const imageLabels = { team: '团队影像', media: '音乐和影像', story: '历程影像', donations: '捐赠图片' }
 const lineBreaks = (text: string) => text.replaceAll('\\n', '\n')
 
 export function AboutHome({ page, state, components, retry }: { page: HomePage; state: ContentState; components: MDXComponents; retry: () => void }) {
@@ -21,7 +21,6 @@ export function AboutHome({ page, state, components, retry }: { page: HomePage; 
     <AboutHomeHero hero={page.hero} />
     <section id="about-content" className={styles.stories} tabIndex={-1} aria-label="进一步认识 Exre">
       <EntryCard page={page} section="communities" />
-      <EntryCard page={page} section="projects" />
       <article className={styles.belief} aria-label="我们的理念">
         <p className={styles.category}>我们的理念</p><h2>{lineBreaks(page.introHeading)}</h2>
         <AboutBody state={state} components={homeComponents} retry={retry} />
@@ -36,7 +35,7 @@ export function AboutHome({ page, state, components, retry }: { page: HomePage; 
 
 function EntryCard({ page, section }: { page: HomePage; section: EntryKey }) {
   // Fixed public section pages are required by the About definition at build time.
-  const target = aboutRegistry.pages.find(item => (item.kind === 'section' || item.kind === 'donations' || item.kind === 'team') && item.section === section)!
+  const target = aboutRegistry.pages.find(item => (item.kind === 'section' || item.kind === 'donations' || item.kind === 'team' || item.kind === 'media') && item.section === section)!
   const rawImage = section === 'communities' ? undefined : page.cardImages?.[section]
   const image = rawImage ? aboutImage(rawImage) : undefined
   const visual = section === 'communities' ? null : <HomeImage key={image?.src ?? 'placeholder'} image={image} label={imageLabels[section]} />

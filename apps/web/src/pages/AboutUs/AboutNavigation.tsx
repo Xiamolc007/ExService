@@ -7,8 +7,8 @@ import styles from './AboutUs.module.scss'
 
 export const sections = [
   { key: 'home', title: '概览', url: '/aboutus' }, { key: 'communities', title: '社区', url: '/aboutus/communities' },
-  { key: 'projects', title: '项目', url: '/aboutus/projects' }, { key: 'team', title: '团队', url: '/aboutus/team' },
-  { key: 'story', title: '历程', url: '/aboutus/story' }, { key: 'media', title: 'Media', url: '/aboutus/media' },
+  { key: 'team', title: '团队', url: '/aboutus/team' },
+  { key: 'story', title: '历程', url: '/aboutus/story' }, { key: 'media', title: '音乐和影像', url: '/aboutus/media' },
   { key: 'donations', title: '捐赠', url: '/aboutus/donations' },
 ] as const
 export function AboutNavigation({ page }: { page: AboutPage }) {
@@ -33,7 +33,7 @@ export function AboutNavigation({ page }: { page: AboutPage }) {
     {page.kind === 'home' ? <Link className={styles.navigationTitle} to="/aboutus" aria-current="page">关于 Exre</Link> :
       <nav className={styles.breadcrumbs} aria-label="About 面包屑">
         <Link className={styles.navigationTitle} to="/aboutus">关于 Exre</Link><span aria-hidden="true">/</span>
-        {(page.kind === 'community' || page.kind === 'project') && <><Link to={`/aboutus/${section}`}>{sections.find(item => item.key === section)?.title}</Link><span aria-hidden="true">/</span></>}
+        {page.kind === 'community' && <><Link to={`/aboutus/${section}`}>{sections.find(item => item.key === section)?.title}</Link><span aria-hidden="true">/</span></>}
         <span aria-current="page">{page.title}</span>
       </nav>}
     <nav className={styles.desktopNavigation} aria-label="About 栏目">{links()}</nav>

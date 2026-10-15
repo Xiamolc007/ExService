@@ -31,7 +31,6 @@ export function RelatedContent({ related, openMember }: { related?: RelatedRefs;
   if (!related || !Object.values(related).some(values => values?.length)) return null
   const links: { key: string; to: string; title: string }[] = []
   for (const slug of related.communities ?? []) links.push({ key: `c:${slug}`, to: `/aboutus/communities/${slug}`, title: aboutRegistry.pages.find(page => page.kind === 'community' && page.slug === slug)?.title ?? slug })
-  for (const slug of related.projects ?? []) links.push({ key: `p:${slug}`, to: `/aboutus/projects/${slug}`, title: aboutRegistry.pages.find(page => page.kind === 'project' && page.slug === slug)?.title ?? slug })
   for (const id of related.media ?? []) links.push({ key: `m:${id}`, to: `/aboutus/media#media-${id}`, title: aboutRegistry.media.find(item => item.id === id)?.title ?? id })
   for (const id of related.milestones ?? []) links.push({ key: `s:${id}`, to: `/aboutus/story#milestone-${id}`, title: '查看关联历程' })
   return <aside className={styles.related} aria-label="相关内容"><h2>继续了解</h2><div>{links.map(link => <Link key={link.key} to={link.to}>{link.title}</Link>)}

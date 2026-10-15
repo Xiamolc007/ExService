@@ -18,7 +18,7 @@
 .communities .captionLink { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 4rem; }
 .communities .captionDescription { max-width: 22rem; justify-self: end; }
 .communities .description { margin-top: 0; }
-.belief { border-radius: 1.75rem; padding: 2.5rem; background: var(--exui-surface-secondary); display: flex; flex-direction: column; }
+.belief { grid-column: 1 / -1; border-radius: 1.75rem; padding: 2.5rem; background: var(--exui-surface-secondary); display: flex; flex-direction: column; }
 .belief h2 { font-size: clamp(2rem, 3.2vw, 2.875rem); margin-bottom: 1.75rem; }
 .belief > div { flex: 1; }
 .belief p:not(.category) { font-size: .9375rem; line-height: 1.85; color: var(--exui-text-secondary); }
