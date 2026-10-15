@@ -2,7 +2,7 @@ import { readdir, readFile, realpath } from 'node:fs/promises'
 import { extname, relative, resolve, sep } from 'node:path'
 import matter from 'gray-matter'
 import { parse } from 'yaml'
-import { analyzeMdx, type ContentAnalysis, type Schema } from './syntax'
+import { analyzeMdx, type ContentAnalysis, type Schema } from './syntax.ts'
 
 export interface ContentEntry {
   id: string; file: string; collection: string; draft: boolean
@@ -47,7 +47,8 @@ export async function readContent(definition: ContentDefinition): Promise<Conten
     try {
       const kind = definition.classify(id)
       if (!kind) throw new Error('Unregistered content file')
-      const source = await readFile(file, 'utf8')
+      // gray-matter leaves a trailing CR in the final frontmatter value on CRLF input.
+      const source = (await readFile(file, 'utf8')).replaceAll('\r\n', '\n')
       const isMdx = /\.mdx?$/.test(file)
       const parsed = isMdx ? matter(source, { engines: { yaml: text => parse(text) as object } }) : { data: parse(source) as object, content: '' }
       const data = kind.schema.parse(parsed.data) as Record<string, unknown>

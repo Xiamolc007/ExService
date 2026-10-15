@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { baseComponents, text, slug, httpsUrl, imageSchema } from '../content/schema'
+import { baseComponents, text, slug, httpsUrl, imageSchema } from '../content/schema.ts'
 const refs = z.array(slug).refine(values => new Set(values).size === values.length, 'Duplicate reference').optional()
 export const relatedSchema = z.strictObject({ communities: refs, projects: refs, members: refs, media: refs, milestones: refs })
 const base = { title: text, description: text, eyebrow: text.optional(), draft: z.boolean().default(false) }

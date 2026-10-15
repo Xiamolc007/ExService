@@ -4,9 +4,9 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import { fumadocsMdx } from 'fumadocs-mdx/vite'
-import { contentPlugin } from './build/content/plugin'
-import { contentDefinitions } from './build/collections'
-import { devEntryPlugin, docsProxy, trustedProxy, proxyBoundaryPlugin } from './dev-entry'
+import { contentPlugin } from './build/content/plugin.ts'
+import { contentDefinitions } from './build/collections.ts'
+import { devEntryPlugin, docsProxy, trustedProxy, proxyBoundaryPlugin } from './dev-entry.ts'
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const communityConfig = JSON.parse(

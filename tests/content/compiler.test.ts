@@ -28,6 +28,19 @@ async function fixture(files: Record<string, string>) {
 }
 
 describe('generic collection compilation', () => {
+  it.each(['\n', '\r\n'])('preserves a numeric final frontmatter field with %j line endings', async newline => {
+    const definition = await fixture({ 'intro.mdx': ['---', 'title: Guide', 'order: 1', '---', '## Start', 'Readable guide'].join(newline) })
+    definition.classify = () => ({ collection: 'guides', schema: { parse: value => value } })
+    const result = await readContent(definition)
+    expect(result.documents[0]?.data).toEqual({ title: 'Guide', order: 1 })
+    expect(result.documents[0]?.analysis.headings).toEqual(['start'])
+  })
+  it.each(['\n', '\r\n'])('excludes a draft with a final boolean frontmatter field and %j line endings', async newline => {
+    const definition = await fixture({ 'private.mdx': ['---', 'title: Secret', 'draft: true', '---', 'Private sentinel'].join(newline) })
+    const result = await readContent(definition)
+    expect(result.documents).toEqual([])
+    expect(result.data).toEqual({ titles: [] })
+  })
   it('accepts a non-About collection and removes draft body imports', async () => {
     const definition = await fixture({ 'intro.mdx': '---\ntitle: Guide\n---\n## Start\nReadable guide', 'private.mdx': '---\ntitle: Secret\ndraft: true\n---\nPrivate sentinel' })
     const result = await readContent(definition)

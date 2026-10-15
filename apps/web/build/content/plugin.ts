@@ -1,6 +1,6 @@
 import { resolve, relative, isAbsolute } from 'node:path'
 import type { Plugin, ViteDevServer } from 'vite'
-import { readContent, type ContentDefinition, type ContentResult } from './compiler'
+import { readContent, type ContentDefinition, type ContentResult } from './compiler.ts'
 
 const virtualPrefix = 'virtual:content/'
 export function contentPlugin(definitions: ContentDefinition[]): Plugin {

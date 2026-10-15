@@ -1,9 +1,9 @@
 import { dirname, resolve, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { ContentDefinition, ContentEntry } from '../content/compiler'
-import { aboutComponents, communitySchema, homeSchema, mediaSchema, memberSchema, projectSchema, sectionSchema, relatedSchema } from './schema'
-import { httpsUrl } from '../content/schema'
-import type { AboutPage, AboutRegistry, AboutSection, RelatedRefs } from '../../src/content/about/types'
+import type { ContentDefinition, ContentEntry } from '../content/compiler.ts'
+import { aboutComponents, communitySchema, homeSchema, mediaSchema, memberSchema, projectSchema, sectionSchema, relatedSchema } from './schema.ts'
+import { httpsUrl } from '../content/schema.ts'
+import type { AboutPage, AboutRegistry, AboutSection, RelatedRefs } from '../../src/content/about/types.ts'
 
 export const fixedPages = { 'index.mdx': 'home', 'communities/index.mdx': 'communities', 'projects/index.mdx': 'projects', 'team.mdx': 'team', 'story.mdx': 'story', 'media/index.mdx': 'media' } as const
 export const pageUrl = (section: string) => section === 'home' ? '/aboutus' : `/aboutus/${section}`
