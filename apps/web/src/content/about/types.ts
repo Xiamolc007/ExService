@@ -5,7 +5,7 @@ export type CommunityStatus = 'active' | 'archived' | 'planned' | 'unknown'
 export type ProjectStatus = 'concept' | 'development' | 'released' | 'archived' | 'unknown'
 interface PageBase { id: string; url: string; section: AboutSection; title: string; description: string; eyebrow?: string }
 export type AboutPage = PageBase & (
-  | { kind: 'home'; hero: { headline: string; summary: string; eyebrow?: string; image?: ContentImageData }; introHeading: string; entryDescriptions?: Partial<Record<Exclude<AboutSection, 'home'>, string>> }
+  | { kind: 'home'; hero: { headline: string; summary: string; lead?: string; eyebrow?: string; image?: ContentImageData }; introHeading: string; entryDescriptions?: Partial<Record<Exclude<AboutSection, 'home'>, string>>; entryHeadlines?: Partial<Record<Exclude<AboutSection, 'home'>, string>>; cardImages?: Partial<Record<Exclude<AboutSection, 'home'>, ContentImageData>> }
   | { kind: 'section' }
   | { kind: 'community'; slug: string; status: CommunityStatus; order: number; cover?: ContentImageData; related?: RelatedRefs; joinUrl?: string }
   | { kind: 'project'; slug: string; status: ProjectStatus; order: number; cover?: ContentImageData; related?: RelatedRefs; publicUrl?: string }

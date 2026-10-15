@@ -25,7 +25,7 @@ export function aboutMdxComponents(openMember: OpenMember): MDXComponents {
 export function AboutBody({ state, components, retry }: { state: ContentState; components: MDXComponents; retry: () => void }) {
   if (state.status === 'loading') return <p role="status" className={styles.loading}>正在加载内容…</p>
   if (state.status === 'error') return <div role="alert" className={styles.loading}><p>内容暂时无法加载</p><Button variant="outline" onClick={retry}>重试</Button><Button variant="ghost" onClick={() => window.location.reload()}>重新加载当前页面</Button><Link to="/aboutus">返回概览</Link></div>
-  return <ContentProse><state.module.default components={components} /></ContentProse>
+  return <div className={styles.body}><ContentProse><state.module.default components={components} /></ContentProse></div>
 }
 export function RelatedContent({ related, openMember }: { related?: RelatedRefs; openMember: OpenMember }) {
   if (!related || !Object.values(related).some(values => values?.length)) return null

@@ -5,7 +5,14 @@ export const relatedSchema = z.strictObject({ communities: refs, projects: refs,
 const base = { title: text, description: text, eyebrow: text.optional(), draft: z.boolean().default(false) }
 const entity = { ...base, slug, order: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).default(0), cover: imageSchema.optional(), related: relatedSchema.optional() }
 export const sectionSchema = z.strictObject(base)
-export const homeSchema = sectionSchema.extend({ hero: z.strictObject({ headline: text, summary: text, eyebrow: text.optional(), image: imageSchema.optional() }), introHeading: text, entryDescriptions: z.strictObject({ communities: text.optional(), projects: text.optional(), team: text.optional(), story: text.optional(), media: text.optional() }).optional() })
+const entryText = z.strictObject({ communities: text.optional(), projects: text.optional(), team: text.optional(), story: text.optional(), media: text.optional() })
+export const homeSchema = sectionSchema.extend({
+  hero: z.strictObject({ headline: text, summary: text, lead: text.optional(), eyebrow: text.optional(), image: imageSchema.optional() }),
+  introHeading: text,
+  entryDescriptions: entryText.optional(),
+  entryHeadlines: entryText.optional(),
+  cardImages: z.strictObject({ communities: imageSchema.optional(), projects: imageSchema.optional(), team: imageSchema.optional(), media: imageSchema.optional(), story: imageSchema.optional() }).optional(),
+})
 export const communitySchema = z.strictObject({ ...entity, status: z.enum(['active', 'archived', 'planned', 'unknown']), joinUrl: text.optional() }).superRefine((value, context) => {
   if (value.joinUrl && (value.status !== 'active' || (value.joinUrl !== '/join/rifling-911' && !httpsUrl.safeParse(value.joinUrl).success))) context.addIssue({ code: 'custom', path: ['joinUrl'], message: 'Join URL requires active status and an existing/HTTPS target' })
 })

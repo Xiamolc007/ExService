@@ -1,9 +1,11 @@
 import { afterEach, expect, it } from 'vitest'
-import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { parse, stringify } from 'yaml'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { aboutDefinition } from '@web/build/about/definition'
 import { readContent } from '@web/build/content/compiler'
+import type { AboutRegistry } from '@web/src/content/about/types'
 
 const roots: string[] = []
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))) })
@@ -13,6 +15,46 @@ async function fixture() {
   await cp(aboutDefinition.root, root, { recursive: true })
   return { ...aboutDefinition, root }
 }
+async function homeFields(definition: typeof aboutDefinition, fields: Record<string, unknown>) {
+  const path = join(definition.root, 'index.mdx')
+  const source = await readFile(path, 'utf8')
+  await writeFile(path, source.replace(/^---\r?\n([\s\S]*?)\r?\n---/, (_, frontmatter: string) => `---\n${stringify({ ...parse(frontmatter), ...fields })}---`))
+}
+it('keeps the new home fields optional in the real registry projection', async () => {
+  const definition = await fixture()
+  await homeFields(definition, { hero: { headline: 'Headline', summary: 'Summary' }, entryHeadlines: undefined, cardImages: undefined })
+  const registry = (await readContent(definition)).data as AboutRegistry
+  const home = registry.pages.find(page => page.kind === 'home')!
+  expect(home).toMatchObject({ kind: 'home', hero: { headline: 'Headline', summary: 'Summary' } })
+  expect('cardImages' in home).toBe(false)
+  expect('entryHeadlines' in home).toBe(false)
+})
+it('projects the new home metadata and validates nested image resources with the real compiler', async () => {
+  const definition = await fixture()
+  await mkdir(join(definition.root, 'assets'), { recursive: true })
+  await writeFile(join(definition.root, 'assets/home.png'), Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64'))
+  const image = { src: 'assets/home.png', alt: 'Community scene', width: 1, height: 1, position: { x: 20, y: 80 } }
+  await homeFields(definition, { hero: { headline: 'Headline', summary: 'Summary', lead: 'Lead' }, entryHeadlines: { communities: 'Custom headline' }, cardImages: { communities: image } })
+  const result = await readContent(definition)
+  expect((result.data as AboutRegistry).pages.find(page => page.kind === 'home')).toMatchObject({ hero: { lead: 'Lead' }, entryHeadlines: { communities: 'Custom headline' }, cardImages: { communities: image } })
+  expect(result.assets['assets/home.png']).toBe(await realpath(join(definition.root, 'assets/home.png')))
+})
+it.each([
+  { entryHeadlines: { belief: 'Not a linked section' } },
+  { entryHeadlines: { communities: ' ' } },
+  { cardImages: { unknown: { src: 'assets/home.png', alt: 'Image', width: 1, height: 1 } } },
+  { cardImages: { belief: { src: 'assets/home.png', alt: 'Image', width: 1, height: 1 } } },
+  { hero: { headline: 'Title', summary: 'Summary', lead: ' ' } },
+])('rejects invalid home metadata with the source filename: %j', async fields => {
+  const definition = await fixture()
+  await homeFields(definition, fields)
+  await expect(readContent(definition)).rejects.toThrow('about/index.mdx')
+})
+it.each(['assets/missing.png', '../outside.png'])('rejects missing or escaped nested card assets: %s', async src => {
+  const definition = await fixture()
+  await homeFields(definition, { cardImages: { communities: { src, alt: 'Image', width: 1, height: 1 } } })
+  await expect(readContent(definition)).rejects.toThrow(/about\/index.mdx.*(asset|资源)/)
+})
 it('projects the real published pages and keeps member bodies separate from routes', async () => {
   const { data } = await readContent(aboutDefinition)
   const registry = data as { pages: { url: string }[]; members: { id: string }[] }
