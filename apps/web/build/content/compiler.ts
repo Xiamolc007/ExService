@@ -50,7 +50,7 @@ export async function readContent(definition: ContentDefinition): Promise<Conten
       // gray-matter leaves a trailing CR in the final frontmatter value on CRLF input.
       const source = (await readFile(file, 'utf8')).replaceAll('\r\n', '\n')
       const isMdx = /\.mdx?$/.test(file)
-      const parsed = isMdx ? matter(source, { engines: { yaml: text => parse(text) as object } }) : { data: parse(source) as object, content: '' }
+      const parsed = isMdx ? matter(source, { engines: { yaml: text => parse(text.replace(/\r\n?/g, '\n')) as object } }) : { data: parse(source) as object, content: '' }
       const data = kind.schema.parse(parsed.data) as Record<string, unknown>
       entries.push({ id, file, collection: kind.collection, draft: data.draft === true, data,
         analysis: isMdx ? analyzeMdx(parsed.content, definition.components) : { links: [], components: [], headings: [] } })

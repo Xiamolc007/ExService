@@ -2,13 +2,15 @@
 
 Website 的仓库内容通过通用 Fumadocs 编译链路接入 SPA。每个业务集合独立定义字段、公开投影和引用语义，编译、资源处理及正文加载不依赖 About。当前使用者是 About；后续 Website 栏目可以注册新的 namespace。
 
-_最后更新：2026-10-14_
+_最后更新：2026-10-15_
 
 ## 边界与数据流
 
 `apps/web/build/content/` 是 Node 构建侧：解析 MDX/YAML、检查静态作者语法、验证资源路径、生成公开虚拟模块。`apps/web/build/collections.ts` 汇总注册集合，Vite 和 `content:check` 共用该列表。`apps/web/source.config.ts` 显式定义 Fumadocs 集合与编译 preset。
 
 业务定义实现 `ContentDefinition`：namespace、root、文件分类/schema、作者组件属性契约及 `project(entries)`。通用引擎先解析全部文件，业务投影再校验跨引用；公开元数据与正文 import 不包含草稿。未注册文件使检查失败。图片资源采用有 src/alt/width/height 的 ImageRef 形态，不把任意业务 src 字段当作本地资源。
+
+MDX 的 YAML frontmatter 解析边界将 CRLF 和孤 CR 规范化为 LF，避免 Windows 换行使末尾数值变为字符串；字段仍经集合 schema 严格验证，不将带引号的数字强制转换为数值。原始 MDX 文件与正文处理保持不变；LF/CRLF 类型及带引号数字拒绝的回归见 `tests/content/compiler.test.ts`。
 
 ```mermaid
 flowchart LR

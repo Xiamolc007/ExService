@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { readContent, type ContentDefinition } from '@web/build/content/compiler'
@@ -40,6 +40,28 @@ describe('generic collection compilation', () => {
     const result = await readContent(definition)
     expect(result.documents).toEqual([])
     expect(result.data).toEqual({ titles: [] })
+  })
+  it.each(['\n', '\r\n'])('preserves numeric and boolean frontmatter types with %j line endings', async newline => {
+    const source = ['---', 'title: Guide', 'draft: false', 'order: 1', '---', '## Body', '[Exact](https://example.com/path?x=1)'].join(newline)
+    const definition = await fixture({ 'intro.mdx': source })
+    definition.classify = () => ({ collection: 'guides', schema: { parse: value => {
+      const data = value as Record<string, unknown>
+      if (typeof data.order !== 'number' || typeof data.draft !== 'boolean') throw Error('strict frontmatter types')
+      return data
+    } } })
+    const [document] = (await readContent(definition)).documents
+    expect(document?.data).toEqual({ title: 'Guide', draft: false, order: 1 })
+    expect(document?.analysis.headings).toEqual(['body'])
+    expect(document?.analysis.links).toEqual(['https://example.com/path?x=1'])
+    expect(await readFile(join(definition.root, 'intro.mdx'), 'utf8')).toBe(source)
+  })
+  it.each(['\n', '\r\n'])('rejects quoted numeric frontmatter with %j line endings', async newline => {
+    const definition = await fixture({ 'intro.mdx': ['---', 'title: Guide', 'order: "1"', '---', 'Body'].join(newline) })
+    definition.classify = () => ({ collection: 'guides', schema: { parse: value => {
+      if (typeof (value as Record<string, unknown>).order !== 'number') throw Error('order must be a number')
+      return value
+    } } })
+    await expect(readContent(definition)).rejects.toThrow('order must be a number')
   })
   it('accepts a non-About collection and removes draft body imports', async () => {
     const definition = await fixture({ 'intro.mdx': '---\ntitle: Guide\n---\n## Start\nReadable guide', 'private.mdx': '---\ntitle: Secret\ndraft: true\n---\nPrivate sentinel' })
