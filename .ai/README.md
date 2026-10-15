@@ -13,7 +13,7 @@ _最后更新：2026-10-14_
 | 共享组件 | `packages/components/` | `.ai/knowledge/components/ex-message-host-lifecycle.md`、`.ai/knowledge/components/error-panel.md`、`.ai/knowledge/components/tiptap-content-boundaries.md` |
 | Web | `apps/web/` | `.ai/architectures/web/authentication-flow.md`、`.ai/knowledge/web/invitation-error-handoff.md` |
 | 通用内容与 About | `apps/web/build/content/`、`apps/web/build/about/`、`apps/web/src/content/`、`apps/web/src/pages/AboutUs/` | `.ai/architectures/web/content-rendering.md`、`.ai/knowledge/web/content-authoring.md` |
-| Server | `apps/server/src/modules/`、`apps/server/src/domains/`、`apps/server/src/http/` | `.ai/architectures/server/request-lifecycle.md`、`.ai/architectures/server/authentication-lifecycle.md` |
+| Server | `apps/server/src/modules/`、`apps/server/src/domains/`、`apps/server/src/http/` | `.ai/architectures/server/request-lifecycle.md`、`.ai/architectures/server/authentication-lifecycle.md`、`.ai/knowledge/server/multipart-lifecycle-traps.md` |
 | 存储与 SDK | `apps/server/src/modules/storage/`、`packages/sdk/` | `.ai/knowledge/storage/lifecycle-traps.md` |
 | 文档集成 | `apps/outline/`、`scripts/docs-integration/` | `.ai/architectures/docs-integration/integration-boundaries.md`、`.ai/architectures/docs-integration/unified-reading-interface.md`、`.ai/knowledge/docs-integration/public-reader-refs.md` |
 | 运行配置与进程 | `scripts/runtime/`、`infra/runtime/` | `.ai/architectures/runtime/runtime-boundaries.md` |
