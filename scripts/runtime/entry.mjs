@@ -1,15 +1,14 @@
 import { resolve, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readFileSync, watchFile, unwatchFile } from 'node:fs'
-import { runOwned, signalScope } from '../docs-integration/ownership.mjs'
-import { validUuid } from '../docs-integration/local-dev.mjs'
+import { runOwned, signalScope } from './ownership.mjs'
 import { readRuntimeConfiguration } from './settings.mjs'
 import { RuntimeError, redact, reporter } from './output.mjs'
 import { Services, serviceNames } from './services.mjs'
 import { runDevelopment } from './applications.mjs'
 import { NativeApplications } from './native.mjs'
 import { convertConfiguration } from './convert.mjs'
-import { prepareInfrastructure, bootstrapInfrastructure } from './infrastructure.mjs'
+import { prepareInfrastructure, provisionIdentityClients } from './infrastructure.mjs'
 import { renderNginx } from './nginx.mjs'
 
 export function parseRuntimeArguments(input) {
@@ -21,16 +20,12 @@ export function parseRuntimeArguments(input) {
   if (args.at(-1) === '--verbose') { verbose = true; args.pop() }
   if (command === 'infra') {
     const action = args.shift(); if (args[0] === '--') args.shift()
-    if (!['convert', 'init', 'migrate', 'bootstrap', 'nginx'].includes(action)) throw new RuntimeError('INFRA_ACTION_INVALID')
-    if (action === 'bootstrap') {
-      if (args.length !== 2 || args[0] !== '--admin-user-id' || !validUuid(args[1])) throw new RuntimeError('BOOTSTRAP_UUID_REQUIRED')
-      return { command, action, adminUserId: args[1], verbose }
-    }
+    if (!['convert', 'init', 'migrate', 'clients', 'nginx'].includes(action)) throw new RuntimeError('INFRA_ACTION_INVALID')
     if (args.length) throw new RuntimeError('ARGUMENTS_INVALID')
     return { command, action, verbose }
   }
   if (command === 'service:logs' || command === 'logs') {
-    if (args.length > 1 || args.length && !(command === 'logs' ? ['server', 'outline', 'hydra'] : serviceNames).includes(args[0])) throw new RuntimeError('LOG_SERVICE_INVALID')
+    if (args.length > 1 || args.length && !(command === 'logs' ? ['server', 'hydra'] : serviceNames).includes(args[0])) throw new RuntimeError('LOG_SERVICE_INVALID')
     return { command, service: args[0], verbose }
   }
   if (args.length) throw new RuntimeError('ARGUMENTS_INVALID')
@@ -38,7 +33,7 @@ export function parseRuntimeArguments(input) {
 }
 
 async function applicationLogs(state, service) {
-  const scope = signalScope(), services = service ? [service] : ['server', 'outline', 'hydra']
+  const scope = signalScope(), services = service ? [service] : ['server', 'hydra']
   const files = services.map(name => join(state.directory, 'logs', `${name}.jsonl`)), positions = new Map()
   const read = (file, initial = false) => {
     let content
@@ -93,7 +88,7 @@ export async function main(input = process.argv.slice(2)) {
   else if (options.command === 'stop') { await new NativeApplications(state).stop(); output.title('本项目应用已停止；后台服务与数据已保留') }
   else if (options.command === 'logs') await applicationLogs(state, options.service)
   else if (['init', 'migrate'].includes(options.action)) await prepareInfrastructure(state, { migrateOnly: options.action === 'migrate' })
-  else if (options.action === 'bootstrap') await bootstrapInfrastructure(state, options.adminUserId)
+  else if (options.action === 'clients') await provisionIdentityClients(state)
   else if (options.action === 'nginx') { renderNginx(state); output.title('Nginx 配置已生成于 .local/runtime/nginx/nginx.conf；须显式 nginx -t 校验后安装与重载') }
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -15,10 +15,11 @@ export class IdentityOutboxWorker {
   constructor(
     private readonly db: AppDatabase,
     private readonly revokeHydraSid: (target: { clientId: string; hydraSid: string }) => Promise<void>,
-    private readonly deliverOutline: (clientId: string, message: Delivery) => Promise<void>,
+    private readonly deliverApplication: (clientId: string, message: Delivery) => Promise<void>,
     private readonly now: () => number = Date.now,
     private readonly reportError: (code: string) => void = () => undefined,
     private readonly assertTargetAvailable: (clientId: string) => void = () => undefined,
+    private readonly needsApplicationDelivery: (clientId: string) => boolean = () => true,
   ) {}
 
   /** Returns whether a due event was claimed, including a failed retry. */
@@ -44,7 +45,7 @@ export class IdentityOutboxWorker {
         catch { failed = true; break }
         // A legacy user event without a captured session cannot safely be
         // delivered after the account is re-enabled. Keep it pending instead
-        // of broad-revoking every current Outline session for that user.
+        // of broad-revoking every current application session for that user.
         if (row.kind === 'user' && (!target.sessionId || !target.deliveryEventId)) {
           this.reportError('INVALID_USER_TARGET_SNAPSHOT')
           failed = true
@@ -58,15 +59,15 @@ export class IdentityOutboxWorker {
           }
           catch { this.reportError('IDENTITY_OUTBOX_HYDRA_PENDING'); failed = true; break }
         }
-        if (target.clientId !== 'ex-oidc-probe') {
-          const outlineKey = `outline:${target.clientId}:${target.hydraSid}`
-          if (!delivered.has(outlineKey)) {
+        if (this.needsApplicationDelivery(target.clientId)) {
+          const applicationKey = `app:${target.clientId}:${target.hydraSid}`
+          if (!delivered.has(applicationKey)) {
             try {
               const sessionId = row.kind === 'session' ? row.session_id : target.sessionId
               if (!sessionId) throw new Error('Outbox target session is missing')
-              await this.deliverOutline(target.clientId, { eventId: row.kind === 'session' ? row.event_id : target.deliveryEventId!,
+              await this.deliverApplication(target.clientId, { eventId: row.kind === 'session' ? row.event_id : target.deliveryEventId!,
                 sessionId })
-              delivered.add(outlineKey)
+              delivered.add(applicationKey)
             } catch { this.reportError('IDENTITY_OUTBOX_DELIVERY_PENDING'); failed = true; break }
           }
         }
@@ -91,7 +92,7 @@ export function configuredIdentityOutboxWorker(db: AppDatabase,
 ): IdentityOutboxWorker {
   if (!config.enabled) throw new Error('IDENTITY_OUTBOX_DISABLED')
   const destination = (clientId: string) => {
-    const target = isIdentityClientId(clientId) ? config.deliveryTargets[clientId] : undefined
+    const target = Object.hasOwn(config.deliveryTargets, clientId) ? config.deliveryTargets[clientId] : undefined
     if (!target) {
       reportError('IDENTITY_OUTBOX_TARGET_MISSING')
       throw new Error('IDENTITY_OUTBOX_TARGET_MISSING')
@@ -102,17 +103,18 @@ export function configuredIdentityOutboxWorker(db: AppDatabase,
     const target = destination(clientId)
     const url = new URL('/admin/oauth2/auth/sessions/login', target.hydraAdminUrl)
     url.searchParams.set('sid', hydraSid)
-    const response = await fetch(url, { method: 'DELETE', signal: AbortSignal.timeout(1000) })
+    const response = await fetch(url, { method: 'DELETE', redirect: 'error', signal: AbortSignal.timeout(1000) })
     if (!response.ok && response.status !== 404) throw new Error('Hydra sid revocation failed')
   }, async (clientId, message) => {
     const target = destination(clientId)
-    if (!target.outlineInternalUrl || !target.deliveryKey) throw new Error('IDENTITY_OUTBOX_TARGET_MISSING')
-    const response = await fetch(new URL('/internal/identity/revoke', target.outlineInternalUrl), {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Identity-Delivery-Key': target.deliveryKey },
+    if (!target.revocation) throw new Error('IDENTITY_OUTBOX_TARGET_MISSING')
+    const response = await fetch(new URL(target.revocation.url), {
+      method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json', 'X-Identity-Delivery-Key': target.revocation.key },
       body: JSON.stringify(message), signal: AbortSignal.timeout(1000),
     })
-    if (!response.ok) throw new Error('Outline revocation delivery failed')
-  }, now, reportError, clientId => { destination(clientId) })
+    if (!response.ok) throw new Error('Application revocation delivery failed')
+    await response.json()
+  }, now, reportError, clientId => { destination(clientId) }, clientId => Boolean(destination(clientId).revocation))
 }
 
 export function startIdentityOutboxWorker(worker: IdentityOutboxWorker): () => void {

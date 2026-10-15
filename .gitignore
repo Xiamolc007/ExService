@@ -32,7 +32,8 @@ Thumbs.db
 # Local agent tooling: the vendored ExUI usage skill is kept on disk for local
 # reading only. Docs under .ai/ and .notes/ cite paths inside it, so it is left
 # in place but intentionally not tracked.
-.agents/
+.agents/*
+!.agents/rules/
 .claude/
 .superpowers/
 
@@ -40,12 +41,7 @@ playwright
 .playwright-cli
 output
 vendor/exui/
-.local/docs-integration/
 .local/
 
-# Local docs-integration previews and one-off verification artifacts
-.notes/docs-integration/previews/
-.notes/docs-integration/reports/
-.notes/archive/docs-integration/previews/
-.notes/archive/docs-integration/reports/
+# Historical docs-integration previews and verification artifacts
 .codegraphy/*

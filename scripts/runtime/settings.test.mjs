@@ -7,11 +7,13 @@ import { join } from 'node:path'
 import { createServer } from 'node:net'
 import { readRuntimeConfiguration, databaseUrl, defaults } from './settings.mjs'
 import { convertValues, convertConfiguration, serializeEnvironment, verifyOriginalTargets } from './convert.mjs'
-import { redact, diagnostic, reporter, runtimeFailure } from './output.mjs'
+import { redact, diagnostic, reporter, runtimeFailure, RuntimeError } from './output.mjs'
 import { verifyApplications, verifyRuntimeHydraClient } from './applications.mjs'
+import { HydraClientCheckError } from './hydra-client.mjs'
 import { composeEnvironment, Services } from './services.mjs'
+import { containerProof } from './container-proof.mjs'
 import { root } from './shared.mjs'
-import { NativeApplications } from './native.mjs'
+import { NativeApplications, verifyNativeClient } from './native.mjs'
 import { processSpecification, processRecord } from './pm2-process.mjs'
 import { nginxConfiguration } from './nginx.mjs'
 import { logWriter } from './logs.mjs'
@@ -19,20 +21,79 @@ import * as runtimeEntry from './entry.mjs'
 import * as runtimeTests from './tests.mjs'
 import { buildSpecifications, main as build } from './build.mjs'
 import { serverSpecification } from './server.mjs'
-import { verifyHydraBinary, initializeDocumentDatabases } from './infrastructure.mjs'
+import { verifyHydraBinary, initializeHydraDatabase } from './infrastructure.mjs'
 
 const { parseRuntimeArguments } = runtimeEntry
 const { testSpecifications, runTests } = runtimeTests
+
+test('container proof preserves the legacy literal digest and its input', () => {
+  const item = {
+    Id: 'container-1', Image: 'sha256:img',
+    Config: { Image: 'repo@sha256:manifest', Labels: { 'com.docker.compose.service': 'hydra' }, Env: ['A=1'] },
+    HostConfig: { Dns: null, DnsOptions: null, DnsSearch: null, Privileged: false,
+      PortBindings: { '5432/tcp': [{ HostIp: '127.0.0.1', HostPort: '15432' }] } },
+    Mounts: [
+      { Type: 'volume', Name: 'vol-b', Source: '/var/lib/docker/volumes/vol-b/_data', Destination: '/b', Driver: 'local', Mode: 'rw', RW: true, Propagation: '' },
+      { Type: 'bind', Source: '/host/a', Destination: '/a', Mode: 'ro', RW: false, Propagation: 'rprivate' },
+    ],
+  }
+  const original = structuredClone(item)
+  assert.deepEqual(containerProof(item), {
+    id: 'container-1', service: 'hydra',
+    digest: 'ac4538fe791ed70f9571fb6c45be27b6ad87adb867433971f1b979998d2f52cf',
+  })
+  assert.deepEqual(item, original)
+})
+
+test('container proof accepts Docker presentation changes and detects every substantive inspect field', () => {
+  const item = { Id: 'owned', Image: 'sha256:image',
+    Config: { Image: 'image:tag', Env: ['A=1'], Labels: { 'com.docker.compose.service': 'hydra' } },
+    HostConfig: { Dns: null, DnsOptions: null, DnsSearch: null, Privileged: false },
+    Mounts: [
+      { Type: 'volume', Name: 'data', Source: '/data', Destination: '/b', Driver: 'local', Mode: 'rw', RW: true, Propagation: '' },
+      { Type: 'bind', Name: 'bind', Source: '/host', Destination: '/a', Driver: '', Mode: 'ro', RW: false, Propagation: 'rprivate' },
+    ],
+  }
+  const before = structuredClone(item), expected = containerProof(item)
+  const equivalent = structuredClone(item)
+  equivalent.Mounts.reverse()
+  Object.assign(equivalent.HostConfig, { Dns: [], DnsOptions: [], DnsSearch: [] })
+  assert.deepEqual(containerProof(equivalent), expected)
+  assert.deepEqual(item, before)
+
+  for (const key of ['Dns', 'DnsOptions', 'DnsSearch']) {
+    const changed = structuredClone(item)
+    changed.HostConfig[key] = ['changed']
+    assert.notEqual(containerProof(changed).digest, expected.digest, key)
+  }
+  for (const key of Object.keys(item.Mounts[0])) {
+    const changed = structuredClone(item)
+    changed.Mounts[0][key] = typeof changed.Mounts[0][key] === 'boolean' ? !changed.Mounts[0][key] : 'changed'
+    assert.notEqual(containerProof(changed).digest, expected.digest, `Mounts.${key}`)
+  }
+  for (const change of [
+    value => { value.HostConfig.Privileged = true },
+    value => { value.Config.Env = ['A=2'] },
+    value => { value.Image = 'sha256:replacement' },
+  ]) {
+    const changed = structuredClone(item)
+    change(changed)
+    assert.notEqual(containerProof(changed).digest, expected.digest)
+  }
+  const replaced = { ...structuredClone(item), Id: 'replacement' }
+  assert.equal(containerProof(replaced).digest, expected.digest)
+  assert.notDeepEqual(containerProof(replaced), expected)
+})
 
 function fixture(t, profile = 'local') {
   const workspace = mkdtempSync(join(tmpdir(), 'runtime-fields-'))
   t.after(() => rmSync(workspace, { recursive: true, force: true }))
   const values = { RUNTIME_PROFILE: profile, AUTH_CODE_HMAC_KEY: 'a'.repeat(64), POSTGRES_PASSWORD: 'readable admin',
-    OUTLINE_OIDC_CLIENT_SECRET: 'readable client', OUTLINE_UTILS_SECRET: 'original-utils',
-    ...Object.fromEntries(['OUTLINE_SECRET_KEY', 'HYDRA_SYSTEM_SECRET', 'OUTLINE_INTEGRATION_KEY', 'IDENTITY_BOOTSTRAP_KEY', 'IDENTITY_DELIVERY_KEY', 'IDENTITY_FLOW_KEY']
+    IDENTITY_CLIENTS_JSON: JSON.stringify([{clientId:'sample-app',name:'Sample',redirectUri:profile==='local'?'http://127.0.0.1:18765/callback':'https://app.example/callback',postLogoutRedirectUri:profile==='local'?'http://127.0.0.1:18765/logout':'https://app.example/logout',scopes:['openid'],clientSecret:'readable client'}]),
+    ...Object.fromEntries(['HYDRA_SYSTEM_SECRET', 'IDENTITY_BOOTSTRAP_KEY', 'IDENTITY_FLOW_KEY']
       .map((key, index) => [key, String(index + 1).repeat(64)])),
-    ...Object.fromEntries(['DATABASE', 'OUTLINE_DATABASE', 'HYDRA_DATABASE'].flatMap((prefix, index) => Object.entries({
-      HOST: '127.0.0.1', PORT: '5432', NAME: ['exre', 'outline', 'hydra'][index], USER: ['website', 'outline', 'hydra'][index],
+    ...Object.fromEntries(['DATABASE', 'HYDRA_DATABASE'].flatMap((prefix, index) => Object.entries({
+      HOST: '127.0.0.1', PORT: '5432', NAME: ['exre', 'hydra'][index], USER: ['website', 'hydra'][index],
       PASSWORD: 'p@:%/# $汉字', SSLMODE: 'disable' }).map(([field, value]) => [`${prefix}_${field}`, value]))),
   }
   if (profile === 'deployment') Object.assign(values, { PUBLIC_ORIGIN: 'https://site.example', HYDRA_PUBLIC_URL: 'https://issuer.example/',
@@ -81,7 +142,7 @@ test('Docker status failures explain engine availability without exposing comman
 test('startup diagnostics name the failed check and corrective step without referring to a manual', () => {
   for (const [code, expected] of [
     ['CONFIG_REQUIRED', /配置缺失/], ['CRYPTO_KEY_INVALID', /64 位 hex/],
-    ['OUTLINE_MARKER_MISSING', /已有 active Website 用户 UUID/], ['DATABASE_MIGRATIONS_MISSING', /pnpm infra migrate/],
+    ['DATABASE_MIGRATIONS_MISSING', /pnpm infra migrate/],
     ['HYDRA_CLIENT_MISSING', /client 尚未登记/], ['APPLICATION_PORT_OCCUPIED', /端口已被占用/],
     ['WEBSITE_NOT_READY', /Website 启动检查未通过/],
   ]) {
@@ -95,22 +156,62 @@ test('startup diagnostics name the failed check and corrective step without refe
 
 test('Hydra startup separates missing clients, configuration conflicts and network failures', async t => {
   const state = fixture(t).read()
-  for (const [error, code] of [
-    [new Error('Hydra client initialization failed (HTTP 404)'), 'HYDRA_CLIENT_MISSING'],
-    [new Error('Existing Hydra client configuration conflict; explicit operator repair is required'), 'HYDRA_CLIENT_CONFLICT'],
-    [new Error('Existing Hydra client secret conflict or protocol service unavailable'), 'HYDRA_CLIENT_CONFLICT'],
-    [new Error('Invalid Hydra bootstrap configuration'), 'HYDRA_CONFIG_INVALID'],
-    [Object.assign(new Error('private-token'), { cause: { code: 'ECONNREFUSED' } }), 'ECONNREFUSED (连接被拒绝)'],
-  ]) await assert.rejects(verifyRuntimeHydraClient(state, async () => { throw error }), failure => {
-    assert.equal(failure.code, code)
-    assert.match(failure.message, /Hydra/)
-    assert.doesNotMatch(failure.message, /private-token|docs\/runtime\.md/)
+  for (const [kind, code] of [
+    ['CLIENT_MISSING', 'HYDRA_CLIENT_MISSING'], ['CLIENT_CONFLICT', 'HYDRA_CLIENT_CONFLICT'],
+    ['CREDENTIAL_PROBE_FAILED', 'HYDRA_CLIENT_CONFLICT'], ['INVALID_CONFIG', 'HYDRA_CONFIG_INVALID'],
+    ['CHECK_FAILED', 'HYDRA_CLIENT_CHECK_FAILED'],
+  ]) {
+    const error = new HydraClientCheckError(kind)
+    Object.defineProperty(error, 'message', { value: 'changed Bearer private-token' })
+    await assert.rejects(verifyRuntimeHydraClient(state, async () => { throw error }, { ready: async () => {} }), failure => {
+      assert.equal(failure.code, code)
+      assert.match(failure.message, /Hydra/)
+      assert.doesNotMatch(failure.message, /private-token|docs\/runtime\.md/)
+      return true
+    })
+  }
+  for (const error of [
+    { kind: 'CLIENT_MISSING', message: 'Hydra client initialization failed (HTTP 404)' },
+    { kind: 'CLIENT_MISSING', cause: { code: 'ECONNREFUSED' } },
+    Object.assign(new Error('private-token'), { kind: 'FUTURE_KIND' }),
+    Object.assign(new Error('private-token'), { code: 'UNSAFE_PRIVATE_CODE' }),
+  ]) await assert.rejects(verifyRuntimeHydraClient(state, async () => { throw error }, { ready: async () => {} }), failure => {
+    assert.equal(failure.code, 'HYDRA_CLIENT_CHECK_FAILED')
+    assert.doesNotMatch(failure.message, /private-token|UNSAFE_PRIVATE_CODE/)
     return true
   })
+  for (const error of [new HydraClientCheckError('NETWORK_FAILURE', { cause: { code: 'ECONNREFUSED', message: 'Bearer private-token' } }),
+    Object.assign(new Error('private-token'), { cause: { code: 'ECONNREFUSED' } })]) {
+    await assert.rejects(verifyRuntimeHydraClient(state, async () => { throw error }, { ready: async () => {} }), failure => {
+      assert.equal(failure.code, 'ECONNREFUSED (连接被拒绝)')
+      assert.doesNotMatch(failure.message, /private-token/)
+      return true
+    })
+  }
+  for (const cause of [{ code: 'UNSAFE_PRIVATE_CODE', message: 'Bearer private-token' },
+    { cause: { code: 'UNSAFE_PRIVATE_CODE' }, errors: [{ code: 'UNSAFE_PRIVATE_CODE' }] },
+    new Error('postgres://private:credential@host/exre')]) {
+    await assert.rejects(verifyRuntimeHydraClient(state, async () => {
+      throw new HydraClientCheckError('NETWORK_FAILURE', { cause })
+    }, { ready: async () => {} }), failure => {
+      assert.equal(failure.code, 'HYDRA_CLIENT_CHECK_FAILED')
+      assert.doesNotMatch(failure.message, /private-token|credential|UNSAFE_PRIVATE_CODE/)
+      return true
+    })
+  }
+  const terminal = [], persisted = []
+  const unsafe = new HydraClientCheckError('NETWORK_FAILURE', { cause: new Error('Bearer private-token response-secret http://secret.invalid/') })
+  await assert.rejects(verifyRuntimeHydraClient(state, async () => { throw unsafe }, { ready: async () => {} }), failure => {
+    reporter({ write: line => terminal.push(line), persist: line => persisted.push(line) }).failure(failure)
+    for (const line of [...terminal, ...persisted]) assert.doesNotMatch(line, /private-token|response-secret|secret\.invalid/)
+    return true
+  })
+  await assert.rejects(verifyRuntimeHydraClient(state, async () => {}, { ready: async () => { throw new RuntimeError('DEPLOYMENT_HYDRA_NOT_READY') } }),
+    { code: 'DEPLOYMENT_HYDRA_NOT_READY' })
   const calls = []
   await verifyApplications(state, { tools: { node: process.execPath }, verifySchemas: async () => {},
-    execute: async (spec, options) => { calls.push(spec.name); options.onLog(spec.name, '检查完成') }, verifyClient: async () => {}, onLog: () => {} })
-  assert.deepEqual(calls, ['server', 'outline'])
+    execute: async (spec, options) => { calls.push(spec.name); options.onLog(spec.name, '检查完成') }, verifyClient: async () => {}, ready: async () => {}, onLog: () => {} })
+  assert.deepEqual(calls, ['server'])
 })
 
 test('Docker status distinguishes an empty project inventory and guides the user', t => {
@@ -122,7 +223,7 @@ test('Docker status distinguishes an empty project inventory and guides the user
   } })
   services.status({ log: reporter({ stream: { isTTY: false }, write: line => lines.push(line) }) })
   const text = lines.join('\n')
-  for (const name of ['PostgreSQL', 'Redis', 'Hydra']) assert.match(text, new RegExp(`${name}\\s+未创建`))
+  for (const name of ['PostgreSQL', 'Hydra']) assert.match(text, new RegExp(`${name}\\s+未创建`))
   assert.match(text, /检查 Docker 状态.*docker info/)
   assert.match(text, /pnpm service:start/)
   assert.equal(calls.some(args => args.includes('up') || args.includes('stop')), false)
@@ -133,13 +234,11 @@ test('status does not claim Hydra is healthy when only the container running sta
   const services = new Services(state), lines = []
   services.inventory = () => [
     { Config: { Labels: { 'com.docker.compose.service': 'postgres' } }, State: { Running: true, Health: { Status: 'healthy' } } },
-    { Config: { Labels: { 'com.docker.compose.service': 'redis' } }, State: { Running: true, Health: { Status: 'unhealthy' } } },
     { Config: { Labels: { 'com.docker.compose.service': 'hydra' } }, State: { Running: true } },
   ]
   services.verify = items => items
   services.status({ log: reporter({ stream: { isTTY: false }, write: line => lines.push(line) }) })
   assert.match(lines.join('\n'), /✓ PostgreSQL\s+运行中（健康检查通过）/)
-  assert.match(lines.join('\n'), /✗ Redis\s+运行中（健康检查失败）/)
   assert.match(lines.join('\n'), /! Hydra\s+运行中（无容器健康检查）/)
   assert.doesNotMatch(lines.find(line => line.includes('Hydra')), /✓|已就绪|健康检查通过/)
 })
@@ -151,7 +250,6 @@ test('root-only component settings preserve short passwords, encoding, process o
   const state = f.read({ DATABASE_PASSWORD: 'x', SERVER_NOTIFICATION_TOKEN_KEY: 'f'.repeat(64), UNKNOWN_SECRET: 'private' })
   assert.equal(decodeURIComponent(new URL(state.website.DATABASE_URL).password), 'x')
   assert.equal(state.environments.server.SERVER_NOTIFICATION_TOKEN_KEY, 'f'.repeat(64))
-  assert.equal(decodeURIComponent(new URL(state.environments.outline.DATABASE_URL).password), f.values.OUTLINE_DATABASE_PASSWORD)
   assert.deepEqual(state.config.ports, defaults)
   for (const name of ['DATABASE_URL', 'AUTH_CODE_HMAC_KEY', 'OUTLINE_OIDC_CLIENT_SECRET', 'SERVER_NOTIFICATION_TOKEN_KEY', 'UNKNOWN_SECRET']) assert.equal(state.environments.web[name], undefined)
   assert.equal(state.environments.web.VITE_API_BASE_URL, '/api')
@@ -163,22 +261,39 @@ test('root-only component settings preserve short passwords, encoding, process o
 test('invalid profile, old sources, duplicate ports, names and cryptographic keys fail without revealing values', t => {
   const f = fixture(t)
   for (const override of [{ DATABASE_URL: 'private-url' }, { RUNTIME_CONFIG_VERSION: '2' }, { DATABASE_NAME: 'outline' },
-    { DATABASE_PASSWORD: '' }, { LOCAL_REDIS_PORT: '5432' }, { AUTH_CODE_HMAC_KEY: 'private-key' },
+    { DATABASE_PASSWORD: '' }, { LOCAL_WEB_PORT: '5432' }, { AUTH_CODE_HMAC_KEY: 'private-key' },
     { SERVER_NOTIFICATION_TOKEN_KEY: 'short-key' }, { RUNTIME_PROFILE: 'old' }]) {
     assert.throws(() => f.read(override), error => !error.message.includes('private-url') && !error.message.includes('private-key') && !error.message.includes('short-key'))
   }
+})
+
+test('identity key diagnostics retain missing and format priority before client parsing', t => {
+  const f = fixture(t)
+  for (const key of ['IDENTITY_BOOTSTRAP_KEY', 'IDENTITY_FLOW_KEY']) {
+    for (const [value, code] of [['', 'CONFIG_REQUIRED'], ['not-a-key', 'CRYPTO_KEY_INVALID']]) {
+      assert.throws(() => f.read({ [key]: value, IDENTITY_CLIENTS_JSON: 'private malformed JSON' }), error => {
+        assert.equal(error.code, code)
+        assert.deepEqual(error.keys, [key])
+        assert.doesNotMatch(error.message, /private malformed JSON|not-a-key/)
+        return true
+      })
+    }
+  }
+  const state = f.read({ IDENTITY_CLIENTS_JSON: '[]' })
+  assert.deepEqual(state.clients, {})
+  assert.equal(state.environments.server.IDENTITY_CLIENTS_JSON, '[]')
+  assert.equal(state.environments.web.IDENTITY_CLIENTS_JSON, undefined)
 })
 
 test('deployment uses independently configured database hosts and explicit application ports', t => {
   const f = fixture(t, 'deployment')
   const state = f.read({ OUTLINE_DATABASE_HOST: 'outline-db.example', HYDRA_DATABASE_HOST: 'hydra-db.example', SERVER_PORT: '18080', OUTLINE_PORT: '13000',
     WEBSITE_INTERNAL_URL: 'http://127.0.0.1:18080/', OUTLINE_INTERNAL_URL: 'http://127.0.0.1:13000/' })
-  assert.equal(new URL(state.databases.OUTLINE_DATABASE).hostname, 'outline-db.example')
-  assert.equal(state.environments.server.SERVER_PORT, '18080'); assert.equal(state.environments.outline.PORT, '13000')
+  assert.equal(state.environments.server.SERVER_PORT, '18080')
   assert.throws(() => composeEnvironment(state), /LOCAL_PROFILE_REQUIRED/)
   assert.throws(() => f.read({ SERVER_PORT: '18080' }), /LISTENER_TARGET_CONFLICT/)
   const local = fixture(t)
-  for (const override of [{ SERVER_PORT: '18082' }, { OUTLINE_PORT: '13102' }, { HYDRA_LISTEN_PUBLIC_PORT: '14444' }, { HYDRA_ADMIN_URL: 'http://127.0.0.1:14445/' }])
+  for (const override of [{ SERVER_PORT: '18082' }, { HYDRA_LISTEN_PUBLIC_PORT: '14444' }, { HYDRA_ADMIN_URL: 'http://127.0.0.1:14445/' }])
     assert.throws(() => local.read(override), /LOCAL_LISTENER_CONFLICT/)
 })
 
@@ -186,7 +301,7 @@ test('every application listener stays on loopback in local and Nginx deployment
   for (const profile of ['local', 'deployment']) {
     const f = fixture(t, profile)
     assert.equal(f.read({ SERVER_HOST: '127.0.0.1' }).environments.server.SERVER_HOST, '127.0.0.1')
-    for (const key of ['SERVER_HOST', 'OUTLINE_HOST', 'HYDRA_LISTEN_HOST']) for (const host of ['0.0.0.0', '::', 'private.example'])
+    for (const key of ['SERVER_HOST', 'HYDRA_LISTEN_HOST']) for (const host of ['0.0.0.0', '::', 'private.example'])
       assert.throws(() => f.read({ [key]: host }), /PRIVATE_LISTENER_REQUIRED/)
   }
 })
@@ -244,7 +359,7 @@ test('stage output retains unknown stderr, expands failures and never clears a p
   assert.ok(lines.some(line => line.includes('file.ts:22'))); assert.ok(lines.every(line => !line.includes('p@%') && !line.includes('\x1b')))
 })
 
-test('Compose uses only PG18/Redis/Hydra, localhost and correctly encoded DSN; remote targets are refused', t => {
+test('Compose uses only PG18/Hydra, localhost and correctly encoded DSN; remote targets are refused', t => {
   const f = fixture(t), state = f.read(); state.workspace = root
   const environment = composeEnvironment(state)
   assert.equal(decodeURIComponent(new URL(environment.RUNTIME_HYDRA_DSN).password), f.values.HYDRA_DATABASE_PASSWORD)
@@ -255,31 +370,40 @@ test('Compose uses only PG18/Redis/Hydra, localhost and correctly encoded DSN; r
 test('owned stop validates the whole inventory before mutation and refuses unknown or changed resources', async t => {
   const f = fixture(t), state = f.read(); state.workspace = root
   const service = new Services(state), changes = []
-  const item = { Id: 'owned', Config: { Labels: { 'com.docker.compose.service': 'redis' } }, Image: 'image', HostConfig: {}, Mounts: [], State: { Running: true } }
+  const item = { Id: 'owned', Config: { Labels: { 'com.docker.compose.service': 'hydra' } }, Image: 'image', HostConfig: {}, Mounts: [], State: { Running: true } }
   service.inventory = () => [item]
   service.call = args => { changes.push(args); item.State.Running = false; return '' }
   service.file = join(f.workspace, 'dependencies.json')
-  writeFileSync(service.file, JSON.stringify({ version: 1, project: 'exwebsite-runtime', proofs: [{ ...service.proof(item), digest: 'changed' }], newlyStarted: ['owned'] }))
+  writeFileSync(service.file, JSON.stringify({ version: 1, project: 'exwebsite-runtime', proofs: [{ ...containerProof(item), digest: 'changed' }], newlyStarted: ['owned'] }))
   await assert.rejects(service.stop({ lock: false }), /STOP_OWNERSHIP_CONFLICT/); assert.deepEqual(changes, [])
-  writeFileSync(service.file, JSON.stringify({ version: 1, project: 'exwebsite-runtime', proofs: [service.proof(item)], newlyStarted: ['owned'] }))
+  writeFileSync(service.file, JSON.stringify({ version: 1, project: 'exwebsite-runtime', proofs: [containerProof(item)], newlyStarted: ['owned'] }))
+  const saved = readFileSync(service.file, 'utf8')
+  const unknown = { ...structuredClone(item), Id: 'unknown' }
+  service.inventory = () => [item, unknown]
+  await assert.rejects(service.stop({ lock: false }), /STOP_OWNERSHIP_CONFLICT/)
+  assert.equal(readFileSync(service.file, 'utf8'), saved)
+  assert.deepEqual(changes, [])
+  service.inventory = () => [item]
   await service.stop({ lock: false }); assert.deepEqual(changes, [['stop', '--time', '10', 'owned']])
+  assert.deepEqual(JSON.parse(readFileSync(service.file, 'utf8')).proofs, [containerProof(item)])
 })
 
 test('start cannot replace a saved proof after DNS drift to make a later stop succeed', async t => {
   const state = fixture(t).read(); state.workspace = root
   let duringStart = () => {}, present = true
-  const mutations = [], item = { Id: 'a'.repeat(64), Image: 'redis-image-id',
-    Config: { Image: 'redis-fixture', Env: [], Labels: {
-      'com.docker.compose.service': 'redis', 'com.docker.compose.project': 'exwebsite-runtime',
-      'com.docker.compose.oneoff': 'false', 'com.docker.compose.config-hash': 'redis-hash',
+  const mutations = [], item = { Id: 'a'.repeat(64), Image: 'hydra-image-id',
+    Config: { Image: 'hydra-fixture', Env: [], Labels: {
+      'com.docker.compose.service': 'hydra', 'com.docker.compose.project': 'exwebsite-runtime',
+      'com.docker.compose.oneoff': 'false', 'com.docker.compose.config-hash': 'hydra-hash',
       'dev.exwebsite.runtime': 'dependencies',
-    } }, HostConfig: { Dns: [], PortBindings: {} }, Mounts: [], State: { Running: false } }
+    } }, HostConfig: { Dns: null, DnsOptions: null, DnsSearch: null, PortBindings: {} },
+    Mounts: [{ Name: 'first', Destination: '/a', Mode: 'rw' }, { Name: 'second', Destination: '/b', Mode: 'ro' }], State: { Running: false } }
   const services = new Services(state, { run: (_command, args) => {
     let stdout = ''
     if (args[0] === 'ps') stdout = present ? item.Id : ''
     else if (args[0] === 'inspect') stdout = JSON.stringify([item])
-    else if (args.includes('config')) stdout = args.includes('--hash') ? 'redis redis-hash'
-      : JSON.stringify({ services: { redis: { image: 'redis-fixture' } } })
+    else if (args.includes('config')) stdout = args.includes('--hash') ? 'hydra hydra-hash'
+      : JSON.stringify({ services: { hydra: { image: 'hydra-fixture' } } })
     else if (args.includes('up') || args[0] === 'stop') {
       mutations.push(args); item.State.Running = args[0] !== 'stop'
       if (args.includes('up')) { present = true; duringStart() }
@@ -287,32 +411,34 @@ test('start cannot replace a saved proof after DNS drift to make a later stop su
     return { status: 0, stdout }
   } })
   mkdirSync(state.directory, { recursive: true })
-  const saved = JSON.stringify({ version: 1, project: 'exwebsite-runtime', proofs: [services.proof(item)], newlyStarted: [] })
+  const saved = JSON.stringify({ version: 1, project: 'exwebsite-runtime', proofs: [containerProof(item)], newlyStarted: [] })
   writeFileSync(services.file, saved)
   item.HostConfig.Dns = ['1.1.1.1']
   await assert.rejects(services.stop({ lock: false }), /STOP_OWNERSHIP_CONFLICT/)
-  await assert.rejects(services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {},
+  await assert.rejects(services.start({ selectedServices: ['hydra'], assertFree: async () => {}, ready: async () => {},
     log: reporter({ write() {} }) }), /START_OWNERSHIP_CONFLICT/)
   assert.equal(readFileSync(services.file, 'utf8'), saved)
   await assert.rejects(services.stop({ lock: false }), /STOP_OWNERSHIP_CONFLICT/)
   assert.deepEqual(mutations, [])
 
-  item.HostConfig.Dns = []
+  Object.assign(item.HostConfig, { Dns: [], DnsOptions: [], DnsSearch: [] })
+  item.Mounts.reverse()
   const originalItem = structuredClone(item)
-  for (const change of [value => { value.HostConfig.Privileged = true }, value => { value.Mounts = [{ Name: 'foreign', Destination: '/extra' }] },
-    value => { value.Image = 'replacement-image-id' }, value => { value.Id = 'b'.repeat(64) }]) {
+  for (const change of [value => { value.HostConfig.Privileged = true }, value => { value.Mounts[0].Mode = 'changed' },
+    value => { value.Config.WorkingDir = '/changed' }, value => { value.Image = 'replacement-image-id' },
+    value => { value.Id = 'b'.repeat(64) }]) {
     Object.assign(item, structuredClone(originalItem)); change(item)
-    await assert.rejects(services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {},
+    await assert.rejects(services.start({ selectedServices: ['hydra'], assertFree: async () => {}, ready: async () => {},
       log: reporter({ write() {} }) }), /START_OWNERSHIP_CONFLICT/)
     assert.equal(readFileSync(services.file, 'utf8'), saved)
   }
   Object.assign(item, structuredClone(originalItem))
   rmSync(services.file)
-  await assert.rejects(services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {},
+  await assert.rejects(services.start({ selectedServices: ['hydra'], assertFree: async () => {}, ready: async () => {},
     log: reporter({ write() {} }) }), /OWNERSHIP_RECORD_MISSING/)
   for (const record of [null, { ...JSON.parse(saved), version: 2 }, { ...JSON.parse(saved), proofs: [null] }]) {
     const invalid = JSON.stringify(record); writeFileSync(services.file, invalid)
-    await assert.rejects(services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {},
+    await assert.rejects(services.start({ selectedServices: ['hydra'], assertFree: async () => {}, ready: async () => {},
       log: reporter({ write() {} }) }), /OWNERSHIP_RECORD_INVALID/)
     assert.equal(readFileSync(services.file, 'utf8'), invalid)
   }
@@ -321,16 +447,17 @@ test('start cannot replace a saved proof after DNS drift to make a later stop su
 
   // Legitimate Docker null/[] normalization retains the original proof and permits restart.
   item.HostConfig.Dns = null
-  await services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {}, log: reporter({ write() {} }) })
+  await services.start({ selectedServices: ['hydra'], assertFree: async () => {}, ready: async () => {}, log: reporter({ write() {} }) })
   assert.deepEqual(JSON.parse(readFileSync(services.file, 'utf8')).proofs, JSON.parse(saved).proofs)
   await services.stop({ lock: false })
   assert.equal(item.State.Running, false)
+  assert.deepEqual(JSON.parse(readFileSync(services.file, 'utf8')).proofs, JSON.parse(saved).proofs)
 
   // A change during Compose must not overwrite proof or trigger an unsafe rollback stop.
   const beforeStart = readFileSync(services.file, 'utf8')
   mutations.length = 0
   duringStart = () => { item.HostConfig.Dns = ['9.9.9.9'] }
-  await assert.rejects(services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {},
+  await assert.rejects(services.start({ selectedServices: ['hydra'], assertFree: async () => {}, ready: async () => {},
     log: reporter({ write() {} }) }), /START_OWNERSHIP_CONFLICT/)
   assert.equal(readFileSync(services.file, 'utf8'), beforeStart)
   assert.equal(mutations.length, 1)
@@ -338,7 +465,7 @@ test('start cannot replace a saved proof after DNS drift to make a later stop su
 
   // A genuinely empty inventory still supports first-time creation and a proven stop.
   Object.assign(item, structuredClone(originalItem)); present = false; duringStart = () => {}; rmSync(services.file)
-  await services.start({ selectedServices: ['redis'], assertFree: async () => {}, ready: async () => {}, log: reporter({ write() {} }) })
+  await services.start({ selectedServices: ['hydra'], assertFree: async () => {}, ready: async () => {}, log: reporter({ write() {} }) })
   await services.stop({ lock: false })
   assert.equal(item.State.Running, false)
 })
@@ -346,10 +473,10 @@ test('start cannot replace a saved proof after DNS drift to make a later stop su
 test('owned stop tolerates Docker mount ordering and unset DNS normalization but refuses real resource changes', async t => {
   const state = fixture(t).read(); state.workspace = root
   const services = new Services(state), calls = []
-  const item = { Id: 'owned', Config: { Labels: { 'com.docker.compose.service': 'redis' } }, Image: 'image',
+  const item = { Id: 'owned', Config: { Labels: { 'com.docker.compose.service': 'hydra' } }, Image: 'image',
     HostConfig: { Dns: null, DnsOptions: null, DnsSearch: null },
     Mounts: [{ Name: 'first', Destination: '/a' }, { Name: 'second', Destination: '/b' }], State: { Running: true } }
-  const record = { version: 1, project: 'exwebsite-runtime', proofs: [services.proof(item)], newlyStarted: ['owned'] }
+  const record = { version: 1, project: 'exwebsite-runtime', proofs: [containerProof(item)], newlyStarted: ['owned'] }
   mkdirSync(state.directory, { recursive: true })
   services.file = join(state.directory, 'dependencies.json'); writeFileSync(services.file, JSON.stringify(record))
   services.inventory = () => [item]
@@ -358,13 +485,30 @@ test('owned stop tolerates Docker mount ordering and unset DNS normalization but
   await services.stop({ lock: false })
   assert.deepEqual(calls, [['stop', '--time', '10', 'owned']])
   const valid = structuredClone(item)
+  const saved = readFileSync(services.file, 'utf8')
   for (const mutation of [value => { value.HostConfig.Dns = ['1.1.1.1'] }, value => { value.Mounts[0].Name = 'foreign' },
     value => { value.Config.Env = ['PASSWORD=changed'] }, value => { value.Image = 'replacement' }]) {
     Object.assign(item, structuredClone(valid)); item.State.Running = true; mutation(item)
     calls.length = 0
     await assert.rejects(services.stop({ lock: false }), /STOP_OWNERSHIP_CONFLICT/)
     assert.deepEqual(calls, [])
+    assert.equal(readFileSync(services.file, 'utf8'), saved)
   }
+})
+
+test('owned stop refuses post-stop inspect drift without rewriting the old proof', async t => {
+  const state = fixture(t).read(); state.workspace = root
+  const services = new Services(state), calls = []
+  const item = { Id: 'owned', Image: 'image', Config: { Labels: { 'com.docker.compose.service': 'hydra' } },
+    HostConfig: { Dns: null }, Mounts: [], State: { Running: true } }
+  services.inventory = () => [item]
+  services.call = args => { calls.push(args); item.State.Running = false; item.HostConfig.Dns = ['9.9.9.9']; return '' }
+  mkdirSync(state.directory, { recursive: true })
+  writeFileSync(services.file, JSON.stringify({ version: 1, project: 'exwebsite-runtime', proofs: [containerProof(item)], newlyStarted: ['owned'] }))
+  const saved = readFileSync(services.file, 'utf8')
+  await assert.rejects(services.stop({ lock: false }), /STOP_OWNERSHIP_CONFLICT/)
+  assert.deepEqual(calls, [['stop', '--time', '10', 'owned']])
+  assert.equal(readFileSync(services.file, 'utf8'), saved)
 })
 
 test('dependency stop refuses an application listener before inspecting or mutating dependencies', async t => {
@@ -387,10 +531,10 @@ test('local service administrator is configurable without changing application d
   const state = f.read(); state.workspace = root
   const environment = composeEnvironment(state)
   assert.equal(environment.POSTGRES_USER, 'existing-admin')
-  assert.equal(state.environments.outline.DATABASE_URL, state.databases.OUTLINE_DATABASE)
-  assert.equal(new URL(state.databases.OUTLINE_DATABASE).username, 'outline')
+  assert.equal(state.environments.hydra.DSN, state.databases.HYDRA_DATABASE)
+  assert.equal(new URL(state.databases.HYDRA_DATABASE).username, 'hydra')
   assert.throws(() => composeEnvironment({ ...state, values: { ...state.values, POSTGRES_VOLUME_EXTERNAL: 'yes' } }), /EXTERNAL_VOLUME_SETTING_INVALID/)
-  assert.throws(() => composeEnvironment({ ...state, values: { ...state.values, POSTGRES_VOLUME_NAME: 'shared', REDIS_VOLUME_NAME: 'shared' } }), /LOCAL_SERVICE_CONFIG_INVALID/)
+  assert.throws(() => composeEnvironment({ ...state, values: { ...state.values, POSTGRES_VOLUME_NAME: 'invalid/volume' } }), /LOCAL_SERVICE_CONFIG_INVALID/)
 })
 
 test('external PG volume requires a verified project consumer and refuses every foreign running consumer', t => {
@@ -419,11 +563,11 @@ test('external PG volume requires a verified project consumer and refuses every 
   assert.ok(calls.every(args => ['ps', 'inspect', 'volume'].includes(args[0])))
 })
 
-test('document initialization never assigns a configured administrator as a document owner', async t => {
+test('Hydra initialization never assigns a configured administrator as its owner', async t => {
   const f = fixture(t)
-  Object.assign(f.values, { POSTGRES_USER: 'existing-admin', OUTLINE_DATABASE_USER: 'existing-admin' }); f.save()
+  Object.assign(f.values, { POSTGRES_USER: 'existing-admin', HYDRA_DATABASE_USER: 'existing-admin' }); f.save()
   const queries = []
-  await assert.rejects(initializeDocumentDatabases(f.read(), { connect: async () => ({
+  await assert.rejects(initializeHydraDatabase(f.read(), { connect: async () => ({
     query: async sql => { queries.push(sql); return { rows: [] } }, end: async () => {},
   }) }), /DATABASE_OWNER_CONFLICT/)
   assert.deepEqual(queries, [])
@@ -431,15 +575,15 @@ test('document initialization never assigns a configured administrator as a docu
 
 test('PM2 online with failed health is never success, and rollback preserves a pre-existing process', async t => {
   const f = fixture(t, 'deployment'), state = f.read(), existing = { name: 'exwebsite-server', pm_id: 7, pid: 70, pm2_env: { status: 'online' } }
-  for (const path of ['apps/server/dist', 'apps/outline/build/server']) mkdirSync(join(f.workspace, path), { recursive: true })
-  writeFileSync(join(f.workspace, 'apps/server/dist/server.js'), ''); writeFileSync(join(f.workspace, 'apps/outline/build/server/index.js'), '')
+  for (const path of ['apps/server/dist']) mkdirSync(join(f.workspace, path), { recursive: true })
+  writeFileSync(join(f.workspace, 'apps/server/dist/server.js'), '')
   writeFileSync(state.values.HYDRA_BINARY, '')
   const native = new NativeApplications(state, { preflight: async () => {}, client: async () => {}, health: async () => { throw new Error('health failed') } }), calls = []
   let items = [existing]
   native.inventory = () => items
-  native.call = args => { calls.push(args); if (args[0] === 'start') items = [...items, ...[{ name: 'exwebsite-outline', pm_id: 8 }, { name: 'exwebsite-hydra', pm_id: 9 }].filter(item => args.at(-1).split(',').includes(item.name))] }
+  native.call = args => { calls.push(args); if (args[0] === 'start') items = [...items, ...[{ name: 'exwebsite-hydra', pm_id: 9 }].filter(item => args.at(-1).split(',').includes(item.name))] }
   await assert.rejects(native.start({ verifySchemas: async () => {}, acquire: () => ({ release() {} }), verifyBinary: () => {} }), /health failed/)
-  assert.deepEqual(calls.at(-1), ['delete', '9', '8'])
+  assert.deepEqual(calls.at(-1), ['delete', '9'])
   assert.equal(calls.some(args => args.includes('all') || args.includes('7')), false)
 })
 
@@ -451,6 +595,33 @@ test('identity conflicts fail before PM2 starts and Hydra client checks precede 
   assert.deepEqual(calls, [])
 })
 
+test('empty-client native startup refuses Website and ready output when Hydra protocol checks fail', async t => {
+  for (const failedPath of ['/health/ready', '/.well-known/openid-configuration']) {
+    const f = fixture(t, 'deployment'), state = f.read(), calls = [], output = []
+    state.clients = {}
+    mkdirSync(join(f.workspace, 'apps/server/dist'), { recursive: true })
+    writeFileSync(join(f.workspace, 'apps/server/dist/server.js'), '')
+    writeFileSync(state.values.HYDRA_BINARY, '')
+    const native = new NativeApplications(state, { preflight: async () => {}, client: current => verifyNativeClient(current, {
+      ready: async (url, { expected } = {}) => {
+        if (new URL(url).pathname === failedPath) throw Error('unreachable')
+        if (expected && !await expected(Response.json({ issuer: state.config.issuer }))) throw Error('issuer mismatch')
+      },
+    }) })
+    let items = []
+    native.inventory = () => items
+    native.call = args => {
+      calls.push(args)
+      if (args[0] === 'start') items = [{ name: 'exwebsite-hydra', pm_id: 9 }]
+      if (args[0] === 'delete') items = []
+    }
+    await assert.rejects(native.start({ verifySchemas: async () => {}, acquire: () => ({ release() {} }), verifyBinary: () => {},
+      log: { title: line => output.push(line), log: (...line) => output.push(line) } }))
+    assert.equal(calls.some(args => args[0] === 'start' && args.at(-1).includes('server')), false)
+    assert.deepEqual(calls.at(-1), ['delete', '9']); assert.deepEqual(output, [])
+  }
+})
+
 test('PM2 wrapper uses the same supported process overrides and isolated PM2 home as the invoking command', t => {
   const f = fixture(t, 'deployment'), environment = { DATABASE_PASSWORD: 'process secret', PM2_HOME: join(f.workspace, 'isolated-pm2') }
   const state = f.read(environment)
@@ -459,7 +630,6 @@ test('PM2 wrapper uses the same supported process overrides and isolated PM2 hom
     const plan = JSON.parse(options.env.EXWEBSITE_RUNTIME_LAUNCH_PLAN)
     assert.equal(plan.server.specification.environment.DATABASE_URL, state.databases.DATABASE)
     assert.equal(plan.hydra.specification.environment.AUTH_CODE_HMAC_KEY, undefined)
-    assert.equal(plan.outline.specification.environment.AUTH_CODE_HMAC_KEY, undefined)
     assert.equal(options.env.PM2_HOME, environment.PM2_HOME)
     return { status: 0, stdout: '[]' }
   } })
@@ -479,39 +649,35 @@ test('native stop remains available when the Hydra binary is missing and only de
   assert.deepEqual(calls, [['jlist'], ['delete', '7'], ['jlist']])
 })
 
-test('conversion checks all three original databases, issuer and old pending target availability before writing', async t => {
+test('conversion checks retained database identity and refuses unknown pending targets', async t => {
   const values = fixture(t).values, seen = [], queries = []
   const connect = async url => {
-    const name = new URL(url).pathname.slice(1), owner = values[`${name === 'exre' ? 'DATABASE' : name.toUpperCase() + '_DATABASE'}_USER`]
+    const name = new URL(url).pathname.slice(1), owner = values[`${name === 'exre' ? 'DATABASE' : 'HYDRA_DATABASE'}_USER`]
     seen.push(name)
     return { query: async sql => { queries.push(sql); return { rows: sql.includes('current_database') ? [{ name, owner }] :
-      sql.includes('pg_database') ? [{ owner }] : sql.includes('to_regclass') ? [{ name: 'present' }] :
-      sql.includes('SELECT issuer') ? [{ issuer: 'http://127.0.0.1:4444/' }] : sql.includes('target_bindings') ? [{ target_bindings: JSON.stringify([{ clientId: 'ex-outline-local', hydraSid: 'old' }]) }] : [] } }, end: async () => {} }
+      sql.includes('pg_database') ? [{ owner }] : sql.includes('to_regclass') ? [{ name: 'present' }] : [] } }, end: async () => {} }
   }
   let checkedClient = false
   await verifyOriginalTargets(values, values, { connect, verifyClient: async () => { checkedClient = true } })
-  assert.deepEqual(seen, ['exre', 'outline', 'hydra']); assert.equal(checkedClient, true)
+  assert.deepEqual(seen, ['exre', 'hydra']); assert.equal(checkedClient, true)
   assert.ok(queries.every(sql => /^(SELECT|BEGIN READ ONLY|ROLLBACK)/.test(sql)))
-  await assert.rejects(verifyOriginalTargets(values, { ...values, HYDRA_PUBLIC_URL: 'http://127.0.0.1:14444/' }, { connect, verifyClient: async () => {} }), /CONVERSION_ISSUER_CONFLICT/)
   const unavailable = async url => {
     const client = await connect(url), original = client.query
-    client.query = async sql => sql.includes('target_bindings') ? { rows: [{ target_bindings: JSON.stringify([{ clientId: 'ex-outline', hydraSid: 'legacy' }]) }] } : original(sql)
+    client.query = async sql => sql.includes('target_bindings') ? { rows: [{ target_bindings: JSON.stringify([{ clientId: 'unknown-app', hydraSid: 'legacy' }]) }] } : original(sql)
     return client
   }
   await assert.rejects(verifyOriginalTargets(values, values, { connect: unavailable, verifyClient: async () => {} }), /CONVERSION_OLD_IDENTITY_PENDING/)
 })
-
-test('compiled production entries use no tsx, no migration and include all Outline services', t => {
-  const state = fixture(t, 'deployment').read()
-  for (const service of ['server', 'outline']) assert.equal(processSpecification(state, service).args.includes('tsx'), false)
-  const outline = processSpecification(state, 'outline')
-  assert.ok(outline.args.includes('--no-migrate')); assert.ok(outline.args.some(value => value.includes('worker') && value.includes('collaboration')))
+test('compiled production server uses no tsx and no implicit migration', t => {
+  const state = fixture(t, 'deployment').read(), server = processSpecification(state, 'server')
+  assert.deepEqual(server.args, ['dist/server.js'])
+  assert.throws(() => processSpecification(state, 'outline'), /PM2_SERVICE_INVALID/)
 })
 
 test('offline Build excludes runtime secrets, needs no prepared database, and stops at the first failed stage', async t => {
   const f = fixture(t), corepack = join(f.workspace, 'corepack.js'); writeFileSync(corepack, '')
   const specs = buildSpecifications({ workspace: f.workspace, inherited: { INTEGRATION_COREPACK_JS: corepack, DATABASE_URL: 'private', AUTH_CODE_HMAC_KEY: 'private' } })
-  assert.equal(specs.length, 8)
+  assert.equal(specs.length, 4)
   assert.equal(specs[0].name, 'API Contract')
   assert.deepEqual(specs[0].args, [join(f.workspace, 'scripts/api/generate.mjs'), 'generate'])
   assert.ok(specs.every(spec => spec.environment.DATABASE_URL === undefined && spec.environment.AUTH_CODE_HMAC_KEY === undefined && spec.environment.NODE_ENV === 'production'))
@@ -542,12 +708,12 @@ test('production maintenance uses compiled CLI and native Hydra must match the l
     assert.throws(() => verifyHydraBinary(state, () => result), /HYDRA_VERSION_CONFLICT/)
 })
 
-test('Nginx template preserves same-origin mounts, HTTPS, WebSocket and denied internal paths; injection fails', t => {
+test('Nginx template preserves HTTPS, Website API forwarding, Hydra whitelist and denied internal paths; injection fails', t => {
   const f = fixture(t, 'deployment'), state = f.read(); state.workspace = root
   Object.assign(state.values, { NGINX_SITE_CERT: '/certs/site.crt', NGINX_SITE_KEY: '/certs/site.key', NGINX_ISSUER_CERT: '/certs/issuer.crt',
     NGINX_ISSUER_KEY: '/certs/issuer.key', HYDRA_INTERNAL_PUBLIC_URL: 'http://127.0.0.1:4444' })
   const text = nginxConfiguration(state)
-  for (const fragment of ['X-Forwarded-Prefix /docs', 'X-Forwarded-Proto https', 'proxy_set_header Upgrade', 'internal(?:/|$)', 'oauth2/', 'try_files']) assert.ok(text.includes(fragment))
+  for (const fragment of ['X-Forwarded-Proto https', 'internal(?:/|$)', 'oauth2/', 'try_files']) assert.ok(text.includes(fragment))
   assert.equal(text.includes('@@'), false)
   state.values.NGINX_SITE_KEY = '/bad;injected'; assert.throws(() => nginxConfiguration(state), /NGINX_VALUE_INVALID/)
 })
@@ -578,21 +744,21 @@ test('structured logs stay bounded and redact short secrets before writing any r
 })
 
 test('new parser separates dependency and native commands and rejects unknown/repeated flags', () => {
-  assert.deepEqual(parseRuntimeArguments(['service:logs', 'redis']), { command: 'service:logs', service: 'redis', verbose: false })
+  assert.deepEqual(parseRuntimeArguments(['service:logs', 'hydra']), { command: 'service:logs', service: 'hydra', verbose: false })
   for (const args of [['service:start', '--mode', 'local'], ['infra', 'configure'], ['infra', 'bootstrap'], ['dev', '--verbose', '--verbose'], ['stop', 'all']]) assert.throws(() => parseRuntimeArguments(args))
 })
 
 test('unified tests exclude real lifecycle probes and remove development credentials from every group', async () => {
   const specs = testSpecifications({ workspace: root, inherited: { DATABASE_URL: 'developer-private', REDIS_URL: 'developer-redis' } })
-  assert.ok(specs.length > 3); assert.ok(specs.every(spec => !Object.values(spec.environment).includes('developer-private')))
+  assert.equal(specs.length, 2); assert.ok(specs.every(spec => !Object.values(spec.environment).includes('developer-private')))
   assert.ok(specs[1].args.every(value => !value.endsWith('-real.test.mjs')))
   assert.ok(specs[1].args.includes('scripts/api/generate.test.mjs'))
   const executed = []
   await assert.rejects(runTests({ workspace: root }, async spec => {
     executed.push(spec.name)
-    if (spec.name === 'runtime / Docs 脚本') throw new Error('group failed')
+    if (spec.name === 'runtime') throw new Error('group failed')
   }, async options => { assert.equal(options.workspace, root); executed.push('API Contract') }), /group failed/)
-  assert.deepEqual(executed, ['API Contract', 'Website', 'runtime / Docs 脚本'])
+  assert.deepEqual(executed, ['API Contract', 'Website', 'runtime'])
 })
 
 test('Contract generation failure prevents every test group from starting', async () => {

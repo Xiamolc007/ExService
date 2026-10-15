@@ -1,3 +1,0 @@
-[submodule "apps/outline"]
-	path = apps/outline
-	url = git@github.com:caep-dev/ex-outline.git

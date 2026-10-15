@@ -1,0 +1,86 @@
+{
+  "base": "0cfa6df1bbe86505338e15a573ddd60839a2386c",
+  "sha256": "b37312e2c88aff83639ddeb125d8b9476db6e3861fb03ffc14d689d41d9f8e43",
+  "files": [
+    {
+      "path": ".ai/architectures/identity/integration-boundaries.md",
+      "sha256": "0823c1ec6d9b275d151979cc2a85a16f47ef8a55d39040f4c1e8c26b84be21d6"
+    },
+    {
+      "path": ".ai/architectures/runtime/runtime-boundaries.md",
+      "sha256": "7b90d14799c03c6473214ee2697b9a336eea7333152c05671ef238e865c7910a"
+    },
+    {
+      "path": "apps/server/src/modules/identity/config.ts",
+      "sha256": "5ce8b8ae72c5e9d0c5fe012c4f28ed0c60ab5e18fa1459d7da46bb8b2cc0ecb2"
+    },
+    {
+      "path": "packages/common/src/node/identity-config/index.d.mts",
+      "sha256": "a16db3d97b0cd5773c1f1cd6ad8ab929a628d2c0bcf4afe5645ebdce279edff4"
+    },
+    {
+      "path": "packages/common/src/node/identity-config/index.mjs",
+      "sha256": "2e0064d8b593ca45aafc5b7112fc95449c6bee4ef0fba4c89a07a78cb5de887f"
+    },
+    {
+      "path": "packages/common/test/config.test.mjs",
+      "sha256": "de0b892121ce025e89bbbcae96a168a97f77e3b38f17e1fca5c6cd80fcb47ccf"
+    },
+    {
+      "path": "packages/common/test/entry.test.mjs",
+      "sha256": "609297b31275947b2a75370f1bbe3daefb5fe7ee588382c5d02a3121076ef812"
+    },
+    {
+      "path": "scripts/runtime/applications.mjs",
+      "sha256": "9124d8ea4c657cdd3d991f4203977f66499f9cf76ff414ea2aed665b00261bcc"
+    },
+    {
+      "path": "scripts/runtime/container-proof.mjs",
+      "sha256": "da31d8c5911bf35d712f83d67a947a39516ba16466201b48fc8de005c72ada24"
+    },
+    {
+      "path": "scripts/runtime/deployment.test.mjs",
+      "sha256": "a7ee2221a399bf6f4dab44d925be971cbcb0b16b704e554e415486355424c58b"
+    },
+    {
+      "path": "scripts/runtime/hydra-client.mjs",
+      "sha256": "c893b4782115cfb587d5cc1a2af0f14b73fb44e1ee5b89660fc1b4a26dbd44b9"
+    },
+    {
+      "path": "scripts/runtime/hydra-client.test.mjs",
+      "sha256": "e47060f874da4dc83d04f6d8362a5dff14968bca397b3c3e2dcb17c203312aac"
+    },
+    {
+      "path": "scripts/runtime/retire-outline.mjs",
+      "sha256": "de41c87dfb90bfc339e5647726653141f499938f12b8fcbcb6827bce2cdfac54"
+    },
+    {
+      "path": "scripts/runtime/retire-outline.test.mjs",
+      "sha256": "3f89f182bcc3feebc8268e38c89ea9963bac3560c186a3dede016be1cee0c861"
+    },
+    {
+      "path": "scripts/runtime/services.mjs",
+      "sha256": "93660b30d0b37de759dacff4f6e8ca8ba3a31970bbeb822155ad91d66e98a649"
+    },
+    {
+      "path": "scripts/runtime/settings.mjs",
+      "sha256": "3dbba1b042ebf7de827c45d20728ad8c8ef6d60b0a616dc372d4911d6f2320f4"
+    },
+    {
+      "path": "scripts/runtime/settings.test.mjs",
+      "sha256": "a1a255d035cfc10965626347381da2552853ad4d57961d58585e1dd7c32240aa"
+    },
+    {
+      "path": "tests/auth/deployment-binding.test.ts",
+      "sha256": "4b4063cd798a2b1af0b239b4dd94932763044668960cd33d627034ff9a8dc17d"
+    },
+    {
+      "path": "tests/auth/identity-config.test.ts",
+      "sha256": "bbec7e214c1cdbe3c3141b85327cfa44d2a49ed6db69e2e53f141bd2e4ca5267"
+    },
+    {
+      "path": "tests/runtime/native-health.test.ts",
+      "sha256": "6ad28df5847f1aa25cb14a52c2e96d29ca10349d5e8b506d85bb1423729f80cb"
+    }
+  ]
+}

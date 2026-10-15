@@ -6,9 +6,10 @@ export function redact(value, environment = {}) {
   const secrets = new Set()
   for (const [key, value] of Object.entries(environment)) {
     if (!value) continue
-    if (/(?:PASSWORD|SECRET|TOKEN|KEY|DSN|DATABASE_URL|REDIS_URL|OUTBOX_TARGETS_JSON)/i.test(key)) {
+    if (/(?:PASSWORD|SECRET|TOKEN|KEY|DSN|DATABASE_URL|REDIS_URL|OUTBOX_TARGETS_JSON|IDENTITY_CLIENTS_JSON)/i.test(key)) {
       secrets.add(value)
       secrets.add(encodeURIComponent(value))
+      secrets.add(JSON.stringify(value).slice(1, -1))
       try {
         const url = new URL(value)
         if (url.password) {
@@ -16,12 +17,16 @@ export function redact(value, environment = {}) {
           secrets.add(decodeURIComponent(url.password))
         }
       } catch {}
-      if (key === 'IDENTITY_OUTBOX_TARGETS_JSON') {
-        try {
-          for (const target of Object.values(JSON.parse(value))) {
-            if (target.deliveryKey) { secrets.add(target.deliveryKey); secrets.add(encodeURIComponent(target.deliveryKey)) }
+      if (['IDENTITY_CLIENTS_JSON', 'IDENTITY_OUTBOX_TARGETS_JSON'].includes(key)) {
+        const collect = item => {
+          if (!item || typeof item !== 'object') return
+          for (const [field, nested] of Object.entries(item)) {
+            if (['clientSecret', 'integrationKey', 'key', 'deliveryKey'].includes(field) && typeof nested === 'string' && nested) {
+              secrets.add(nested); secrets.add(encodeURIComponent(nested)); secrets.add(JSON.stringify(nested).slice(1, -1))
+            } else collect(nested)
           }
-        } catch {}
+        }
+        try { collect(JSON.parse(value)) } catch {}
       }
     }
   }
@@ -45,23 +50,17 @@ const advice = {
   CRYPTO_KEY_INVALID: ['密钥格式无效', '上方密钥必须为 64 位 hex；保留已有环境的原密钥'],
   DATABASE_HOST_INVALID: ['数据库主机格式无效', '填写数据库主机名或 IP，不要填写连接 URL'],
   DATABASE_TLS_INVALID: ['数据库 TLS 模式无效', '使用 disable、allow、prefer、require、verify-ca 或 verify-full'],
-  DATABASE_IDENTITY_CONFLICT: ['数据库名称或连接身份与预期不一致', '核对该服务的数据库名和独立 owner；Website=exre，Outline=outline，Hydra=hydra'],
+  DATABASE_IDENTITY_CONFLICT: ['数据库名称或连接身份与预期不一致', '核对该服务的数据库名和独立 owner；Website=exre，Hydra=hydra'],
   DATABASE_OWNER_CONFLICT: ['数据库 owner 或角色权限冲突', '核对现有库的独立 owner、登录权限和原凭据；文档 owner 不得使用管理员或 Website owner'],
-  DATABASE_MIGRATIONS_MISSING: ['数据库 migration 未完成', '对现有 Outline/Hydra 显式执行 pnpm infra migrate'],
-  DATABASE_STRUCTURE_INCOMPLETE: ['数据库必需表或列缺失', '对现有 Outline/Hydra 显式执行 pnpm infra migrate；被手工修改的结构先核对迁移记录'],
-  OUTLINE_EXTENSION_MISSING: ['Outline 缺少 pg_trgm 扩展', '由数据库管理员在 outline 库显式准备 pg_trgm，再重试'],
-  OUTLINE_MARKER_MISSING: ['Outline 文档身份尚未准备', '选择已有 active Website 用户 UUID，执行 pnpm infra bootstrap --admin-user-id <UUID>'],
-  OUTLINE_IDENTITY_CONFLICT: ['Outline 文档身份与当前 issuer 冲突', '核对 HYDRA_PUBLIC_URL 与已有身份记录；保留原 issuer 和账号，完成显式身份维护后重试'],
-  STORAGE_PATH_INVALID: ['Outline 附件目录无效', 'OUTLINE_STORAGE_DIRECTORY 使用绝对路径并保留现有附件'],
-  REDIS_URL_INVALID: ['Redis 地址无效', 'OUTLINE_REDIS_URL 使用有效 redis:// 或 rediss:// 地址'],
+  DATABASE_MIGRATIONS_MISSING: ['数据库 migration 未完成', '对现有 Hydra 显式执行 pnpm infra migrate'],
+  DATABASE_STRUCTURE_INCOMPLETE: ['数据库必需表或列缺失', '对现有 Hydra 显式执行 pnpm infra migrate；被手工修改的结构先核对迁移记录'],
   BUILD_ARTIFACT_MISSING: ['应用构建产物缺失', '执行 pnpm build 后重试'],
   HYDRA_BINARY_REQUIRED: ['原生 Hydra 可执行文件缺失', '安装 Hydra v2.3.0，并将 HYDRA_BINARY 指向可执行文件'],
-  HYDRA_CLIENT_MISSING: ['Hydra OIDC client 尚未登记', '选择已有 active Website 用户 UUID，执行 pnpm infra bootstrap --admin-user-id <UUID>'],
-  HYDRA_CLIENT_CONFLICT: ['Hydra OIDC client 配置不一致', '核对 issuer、回调地址和 OUTLINE_OIDC_CLIENT_SECRET 与现有 client；不要自动覆盖身份配置'],
-  HYDRA_CONFIG_INVALID: ['Hydra OIDC 连接配置无效', '核对 HYDRA_ADMIN_URL、HYDRA_PUBLIC_URL、PUBLIC_ORIGIN 和 OUTLINE_OIDC_CLIENT_SECRET'],
+  HYDRA_CLIENT_MISSING: ['Hydra OIDC client 尚未登记', '核对 IDENTITY_CLIENTS_JSON 后显式执行 pnpm infra clients'],
+  HYDRA_CLIENT_CONFLICT: ['Hydra OIDC client 配置不一致', '核对 issuer、回调地址和 IDENTITY_CLIENTS_JSON 与现有 client；不要自动覆盖身份配置'],
+  HYDRA_CONFIG_INVALID: ['Hydra OIDC 连接配置无效', '核对 HYDRA_ADMIN_URL、HYDRA_PUBLIC_URL、PUBLIC_ORIGIN 和 IDENTITY_CLIENTS_JSON'],
   HYDRA_CLIENT_CHECK_FAILED: ['Hydra OIDC client 检查失败', '检查 pnpm service:status、pnpm service:logs hydra 和 Hydra admin/public 地址'],
   WEBSITE_NOT_READY: ['Website 启动检查未通过', '按上方 Website 检查项修正对应配置或迁移后重试'],
-  OUTLINE_NOT_READY: ['Outline 身份或工作区检查未通过', '按上方 Outline 检查项修正；迁移使用 pnpm infra migrate，身份准备须指定已有 active 用户 UUID'],
   APPLICATION_NOT_READY: ['应用 HTTP 健康检查未通过', '核对上方服务地址、监听端口和进程日志'],
   APP_EXITED_DURING_START: ['应用在启动期间退出', '检查上方退出进程的错误日志，修正后重试'],
   APPLICATION_PORT_OCCUPIED: ['应用端口已被占用', '检查对应端口的监听进程；停止已知应用或显式调整本项目端口'],

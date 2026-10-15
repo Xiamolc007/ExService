@@ -21,15 +21,14 @@ env:
 
 jobs:
   verify:
-    # PostgreSQL, Redis and Nginx fixtures require Linux containers.
+    # PostgreSQL and Nginx fixtures require Linux containers.
     runs-on: ubuntu-24.04
     timeout-minutes: 60
 
     steps:
-      - name: Check out repository and Outline
+      - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          submodules: recursive
           persist-credentials: false
 
       - name: Install pnpm
@@ -56,21 +55,16 @@ jobs:
       - name: Install Website dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Outline dependencies
-        working-directory: apps/outline
-        run: corepack yarn install --immutable
-
       - name: Verify generated API Contract
         run: pnpm api:check
 
       - name: Type-check workspaces
         run: pnpm typecheck
 
-      - name: Build Website and Outline
+      - name: Build Website
         run: pnpm build
 
-      # Readiness CLI tests launch the compiled Outline scripts.
-      - name: Test Website, runtime and Outline
+      - name: Test Website and runtime
         run: pnpm test
 
   ci-gate:

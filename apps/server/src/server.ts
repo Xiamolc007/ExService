@@ -112,7 +112,7 @@ try {
       notifications,
       identityKeys: identity.enabled
         ? {
-            clients: { [identity.clientId]: identity.keys.outline },
+            clients: { ...identity.integrationClients },
             bootstrapKey: identity.keys.bootstrap,
           }
         : undefined,
@@ -144,7 +144,7 @@ try {
     console.error(formatBusinessPluginError(error));
   } else if (error instanceof IdentityConfigError) {
     console.error(
-      `[server] ${error.message}; 请核对集成模式配置并显式运行 integration:configure。`,
+      `[server] ${error.message}; 请核对根 .env.local 中的身份配置。`,
     );
   } else if (
     error instanceof StorageConfigError ||

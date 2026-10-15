@@ -9,9 +9,8 @@ import { APPLICATION_TABLES } from '@server/src/db/schema-check'
 import { parseIntegrationCheckArguments, validateWebsiteIntegrationPreflight } from '@server/src/integration-readiness'
 
 const serverRoot = fileURLToPath(new URL('../../apps/server/', import.meta.url))
-const preflight = { AUTH_CODE_HMAC_KEY: 'a'.repeat(64), WEBSITE_INTEGRATION_ENABLED: 'true',
-  WEBSITE_INTEGRATION_MODE: 'local', OUTLINE_INTEGRATION_KEY: 'b'.repeat(64),
-  IDENTITY_DELIVERY_KEY: 'c'.repeat(64), IDENTITY_FLOW_KEY: 'd'.repeat(64), IDENTITY_BOOTSTRAP_KEY: 'e'.repeat(64) }
+const preflight = { AUTH_CODE_HMAC_KEY: 'a'.repeat(64), IDENTITY_ENABLED: 'true', IDENTITY_MODE: 'local',
+  SERVER_PUBLIC_WEB_BASE_URL: 'http://127.0.0.1:8080', HYDRA_PUBLIC_URL: 'http://127.0.0.1:4444/', HYDRA_ADMIN_URL: 'http://127.0.0.1:4445/', IDENTITY_FLOW_KEY: 'd'.repeat(64), IDENTITY_BOOTSTRAP_KEY: 'e'.repeat(64) }
 
 const failure = (code: string) => ({ code: 1, output: expect.stringContaining(`[integration:check] ${code}；检查项：`) })
 
@@ -101,7 +100,7 @@ it('runs the actual readiness CLI with a read-only role and rejects unsafe targe
       expect((await configuredDb.query("SELECT current_schema() AS schema, current_setting('statement_timeout') AS timeout")).rows)
         .toEqual([{ schema: 'public', timeout: '2500ms' }])
     } finally { await configuredDb.close() }
-    expect(await cli(reader.href, [], { WEBSITE_INTEGRATION_ENABLED: 'false' }))
+    expect(await cli(reader.href, [], { IDENTITY_ENABLED: 'false' }))
       .toEqual({ code: 0, output: '[integration:check] INTEGRATION_CHECK_READY' })
     for (const id of [disabled, randomUUID()]) {
       expect(await cli(reader.href, ['--admin-user-id', id]))

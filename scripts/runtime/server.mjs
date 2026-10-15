@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { root } from './shared.mjs'
-import { LocalError } from '../docs-integration/local-config.mjs'
+import { LocalError } from './local-config.mjs'
 import { readRuntimeConfiguration } from './settings.mjs'
 
 export function serverSpecification(action, args = [], { workspace = root, inherited = process.env } = {}) {

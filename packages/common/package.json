@@ -1,0 +1,16 @@
+{
+  "name": "@workspace/common",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./node/identity-config": {
+      "browser": null,
+      "types": "./src/node/identity-config/index.d.mts",
+      "node": "./src/node/identity-config/index.mjs"
+    }
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}

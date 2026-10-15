@@ -154,18 +154,18 @@ function OidcChallenge({ phase, search }: { phase: Phase; search: string }) {
   }
 
   const loginRequired = challenge !== null && stage === 'login-required' && phase === 'login'
-  const serviceName = info?.clientName === 'Docs' ? '文档服务' : (info?.clientName ?? '文档服务')
+  const serviceName = info?.clientName ?? '应用'
 
   return <main className={styles.page} data-page="identity">
     <AuthBackdrop />
     <Card glass className={styles.panel} data-auth-mode={loginRequired ? 'login' : undefined}>
-      {!loginRequired && <h1 className={identityStyles.statusTitle}>{phase === 'logout' ? '退出文档服务' : '继续登录文档服务'}</h1>}
+      {!loginRequired && <h1 className={identityStyles.statusTitle}>{phase === 'logout' ? '退出应用' : '继续登录应用'}</h1>}
       {challenge === null || stage === 'invalid' ? <Alert variant="destructive" role="alert">
-        <AlertDescription>身份入口无效，请从文档服务重新进入。</AlertDescription>
+        <AlertDescription>身份入口无效，请从应用重新进入。</AlertDescription>
       </Alert> : stage === 'login-required' && phase === 'login' ? <AuthFlow
         presentation="page" onSessionCreated={value => { setStage('checking'); setToken(value) }}
         description={<>使用 Exre 账号，继续访问 <strong>{serviceName}</strong></>}
-      /> : stage === 'restart' ? <p role="alert">此登录流程已失效，请重新从文档服务发起登录。</p>
+      /> : stage === 'restart' ? <p role="alert">此登录流程已失效，请重新从应用发起登录。</p>
         : stage === 'retry-inspect' || stage === 'retry-accept' ? <div className={identityStyles.retryState}>
           <p role="alert">暂时无法连接身份服务，请重试。</p>
           <Button type="button" onClick={retry}>重试</Button>

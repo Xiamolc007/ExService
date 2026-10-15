@@ -2,7 +2,7 @@
 
 本文件说明共享认证 UI、应用流程和浏览器存储之间的边界。HTTP operation 与字段形状以 `api/openapi.yaml` 和生成 Client 类型为准。
 
-_最后更新：2026-10-05_
+_最后更新：2026-10-15_
 
 ## 责任分层
 
@@ -72,15 +72,15 @@ Hero 图片来自 `apps/web/public/images/heros/join/rifling-911/`。构建时�
 
 本地清理前捕获的 token 仅用于后台 `/auth/logout` 撤销请求，通过显式 Authorization 传递。API 拒绝、断网、超时或请求未完成均不阻止浏览器退出；请求结束不再修改本地身份，因此迟到结果不能清除后来登录的新会话。此路径不立即刷新页面，以免中断尚未送达服务端的撤销请求。本地退出不等于服务端撤销成功；跨服务会话撤销仍依赖服务端请求成功处理。
 
-## 文档身份页面
+## 身份页面
 
-`apps/web/src/App.tsx` 注册 `/identity/login`、`/identity/consent`、`/identity/logout`、`/identity/status` 和 `/identity/signed-out`。挑战页面通过生成的 API Client 检查或接受 Hydra challenge；已有有效本站 Bearer 可直接完成登录与授权，缺少会话时经现有登录 UI。挑战与当前 token 不匹配时重新开始，避免迟到响应将旧身份带入新会话。
+`apps/web/src/App.tsx` 注册 `/identity/login`、`/identity/consent`、`/identity/logout` 和 `/identity/signed-out`。挑战页面通过生成的 API Client 检查或接受 Hydra challenge；已有有效本站 Bearer 可直接完成登录与授权，缺少会话时经现有登录 UI。挑战与当前 token 不匹配时重新开始，避免迟到响应将旧身份带入新会话。
 
-文档密码登录将目标服务说明放在共享表单的标题区，通过可选 `description` 展示，并在验证码步骤继续保留；表单显示时不再叠加外围登录标题。页面底部的信息入口通过 `OidcSharingDialog` 打开独立 ExUI Dialog，只描述 challenge 检查返回的 scope：`openid` 为账号身份，`profile` 为基本资料，`email` 为邮箱；每项使用图标、标题与用途说明，原始 scope 收在弹窗内的技术详情。其他 scope 保留原标识，不推断权限。关闭、Esc 或“知道了”返回入口并保留表单输入；该弹窗只供查看，不增加授权确认步骤，已有会话仍按原流程自动继续。
+身份密码登录将目标服务说明放在共享表单的标题区，通过可选 `description` 展示，并在验证码步骤继续保留；表单显示时不再叠加外围登录标题。页面底部的信息入口通过 `OidcSharingDialog` 打开独立 ExUI Dialog，只描述 challenge 检查返回的 scope：`openid` 为账号身份，`profile` 为基本资料，`email` 为邮箱；每项使用图标、标题与用途说明，原始 scope 收在弹窗内的技术详情。其他 scope 保留原标识，不推断权限。关闭、Esc 或“知道了”返回入口并保留表单输入；该弹窗只供查看，不增加授权确认步骤，已有会话仍按原流程自动继续。
 
 生成 Client 经 ExAxios 直接返回成功数据，失败抛出 `ExAxiosError`，身份页面按其状态码和错误码决定重试、重新开始或拒绝无效入口。身份路由中的会话失效由当前页面继续处理；共享请求层同步浏览器会话后不把该路由跳到普通 `/login`，以保留 challenge 和退出确认流程。
 
-`/identity/status` 仅向同源父窗口返回 nonce 和粗粒度状态，不传递 token 或资料，供 Outline 的匿名页面决定是否尝试自动接入。`/identity/signed-out` 重新验证当前 token，只删除已确认无效且仍匹配的 token；迟到的 Outline 退出跳转不能清除后来登录的新账号。服务端撤销仍是会话有效性的依据。跨服务边界见 `.ai/architectures/docs-integration/integration-boundaries.md`。
+`/identity/signed-out` 重新验证当前 token，只删除已确认无效且仍匹配的 token；请求代次与会话变化订阅使迟到退出检查不能清除后来登录的新账号。该页只提供首页返回，不读取旧 Docs return/resume 参数或自动导航。服务端撤销仍是会话有效性的依据。跨服务边界见 `.ai/architectures/identity/integration-boundaries.md`。
 
 ## 用户设置
 

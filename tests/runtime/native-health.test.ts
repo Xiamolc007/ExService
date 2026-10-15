@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, test, vi } from 'vitest'
 import { deploymentBinding } from '../../scripts/runtime/deployment.mjs'
+import { HydraClientCheckError } from '../../scripts/runtime/hydra-client.mjs'
 import { verifyNativeHealth } from '../../scripts/runtime/native.mjs'
 
 const probes = vi.hoisted(() => ({
@@ -12,16 +13,16 @@ const probes = vi.hoisted(() => ({
   databases: [] as string[],
 }))
 
-vi.mock('../../scripts/docs-integration/local-dev.mjs', async importOriginal => ({
+vi.mock('../../scripts/runtime/local-dev.mjs', async importOriginal => ({
   ...await importOriginal<object>(), httpReady: probes.ready,
 }))
-vi.mock('../../scripts/docs-integration/ownership.mjs', async importOriginal => ({
+vi.mock('../../scripts/runtime/ownership.mjs', async importOriginal => ({
   ...await importOriginal<object>(), runOwned: probes.execute,
 }))
-vi.mock('../../scripts/docs-integration/local-config.mjs', async importOriginal => ({
+vi.mock('../../scripts/runtime/local-config.mjs', async importOriginal => ({
   ...await importOriginal<object>(), toolchain: () => ({ node: process.execPath }),
 }))
-vi.mock('../../scripts/docs-integration/hydra-client.mjs', async importOriginal => ({
+vi.mock('../../scripts/runtime/hydra-client.mjs', async importOriginal => ({
   ...await importOriginal<object>(), verifyHydraClient: probes.client,
 }))
 vi.mock('pg', () => ({ default: { Client: class {
@@ -32,8 +33,7 @@ vi.mock('pg', () => ({ default: { Client: class {
   async connect() { probes.databases.push(this.name) }
   async query(sql: string) {
     return { rows: sql.includes('current_database') ? [{ name: this.name }]
-      : sql.includes('to_regclass') ? [{ name: 'website_integrations' }]
-      : sql.includes('SELECT issuer') ? [{ issuer: 'https://issuer.example/' }] : [] }
+      : [] }
   }
   async end() {}
 } } }))
@@ -45,37 +45,59 @@ afterEach(() => {
   probes.databases.length = 0
 })
 
-test('native health runs deployment client validation and both integration checks with healthy dependencies', async () => {
+function nativeState(withClient = true) {
   const workspace = mkdtempSync(join(tmpdir(), 'exwebsite-native-health-'))
   workspaces.push(workspace)
+  const client = { clientId: 'native-app', name: 'Native app', clientSecret: 'existing-secret',
+    redirectUri: 'https://app.example/callback', postLogoutRedirectUri: 'https://app.example/logout', scopes: ['openid'] }
   const state = {
     workspace, profile: 'deployment',
-    config: { websiteTarget: { database: 'exre' }, publicOrigin: 'https://site.example',
-      issuer: 'https://issuer.example/', callback: 'https://site.example/docs/auth/oidc.callback', clientId: 'ex-outline' },
-    internal: { website: 'http://127.0.0.1:8082/', outline: 'http://127.0.0.1:3102/', hydra: 'http://127.0.0.1:4445/' },
-    values: { HYDRA_ADMIN_URL: 'http://127.0.0.1:4445/', OUTLINE_OIDC_CLIENT_SECRET: 'test-client' },
-    secrets: { OUTLINE_OIDC_CLIENT_SECRET: 'test-client', IDENTITY_DELIVERY_KEY: 'test-delivery' },
-    databases: { DATABASE: 'postgres://test:test@127.0.0.1:1/exre', OUTLINE_DATABASE: 'postgres://test:test@127.0.0.1:1/outline' },
-    environments: { server: {}, outline: {} },
+    config: { websiteTarget: { host: '127.0.0.1', port: 1, user: 'test', database: 'exre', verifiedDatabase: 'exre' },
+      publicOrigin: 'https://site.example', issuer: 'https://issuer.example/' },
+    internal: { website: 'http://127.0.0.1:8082/', hydra: 'http://127.0.0.1:4445/' },
+    values: {},
+    secrets: { IDENTITY_FLOW_KEY: 'a'.repeat(64), IDENTITY_BOOTSTRAP_KEY: 'b'.repeat(64) },
+    databases: { DATABASE: 'postgres://test:test@127.0.0.1:1/exre' },
+    environments: { server: {} },
+    clients: withClient ? { 'native-app': client } : {}, cleanupTargets: {},
   }
   const directory = join(workspace, '.local/runtime-deployment')
   mkdirSync(directory, { recursive: true })
   writeFileSync(join(directory, 'identity.json'), JSON.stringify(deploymentBinding(state)))
+  return state
+}
 
+test('native health verifies Website, Hydra, configured clients and the retained Website readiness CLI', async () => {
+  const state = nativeState()
   await verifyNativeHealth(state)
-
   expect(probes.ready.mock.calls.map(([url]) => String(url))).toEqual([
-    'http://127.0.0.1:8082/api/health', 'http://127.0.0.1:3102/_health', 'http://127.0.0.1:4445/health/ready',
+    'http://127.0.0.1:8082/api/health', 'http://127.0.0.1:4445/health/ready', 'https://issuer.example/.well-known/openid-configuration',
   ])
-  expect(probes.databases).toEqual(['exre', 'outline'])
-  expect(probes.client).toHaveBeenCalledTimes(2)
-  for (const [options] of probes.client.mock.calls) expect(options).toMatchObject({
+  expect(probes.databases).toEqual(['exre'])
+  expect(probes.client).toHaveBeenCalledTimes(1)
+  for (const [options] of probes.client.mock.calls) expect(options).toEqual({
     mode: 'deployment', adminUrl: state.internal.hydra, publicUrl: state.config.issuer,
-    publicOrigin: state.config.publicOrigin, callback: state.config.callback, clientId: 'ex-outline',
-    clientSecret: state.values.OUTLINE_OIDC_CLIENT_SECRET,
+    client: state.clients['native-app'],
   })
   expect(probes.execute.mock.calls.map(([spec]) => ({ name: spec.name, args: spec.args }))).toEqual([
-    { name: 'server', args: [join(workspace, 'scripts/runtime/server.mjs'), 'integration:check'] },
-    { name: 'outline', args: [join(workspace, 'apps/outline/build/server/scripts/integration-check.js')] },
+    { name: 'server', args: [join(state.workspace, 'scripts/runtime/server.mjs'), 'integration:check'] },
   ])
+})
+
+test('native health accepts zero configured clients while still checking Website and Hydra readiness', async () => {
+  const state = nativeState(false)
+  await verifyNativeHealth(state)
+  expect(probes.client).not.toHaveBeenCalled()
+  expect(probes.ready.mock.calls.map(([url]) => String(url))).toEqual([
+    'http://127.0.0.1:8082/api/health', 'http://127.0.0.1:4445/health/ready', 'https://issuer.example/.well-known/openid-configuration',
+  ])
+  expect(probes.databases).toEqual(['exre'])
+  expect(probes.execute).toHaveBeenCalledTimes(1)
+})
+
+test('native health rejects a missing explicitly configured client before the Website check CLI', async () => {
+  const state = nativeState()
+  probes.client.mockRejectedValueOnce(new HydraClientCheckError('CLIENT_MISSING'))
+  await expect(verifyNativeHealth(state)).rejects.toMatchObject({ code: 'HYDRA_CLIENT_MISSING' })
+  expect(probes.execute).not.toHaveBeenCalled()
 })

@@ -1,19 +1,19 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { digest, atomicJson, readJson } from '../docs-integration/local-config.mjs'
-import { acquireLock } from '../docs-integration/ownership.mjs'
-import { assertPortFree, httpReady } from '../docs-integration/local-dev.mjs'
+import { digest, atomicJson, readJson } from './local-config.mjs'
+import { acquireLock } from './ownership.mjs'
+import { assertPortFree, httpReady } from './local-dev.mjs'
 import { RuntimeError, reporter, diagnostic } from './output.mjs'
 import { acquireApplicationLock } from './application-lock.mjs'
+import { containerProof } from './container-proof.mjs'
 
-export const serviceNames = Object.freeze(['postgres', 'redis', 'hydra'])
+export const serviceNames = Object.freeze(['postgres', 'hydra'])
 const project = 'exwebsite-runtime'
 const label = 'dev.exwebsite.runtime'
 const context = (service, phase) => ({ service, phase, next: '检查 Docker 状态（docker info）、配置和端口占用；容器日志使用 pnpm service:logs，状态使用 pnpm service:status' })
 const serviceDetails = state => [
   ['postgres', 'PostgreSQL', `127.0.0.1:${state.config.ports.postgres}`],
-  ['redis', 'Redis', `127.0.0.1:${state.config.ports.redis}`],
   ['hydra', 'Hydra', state.config.issuer],
 ]
 
@@ -21,29 +21,24 @@ const serviceDetails = state => [
 export function composeEnvironment(state) {
   if (state.profile !== 'local') throw new RuntimeError('LOCAL_PROFILE_REQUIRED')
   const { ports: p } = state.config, v = state.values
-  for (const prefix of ['DATABASE', 'OUTLINE_DATABASE', 'HYDRA_DATABASE']) {
+  for (const prefix of ['DATABASE', 'HYDRA_DATABASE']) {
     const url = new URL(state.databases[prefix])
     if (url.hostname !== '127.0.0.1' || Number(url.port) !== p.postgres)
       throw new RuntimeError('LOCAL_DATABASE_LAYOUT_CONFLICT', { keys: [`${prefix}_HOST`, `${prefix}_PORT`, 'LOCAL_POSTGRES_PORT'] })
   }
-  const redis = new URL(state.redis)
-  if (redis.hostname !== '127.0.0.1' || Number(redis.port || 6379) !== p.redis || redis.password || redis.protocol !== 'redis:')
-    throw new RuntimeError('LOCAL_REDIS_LAYOUT_CONFLICT', { keys: ['OUTLINE_REDIS_URL', 'LOCAL_REDIS_PORT'] })
   const images = JSON.parse(readFileSync(join(state.workspace, 'infra/runtime/images.lock.json'), 'utf8'))
   const dsn = new URL(state.databases.HYDRA_DATABASE); dsn.hostname = 'postgres'; dsn.port = '5432'
   const postgresVolume = v.POSTGRES_VOLUME_NAME ?? 'exwebsite-runtime-pgdata'
-  const redisVolume = v.REDIS_VOLUME_NAME ?? 'exwebsite-runtime-redisdata'
   const postgresUser = v.POSTGRES_USER ?? 'postgres'
   const externalVolume = v.POSTGRES_VOLUME_EXTERNAL ?? 'false'
   if (!['true', 'false'].includes(externalVolume)) throw new RuntimeError('EXTERNAL_VOLUME_SETTING_INVALID', { keys: ['POSTGRES_VOLUME_EXTERNAL'] })
-  if (postgresVolume === redisVolume || ![postgresVolume, redisVolume].every(value => /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(value)) || !v.POSTGRES_PASSWORD)
-    throw new RuntimeError('LOCAL_SERVICE_CONFIG_INVALID', { keys: ['POSTGRES_VOLUME_NAME', 'REDIS_VOLUME_NAME', 'POSTGRES_PASSWORD'] })
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(postgresVolume) || !v.POSTGRES_PASSWORD)
+    throw new RuntimeError('LOCAL_SERVICE_CONFIG_INVALID', { keys: ['POSTGRES_VOLUME_NAME', 'POSTGRES_PASSWORD'] })
   if (!postgresUser || /[\u0000\r\n]/.test(postgresUser)) throw new RuntimeError('LOCAL_SERVICE_CONFIG_INVALID', { keys: ['POSTGRES_USER'] })
   return { ...state.inherited, POSTGRES_USER: postgresUser, POSTGRES_PASSWORD: v.POSTGRES_PASSWORD, HYDRA_SYSTEM_SECRET: v.HYDRA_SYSTEM_SECRET,
-    RUNTIME_POSTGRES_VOLUME_EXTERNAL: externalVolume,
-    POSTGRES_VOLUME_NAME: postgresVolume, REDIS_VOLUME_NAME: redisVolume, RUNTIME_HYDRA_DSN: dsn.href,
-    RUNTIME_POSTGRES_IMAGE: images.postgres, RUNTIME_REDIS_IMAGE: images.redis, RUNTIME_HYDRA_IMAGE: images.hydra,
-    LOCAL_POSTGRES_PORT: String(p.postgres), LOCAL_REDIS_PORT: String(p.redis), LOCAL_HYDRA_PUBLIC_PORT: String(p.hydraPublic),
+    POSTGRES_VOLUME_NAME: postgresVolume, RUNTIME_POSTGRES_IMAGE: images.postgres, RUNTIME_HYDRA_IMAGE: images.hydra,
+    RUNTIME_HYDRA_DSN: dsn.href, RUNTIME_POSTGRES_VOLUME_EXTERNAL: externalVolume,
+    LOCAL_POSTGRES_PORT: String(p.postgres), LOCAL_HYDRA_PUBLIC_PORT: String(p.hydraPublic),
     LOCAL_HYDRA_ADMIN_PORT: String(p.hydraAdmin), RUNTIME_ISSUER: state.config.issuer, RUNTIME_PUBLIC_ORIGIN: state.config.publicOrigin }
 }
 
@@ -91,14 +86,6 @@ export class Services {
     } else log.next(items.every(item => item.State.Running && (!item.State.Health || item.State.Health.Status === 'healthy'))
       && items.length === serviceNames.length ? 'pnpm dev' : '检查 pnpm service:logs；依赖尚未运行时执行 pnpm service:start')
   }
-  proof(item) {
-    const host = { ...item.HostConfig }
-    // Docker normalizes unset DNS lists between null and [] after a restart.
-    for (const key of ['Dns', 'DnsOptions', 'DnsSearch']) if (host[key] === null) host[key] = []
-    return { id: item.Id, service: item.Config.Labels['com.docker.compose.service'],
-      digest: digest({ image: item.Image, config: item.Config, host,
-        mounts: [...item.Mounts].sort((left, right) => left.Destination.localeCompare(right.Destination)) }) }
-  }
   verify(items) {
     const configuration = JSON.parse(this.compose(['config', '--format', 'json']))
     for (const item of items) {
@@ -121,7 +108,7 @@ export class Services {
     return items
   }
   verifyVolumes() {
-    for (const name of [this.environment.POSTGRES_VOLUME_NAME, this.environment.REDIS_VOLUME_NAME]) {
+    for (const name of [this.environment.POSTGRES_VOLUME_NAME]) {
       const names = this.call(['volume', 'ls', '--format', '{{.Name}}']).trim().split(/\r?\n/)
       const external = name === this.environment.POSTGRES_VOLUME_NAME && this.environment.RUNTIME_POSTGRES_VOLUME_EXTERNAL === 'true'
       if (!names.includes(name)) {
@@ -141,7 +128,7 @@ export class Services {
           throw new RuntimeError('EXTERNAL_VOLUME_IN_USE', { service: 'PostgreSQL', target: name })
         continue
       }
-      const expectedKey = name === this.environment.POSTGRES_VOLUME_NAME ? 'pgdata' : 'redisdata'
+      const expectedKey = 'pgdata'
       if (volume?.Labels?.['com.docker.compose.project'] !== project || volume.Labels['com.docker.compose.volume'] !== expectedKey)
         throw new RuntimeError('VOLUME_ADOPTION_REQUIRES_MAINTENANCE', { ...context('Docker', '卷归属核验'), target: name })
     }
@@ -154,7 +141,7 @@ export class Services {
     return record
   }
   verifyProofs(items, proofs, code, phase) {
-    for (const item of items) if (!proofs.some(proof => proof?.id === item.Id && digest(proof) === digest(this.proof(item))))
+    for (const item of items) if (!proofs.some(proof => proof?.id === item.Id && digest(proof) === digest(containerProof(item))))
       throw new RuntimeError(code, context('Docker', phase))
   }
   async start({ ready = verifyDependencyHealth, assertFree = assertPortFree, log = reporter({ environment: this.state.values }), selectedServices = serviceNames } = {}) {
@@ -167,9 +154,9 @@ export class Services {
       if (!record && previous.length) throw new RuntimeError('OWNERSHIP_RECORD_MISSING', context('Docker', '启动前归属核验'))
       if (record) this.verifyProofs(previous, record.proofs, 'START_OWNERSHIP_CONFLICT', '启动前归属核验')
       this.verifyVolumes()
-      const priorProofs = previous.map(item => this.proof(item))
+      const priorProofs = previous.map(containerProof)
       const p = this.state.config.ports
-      for (const [service, ports] of [['postgres', [p.postgres]], ['redis', [p.redis]], ['hydra', [p.hydraPublic, p.hydraAdmin]]].filter(([service]) => selectedServices.includes(service))) {
+      for (const [service, ports] of [['postgres', [p.postgres]], ['hydra', [p.hydraPublic, p.hydraAdmin]]].filter(([service]) => selectedServices.includes(service))) {
         if (!previous.some(item => item.Config.Labels['com.docker.compose.service'] === service && item.State.Running))
           for (const port of ports) await assertFree(port)
       }
@@ -181,7 +168,7 @@ export class Services {
         const existing = items.filter(item => previous.some(prior => prior.Config.Labels['com.docker.compose.service'] === item.Config.Labels['com.docker.compose.service']))
         this.verifyProofs(existing, priorProofs, 'START_OWNERSHIP_CONFLICT', '启动后归属核验')
         atomicJson(this.file, { version: 1, project, proofs: items.map(item =>
-          record?.proofs.find(proof => proof.id === item.Id) ?? priorProofs.find(proof => proof.id === item.Id) ?? this.proof(item)),
+          record?.proofs.find(proof => proof.id === item.Id) ?? priorProofs.find(proof => proof.id === item.Id) ?? containerProof(item)),
           newlyStarted: items.filter(item => !original.has(item.Id)).map(item => item.Id) })
         saved = true
       }
@@ -202,7 +189,7 @@ export class Services {
     const applicationLock = useLock ? acquireApplicationLock(this.state) : undefined
     let lock
     try {
-      if (useLock) for (const port of ['public', 'web', 'api', 'outline', 'outlineVite'].map(name => this.state.config.ports[name]))
+      if (useLock) for (const port of ['public', 'web', 'api'].map(name => this.state.config.ports[name]))
         await assertPortFree(port)
       lock = useLock ? acquireLock({ mode: 'local', fingerprint: this.state.fingerprint, directory: this.state.directory, name: 'service-lock.json' }) : undefined
       if (!existsSync(this.file)) {
@@ -216,7 +203,7 @@ export class Services {
       const actual = this.inventory()
       this.verifyProofs(actual, record.proofs, 'STOP_OWNERSHIP_CONFLICT', '停止后归属核验')
       if (actual.some(item => selected.some(prior => prior.Id === item.Id) && item.State.Running)) throw new RuntimeError('STOP_INCOMPLETE')
-      atomicJson(this.file, { ...record, proofs: actual.map(item => this.proof(item)) })
+      atomicJson(this.file, { ...record, proofs: actual.map(containerProof) })
     } finally { lock?.release(); applicationLock?.release() }
   }
 }
@@ -233,7 +220,6 @@ export async function verifyDependencyHealth(state, services, selected = service
     } catch (error) { throw diagnostic(error, { ...context(name, '连接检查'), keys: ['LOCAL_POSTGRES_PORT', 'POSTGRES_PASSWORD'] }) }
     finally { await client.end().catch(() => {}) }
   }
-  if (services.compose(['exec', '-T', 'redis', 'redis-cli', 'ping']).trim() !== 'PONG') throw new RuntimeError('REDIS_NOT_READY')
   if (!selected.includes('hydra')) return
   await httpReady(new URL('/health/ready', state.internal.hydra), { timeout: 20000 })
   await httpReady(new URL('/.well-known/openid-configuration', state.config.issuer), { timeout: 20000,

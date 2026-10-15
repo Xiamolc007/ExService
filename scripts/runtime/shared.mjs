@@ -3,13 +3,13 @@ import { dirname, resolve, join, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
-export const localRoot = join(root, '.local/docs-integration')
+export const localRoot = join(root, '.local/runtime')
 
 /** Checks registry artifacts without loading historical configuration or source links. */
 export function assertInstalledExui(workspace = root) {
   const entries = value => typeof value === 'string' ? [value]
     : value && typeof value === 'object' ? Object.values(value).flatMap(entries) : []
-  for (const consumer of ['apps/web', 'packages/components', 'packages/sdk', 'apps/outline']) {
+  for (const consumer of ['apps/web', 'packages/components', 'packages/sdk']) {
     const directory = join(workspace, consumer, 'node_modules/@exre/exui')
     let packageJson
     try { packageJson = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')) }

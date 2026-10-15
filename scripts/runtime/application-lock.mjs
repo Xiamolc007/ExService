@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { acquireLock, identityAlive, processIdentity } from '../docs-integration/ownership.mjs'
-import { atomicJson, digest, readJson, LocalError } from '../docs-integration/local-config.mjs'
+import { acquireLock, identityAlive, processIdentity } from './ownership.mjs'
+import { atomicJson, digest, readJson, LocalError } from './local-config.mjs'
 
 /** A dead Windows helper closes its private kill-on-close JobObject. Recovery
  * proves that whole generation is gone; it never reconstructs PID capabilities. */

@@ -23,7 +23,7 @@ export function isInternalPath(raw = ''): boolean {
   return /^(?:api|docs)\/internal(?:\/|$)/i.test(segments.join('/'))
 }
 
-/** Keep browser storage, session probing and OIDC on one configured development origin. */
+/** Keep browser storage and OIDC on one configured development origin. */
 export function proxyBoundaryPlugin(publicOrigin?: string): Plugin {
   const canonical = publicOrigin ? new URL(publicOrigin) : undefined
   return { name: 'website-proxy-boundary', apply: 'serve', configureServer(vite) {
@@ -40,8 +40,6 @@ export function proxyBoundaryPlugin(publicOrigin?: string): Plugin {
         response.writeHead(307, { Location: `${canonical.origin}${path}`, 'Cache-Control': 'no-store' })
         response.end(); return
       }
-      const match = /^\/docs(\?.*)?$/.exec(request.url ?? '')
-      if (match) { response.writeHead(308, { Location: `/docs/${match[1] ?? ''}` }); response.end(); return }
       next()
     })
     // Each proxy also uses bypass: ending a socket cannot cancel other listeners.
@@ -64,7 +62,6 @@ export function trustedProxy(options: ProxyOptions, publicOrigin: string): Proxy
   return guardedProxy({ ...options, configure(proxy, proxyOptions) {
     options.configure?.(proxy, proxyOptions)
     const headers = (request: ClientRequest, _incoming: IncomingMessage) => {
-      request.setHeader('X-Website-Docs-Origin', origin.origin)
       request.setHeader('X-Forwarded-Host', origin.host)
       request.setHeader('X-Forwarded-Proto', origin.protocol.slice(0, -1))
       request.setHeader('X-Forwarded-Port', origin.port)
@@ -76,27 +73,6 @@ export function trustedProxy(options: ProxyOptions, publicOrigin: string): Proxy
     proxy.on('proxyReq', headers)
     proxy.on('proxyReqWs', headers)
   } })
-}
-
-/** Browser Origin remains intact; routing headers have one trusted source. */
-export function docsProxy(target: string, options: { publicOrigin?: string; integrated?: boolean } = {}): ProxyOptions {
-  const origin = new URL(options.publicOrigin ?? 'http://127.0.0.1:8080')
-  return trustedProxy({
-    target, ws: true,
-    rewrite: path => {
-      const stripped = path.replace(/^\/docs(?=\/|\?|$)/, '')
-      return stripped.startsWith('/') ? stripped : `/${stripped}`
-    },
-    ...(options.integrated ? {} : { cookiePathRewrite: '/docs' }),
-    configure(proxy) {
-      proxy.on('proxyRes', response => {
-        const location = response.headers.location
-        if (location && /^\/(?:doc(?:\/|\?|$)|collection(?:\/|\?|$)|s\/|auth\/|api\/|realtime\/|home(?:\?|$)|search(?:\?|$)|settings(?:\/|\?|$))/.test(location)) {
-          response.headers.location = `/docs${location}`
-        }
-      })
-    },
-  }, origin.origin)
 }
 
 export async function createDevEntryServer(vite: ViteDevServer, port: number): Promise<Server> {

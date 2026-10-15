@@ -2,14 +2,12 @@
 // Real geometry and keyboard checks; fixture data does not call the runtime API.
 import assert from 'node:assert/strict'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { createRequire } from 'node:module'
+import { chromium } from 'playwright'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createServer } from 'vite'
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
-const require = createRequire(new URL('../../apps/outline/package.json', import.meta.url))
-const { chromium } = require('playwright')
 const evidence = resolve(repository, 'output/playwright/error-panel')
 await mkdir(evidence, { recursive: true })
 const fixturePath = resolve(repository, 'tests/browser/error-panel-fixture.tsx').replaceAll('\\', '/')

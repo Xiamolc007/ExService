@@ -16,13 +16,13 @@ it('requires mapped internal keys and returns the exact linked-session contract'
   const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices,
     authServices: fixture.authServices, profileServices: fixture.profileServices, storageServices: fixture.storageServices,
     notifications: fixture.notifications,
-    identityKeys: { clients: { 'ex-outline': 'outline-secret', other: 'other-secret' }, bootstrapKey: 'bootstrap-secret' } })
+    identityKeys: { clients: { 'another-app': 'app-secret', other: 'other-secret' }, bootstrapKey: 'bootstrap-secret' } })
   apps.push(app)
   const userId = await fixture.seedUser({ email: 'identity@example.com', nickname: 'Identity', password: 'valid password' })
   const login = await fixture.authServices.login({ email: 'identity@example.com', password: 'valid password' })
   const session = await fixture.authServices.authenticateToken(login.token)
   await fixture.db.query(`INSERT INTO auth_oidc_bindings (client_id, hydra_sid, session_id, user_id, created_at)
-    VALUES ('ex-outline', 'sid-one', $1, $2, $3)`, [session.id, userId, fixture.now()])
+    VALUES ('another-app', 'sid-one', $1, $2, $3)`, [session.id, userId, fixture.now()])
   const payload = { hydraSid: 'sid-one', subject: userId }
   const url = '/api/internal/identity/session/check'
   const unauthorized = await app.inject({ method: 'POST', url, payload })
@@ -31,11 +31,11 @@ it('requires mapped internal keys and returns the exact linked-session contract'
   const wrongClient = await app.inject({ method: 'POST', url, headers: { 'x-integration-key': 'other-secret' }, payload })
   expect(wrongClient.statusCode).toBe(200)
   expect(wrongClient.json()).toEqual({ active: false, reason: 'unknown' })
-  const active = await app.inject({ method: 'POST', url, headers: { 'x-integration-key': 'outline-secret' }, payload })
+  const active = await app.inject({ method: 'POST', url, headers: { 'x-integration-key': 'app-secret' }, payload })
   expect(active.statusCode, active.body).toBe(200)
   expect(active.json()).toMatchObject({ active: true, sessionId: session.id, userId,
     profile: { nickname: 'Identity', email: 'identity@example.com', version: 0 } })
-  const raw = await serviceHandlers.checkLinkedSession({ identityClientId: 'ex-outline', body: payload,
+  const raw = await serviceHandlers.checkLinkedSession({ identityClientId: 'another-app', body: payload,
     server: { authServices: fixture.authServices } } as Parameters<typeof serviceHandlers.checkLinkedSession>[0],
   { header: () => undefined } as Parameters<typeof serviceHandlers.checkLinkedSession>[1])
   expect(raw).toEqual(active.json())
@@ -50,15 +50,15 @@ it('requires mapped internal keys and returns the exact linked-session contract'
 
   const revokePayload = { hydraSid: 'sid-one', subject: userId, requestId: '11111111-1111-4111-8111-111111111111' }
   const revoked = await app.inject({ method: 'POST', url: '/api/internal/identity/session/revoke',
-    headers: { 'x-integration-key': 'outline-secret' }, payload: revokePayload })
+    headers: { 'x-integration-key': 'app-secret' }, payload: revokePayload })
   expect(revoked.statusCode, revoked.body).toBe(200)
   expect(revoked.json()).toEqual({ revoked: true })
-  const rawRevoke = await serviceHandlers.revokeLinkedSession({ identityClientId: 'ex-outline', body: revokePayload,
+  const rawRevoke = await serviceHandlers.revokeLinkedSession({ identityClientId: 'another-app', body: revokePayload,
     server: { authServices: fixture.authServices } } as Parameters<typeof serviceHandlers.revokeLinkedSession>[0],
   { header: () => undefined } as Parameters<typeof serviceHandlers.revokeLinkedSession>[1])
   expect(rawRevoke).toEqual(revoked.json())
   const afterRevoke = await app.inject({ method: 'POST', url,
-    headers: { 'x-integration-key': 'outline-secret' }, payload })
+    headers: { 'x-integration-key': 'app-secret' }, payload })
   expect(afterRevoke.json()).toEqual({ active: false, reason: 'revoked' })
 })
 
@@ -68,23 +68,23 @@ it('routes the OIDC browser operations through the generated contract shape', as
   const userId = await fixture.seedUser({ email: 'browser@example.com', nickname: 'Browser', password: 'valid password' })
   const { token } = await fixture.authServices.login({ email: 'browser@example.com', password: 'valid password' })
   const session = await fixture.authServices.authenticateToken(token)
-  const client = { client_id: 'ex-outline', redirect_uris: ['http://exwebsite.test:8090/docs/auth/oidc.callback'] }
+  const client = { client_id: 'another-app', redirect_uris: ['http://127.0.0.1:9000/callback'] }
   const admin = {
     getLogin: async () => ({ challenge: 'a', client, requested_scope: ['openid'], session_id: 'sid',
-      subject: '', skip: false, request_url: 'http://identity.exwebsite.test:8090/oauth2/auth?redirect_uri=http%3A%2F%2Fexwebsite.test%3A8090%2Fdocs%2Fauth%2Foidc.callback' }),
+      subject: '', skip: false, request_url: 'http://identity.exwebsite.test:8090/oauth2/auth?redirect_uri=http%3A%2F%2F127.0.0.1%3A9000%2Fcallback' }),
     acceptLogin: async () => ({ redirect_to: 'http://identity.exwebsite.test:8090/oauth2/auth?login_verifier=one' }),
     getConsent: async () => ({ challenge: 'b', client, requested_scope: ['openid'], login_session_id: 'sid',
       // Hydra v2.3 returns its internal login request ID here, not the
       // signed browser login_challenge previously submitted to Website.
       login_challenge: 'hydra-internal-login-request-id', subject: userId,
-      request_url: 'http://identity.exwebsite.test:8090/oauth2/auth?redirect_uri=http%3A%2F%2Fexwebsite.test%3A8090%2Fdocs%2Fauth%2Foidc.callback' }),
+      request_url: 'http://identity.exwebsite.test:8090/oauth2/auth?redirect_uri=http%3A%2F%2F127.0.0.1%3A9000%2Fcallback' }),
     acceptConsent: async () => ({ redirect_to: 'http://identity.exwebsite.test:8090/oauth2/auth?consent_verifier=one' }),
     getLogout: async () => ({ sid: 'sid', subject: userId, client }),
     acceptLogout: async () => ({ redirect_to: 'http://identity.exwebsite.test:8090/oauth2/sessions/logout?verifier=one' }),
   }
   const oidcServices = new OidcService({ db: fixture.db, authServices: fixture.authServices, admin,
     issuer: 'http://identity.exwebsite.test:8090/', flowKey: Buffer.alloc(32, 7), now: fixture.now,
-    clients: { 'ex-outline': { name: 'Docs', redirectUri: client.redirect_uris[0]!, scopes: ['openid'] } } })
+    clients: { 'another-app': { name: 'Test App', redirectUri: client.redirect_uris[0]!, scopes: ['openid'] } } })
   const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices,
     authServices: fixture.authServices, profileServices: fixture.profileServices, storageServices: fixture.storageServices,
     notifications: fixture.notifications,
@@ -92,7 +92,7 @@ it('routes the OIDC browser operations through the generated contract shape', as
   apps.push(app)
   const inspect = await app.inject({ method: 'POST', url: '/api/auth/oidc/inspect', payload: { phase: 'login', challenge: 'a' } })
   expect(inspect.statusCode, inspect.body).toBe(200)
-  expect(inspect.json()).toEqual({ clientName: 'Docs', scopes: ['openid'] })
+  expect(inspect.json()).toEqual({ clientName: 'Test App', scopes: ['openid'] })
   const rawInspect = await serviceHandlers.inspectOidcRequest({ body: { phase: 'login', challenge: 'a' },
     server: { oidcServices } } as Parameters<typeof serviceHandlers.inspectOidcRequest>[0],
   { header: () => undefined } as Parameters<typeof serviceHandlers.inspectOidcRequest>[1])

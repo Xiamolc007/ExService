@@ -3,20 +3,21 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { parseEnv } from 'node:util'
 import { environmentFile, databaseUrl } from './settings.mjs'
-import { verifyHydraClient } from '../docs-integration/hydra-client.mjs'
+import { verifyHydraClient } from './hydra-client.mjs'
+import { parseIdentityClients, parseIdentityDeliveryTargets, composeIdentityClients } from '@workspace/common/node/identity-config'
 import { root } from './shared.mjs'
 import { RuntimeError, diagnostic } from './output.mjs'
 
 const parameters = { sslmode: 'SSLMODE', sslrootcert: 'SSLROOTCERT', connect_timeout: 'CONNECT_TIMEOUT', options: 'OPTIONS' }
 
 /** Pure conversion preserves endpoints, secrets, unknown keys and supported connection semantics. */
-export function convertValues(original) {
+export function convertValues(original, { includeRetired = false } = {}) {
   const values = { ...original }, conflicts = []
   const set = (key, value) => {
     if (values[key] !== undefined && values[key] !== value) conflicts.push(key)
     else values[key] = value
   }
-  for (const [prefix, name] of [['DATABASE', 'exre'], ['OUTLINE_DATABASE', 'outline'], ['HYDRA_DATABASE', 'hydra']]) {
+  for (const [prefix, name] of [['DATABASE', 'exre'], ...(includeRetired ? [['OUTLINE_DATABASE', 'outline']] : []), ['HYDRA_DATABASE', 'hydra']]) {
     const oldKey = `${prefix}_URL`
     let value = values[oldKey]
     if (!value && prefix !== 'DATABASE' && values[`${name.toUpperCase()}_PASSWORD`]) {
@@ -43,12 +44,12 @@ export function convertValues(original) {
     }
     delete values[oldKey]
   }
-  for (const [old, current] of [['OUTLINE_PASSWORD', 'OUTLINE_DATABASE_PASSWORD'], ['HYDRA_PASSWORD', 'HYDRA_DATABASE_PASSWORD']]) {
+  for (const [old, current] of [...(includeRetired ? [['OUTLINE_PASSWORD', 'OUTLINE_DATABASE_PASSWORD']] : []), ['HYDRA_PASSWORD', 'HYDRA_DATABASE_PASSWORD']]) {
     if (values[old] !== undefined) { set(current, values[old]); delete values[old] }
   }
   if (conflicts.length) throw new RuntimeError('CONVERSION_FIELD_CONFLICT', { keys: [...new Set(conflicts)] })
   // Preserve old ports/issuer explicitly: configuration conversion is not an identity migration.
-  for (const [key, value] of Object.entries({ LOCAL_POSTGRES_PORT: '17432', LOCAL_REDIS_PORT: '17379', LOCAL_HYDRA_PUBLIC_PORT: '14444', LOCAL_HYDRA_ADMIN_PORT: '14447' }))
+  for (const [key, value] of Object.entries({ LOCAL_POSTGRES_PORT: '17432', LOCAL_HYDRA_PUBLIC_PORT: '14444', LOCAL_HYDRA_ADMIN_PORT: '14447' }))
     if (original.RUNTIME_CONFIG_VERSION && values[key] === undefined) values[key] = value
   delete values.RUNTIME_CONFIG_VERSION
   delete values.EXUI_SOURCE_DIR
@@ -96,16 +97,13 @@ export async function convertConfiguration({ workspace = root, verify } = {}) {
 /** Verify every original database and routing identity without delivering or changing records. */
 export async function verifyOriginalTargets(original, converted = convertValues(original), { connect, verifyClient = verifyHydraClient } = {}) {
   const factory = connect ?? (async url => { const { default: pg } = await import('pg'); const client = new pg.Client({ connectionString: url, connectionTimeoutMillis: 3000 }); await client.connect(); return client })
-  const local = converted.RUNTIME_PROFILE === 'local'
-  const origin = converted.PUBLIC_ORIGIN ?? `http://127.0.0.1:${converted.LOCAL_PUBLIC_PORT ?? 8080}`
+  for (const key of ['PUBLIC_ORIGIN','HYDRA_PUBLIC_URL','HYDRA_ADMIN_URL','IDENTITY_CLIENTS_JSON','IDENTITY_OUTBOX_TARGETS_JSON','IDENTITY_FLOW_KEY','IDENTITY_BOOTSTRAP_KEY','HYDRA_SYSTEM_SECRET'])
+    if (original[key] !== converted[key]) throw new RuntimeError('CONVERSION_IDENTITY_CONFLICT', { keys: [key] })
   const issuer = converted.HYDRA_PUBLIC_URL ?? `http://127.0.0.1:${converted.LOCAL_HYDRA_PUBLIC_PORT ?? 4444}/`
   const adminUrl = converted.HYDRA_ADMIN_URL ?? `http://127.0.0.1:${converted.LOCAL_HYDRA_ADMIN_PORT ?? 4445}/`
-  const outlineUrl = converted.OUTLINE_INTERNAL_URL ?? `http://127.0.0.1:${converted.LOCAL_OUTLINE_PORT ?? 3102}/`
-  const clientId = local ? 'ex-outline-local' : 'ex-outline'
-  let targets
-  try { targets = JSON.parse(converted.IDENTITY_OUTBOX_TARGETS_JSON ?? '{}') } catch { throw new RuntimeError('CONVERSION_OUTBOX_TARGETS_INVALID') }
-  targets[clientId] = { hydraAdminUrl: adminUrl, outlineInternalUrl: outlineUrl, deliveryKey: converted.IDENTITY_DELIVERY_KEY }
-  for (const [prefix, name] of [['DATABASE', 'exre'], ['OUTLINE_DATABASE', 'outline'], ['HYDRA_DATABASE', 'hydra']]) {
+  const clients = parseIdentityClients(converted.IDENTITY_CLIENTS_JSON, converted.RUNTIME_PROFILE)
+  const targets = composeIdentityClients(clients, parseIdentityDeliveryTargets(converted.IDENTITY_OUTBOX_TARGETS_JSON, converted.RUNTIME_PROFILE), adminUrl).deliveryTargets
+  for (const [prefix, name] of [['DATABASE', 'exre'], ['HYDRA_DATABASE', 'hydra']]) {
     let client
     try {
       client = await factory(databaseUrl(converted, prefix, name, Number(converted.LOCAL_POSTGRES_PORT ?? 5432)))
@@ -116,15 +114,12 @@ export async function verifyOriginalTargets(original, converted = convertValues(
         const owner = (await client.query('SELECT r.rolname AS owner FROM pg_database d JOIN pg_roles r ON r.oid=d.datdba WHERE d.datname=$1', [name])).rows[0]
         if (owner?.owner !== identity.owner) throw new RuntimeError('CONVERSION_DATABASE_OWNER_CONFLICT', { service: name })
       }
-      if (name === 'outline' && (await client.query("SELECT to_regclass('public.website_integrations') AS name")).rows[0]?.name) {
-        const markers = (await client.query('SELECT issuer FROM website_integrations')).rows
-        if (markers.length > 1 || markers.some(marker => marker.issuer !== issuer)) throw new RuntimeError('CONVERSION_ISSUER_CONFLICT', { service: name })
-      }
       if (name === 'exre' && (await client.query("SELECT to_regclass('public.auth_identity_outbox') AS name")).rows[0]?.name) {
         const pending = (await client.query('SELECT target_bindings FROM auth_identity_outbox WHERE completed_at IS NULL')).rows
         for (const row of pending) for (const target of JSON.parse(row.target_bindings)) {
           const retained = targets[target.clientId]
-          if (!retained || ['hydraAdminUrl', 'outlineInternalUrl', 'deliveryKey'].some(key => target[key] !== undefined && target[key] !== retained[key]))
+          if (!retained || ['hydraAdminUrl'].some(key => target[key] !== undefined && target[key] !== retained[key]) ||
+            target.revocation !== undefined && JSON.stringify(target.revocation) !== JSON.stringify(retained.revocation) || target.outlineInternalUrl !== undefined || target.deliveryKey !== undefined)
             throw new RuntimeError('CONVERSION_OLD_IDENTITY_PENDING', { service: 'Website', next: '保留完整原目标并先投递原 pending 撤销事件；不要替换为新地址或新密钥' })
         }
       }
@@ -132,6 +127,5 @@ export async function verifyOriginalTargets(original, converted = convertValues(
     } catch (error) { throw diagnostic(error, { service: name, phase: '原目标转换前核验', keys: [`${prefix}_HOST`, `${prefix}_PORT`, `${prefix}_USER`, `${prefix}_PASSWORD`] }) }
     finally { await client?.end().catch(() => {}) }
   }
-  await verifyClient({ mode: converted.RUNTIME_PROFILE, publicOrigin: origin, publicUrl: issuer, adminUrl, clientId,
-    callback: `${origin}/docs/auth/oidc.callback`, clientSecret: converted.OUTLINE_OIDC_CLIENT_SECRET })
+  for (const client of Object.values(clients)) await verifyClient({ mode: converted.RUNTIME_PROFILE, publicUrl: issuer, adminUrl, client })
 }

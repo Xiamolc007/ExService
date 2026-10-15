@@ -1,0 +1,478 @@
+diff --git a/scripts/runtime/applications.mjs b/scripts/runtime/applications.mjs
+index adb59ce..44cbde0 100644
+--- a/scripts/runtime/applications.mjs
++++ b/scripts/runtime/applications.mjs
+@@ -4,13 +4,24 @@ import { runOwned, signalScope } from './ownership.mjs'
+ import { acquireApplicationLock } from './application-lock.mjs'
+ import { toolchain } from './local-config.mjs'
+ import { httpReady, assertPortFree, supervise, specifications, verifyFoundationSchemas } from './local-dev.mjs'
+-import { verifyHydraClient } from './hydra-client.mjs'
++import { verifyHydraClient, HydraClientCheckError } from './hydra-client.mjs'
+ import { withNodePath } from './settings.mjs'
+ import { reporter, RuntimeError, diagnostic } from './output.mjs'
+ 
+ export const hydraOptions = (state, client) => ({ mode: state.profile, adminUrl: state.internal.hydra,
+   publicUrl: state.config.issuer, client })
+ 
++const hydraCheckCodes = Object.freeze({ CLIENT_MISSING: 'HYDRA_CLIENT_MISSING',
++  CLIENT_CONFLICT: 'HYDRA_CLIENT_CONFLICT', CREDENTIAL_PROBE_FAILED: 'HYDRA_CLIENT_CONFLICT',
++  INVALID_CONFIG: 'HYDRA_CONFIG_INVALID', CHECK_FAILED: 'HYDRA_CLIENT_CHECK_FAILED' })
++const networkCodes = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'ETIMEDOUT', 'ECONNRESET'])
++
++function safeNetworkCode(error) {
++  for (const code of [error?.code, error?.cause?.code, error?.errors?.[0]?.code]) {
++    if (networkCodes.has(code)) return code
++  }
++}
++
+ export function cliSpecification(state, tools, service, action, args = []) {
+   if (service !== 'server') throw new RuntimeError('APPLICATION_SERVICE_INVALID')
+   return { name: service, command: tools.node, cwd: state.workspace,
+@@ -29,12 +40,16 @@ export async function verifyRuntimeHydraClient(state, verifyClient = verifyHydra
+     return await Promise.all(Object.values(state.clients).map(client => verifyClient(hydraOptions(state, client))))
+   }
+   catch (error) {
++    if (error instanceof RuntimeError) throw error
+     const context = { service: 'Hydra', phase: 'OIDC client 检查', keys: ['HYDRA_ADMIN_URL', 'HYDRA_PUBLIC_URL', 'IDENTITY_CLIENTS_JSON'] }
+-    if (error?.message === 'Hydra client initialization failed (HTTP 404)') throw new RuntimeError('HYDRA_CLIENT_MISSING', context)
+-    if (error?.message === 'Invalid Hydra bootstrap configuration') throw new RuntimeError('HYDRA_CONFIG_INVALID', context)
+-    if (/^Existing Hydra client (configuration conflict; explicit operator repair is required|secret conflict or protocol service unavailable)$/.test(error?.message ?? ''))
+-      throw new RuntimeError('HYDRA_CLIENT_CONFLICT', context)
+-    if (error?.code || error?.cause?.code) throw diagnostic(error, { ...context, next: '核对 Hydra admin/public 地址；本地检查 pnpm service:status 和 pnpm service:logs hydra' })
++    if (error instanceof HydraClientCheckError) {
++      if (Object.hasOwn(hydraCheckCodes, error.kind)) throw new RuntimeError(hydraCheckCodes[error.kind], context)
++      if (error.kind !== 'NETWORK_FAILURE') throw new RuntimeError('HYDRA_CLIENT_CHECK_FAILED', context)
++      error = error.cause
++    } else if (error && (typeof error === 'object' || typeof error === 'function') && 'kind' in error)
++      throw new RuntimeError('HYDRA_CLIENT_CHECK_FAILED', context)
++    const code = safeNetworkCode(error)
++    if (code) throw diagnostic({ code }, { ...context, next: '核对 Hydra admin/public 地址；本地检查 pnpm service:status 和 pnpm service:logs hydra' })
+     throw new RuntimeError('HYDRA_CLIENT_CHECK_FAILED', context)
+   }
+ }
+diff --git a/scripts/runtime/hydra-client.mjs b/scripts/runtime/hydra-client.mjs
+index bebc884..2803c5c 100644
+--- a/scripts/runtime/hydra-client.mjs
++++ b/scripts/runtime/hydra-client.mjs
+@@ -1,6 +1,34 @@
+ import { parseIdentityClients, parseIdentityUrl } from '@workspace/common/node/identity-config'
+ import { createHash, randomBytes } from 'node:crypto'
+ 
++const checkMessages = Object.freeze({
++  CLIENT_MISSING: 'Hydra client is not registered',
++  CLIENT_CONFLICT: 'Hydra client configuration differs',
++  CREDENTIAL_PROBE_FAILED: 'Hydra credential probe failed',
++  INVALID_CONFIG: 'Invalid Hydra client configuration',
++  NETWORK_FAILURE: 'Hydra request failed',
++  CHECK_FAILED: 'Hydra client check failed',
++})
++
++export class HydraClientCheckError extends Error {
++  constructor(kind, { cause } = {}) {
++    if (!Object.hasOwn(checkMessages, kind)) throw new TypeError('Invalid Hydra client check kind')
++    super(checkMessages[kind], cause === undefined ? undefined : { cause })
++    this.name = 'HydraClientCheckError'
++    Object.defineProperty(this, 'kind', { value: kind, enumerable: true })
++  }
++}
++
++async function fetchHydra(url, options) {
++  try { return await fetch(url, options) }
++  catch (cause) { throw new HydraClientCheckError('NETWORK_FAILURE', { cause }) }
++}
++
++async function responseJson(response) {
++  try { return await response.json() }
++  catch { throw new HydraClientCheckError('CHECK_FAILED') }
++}
++
+ /** OAuth Basic credentials encode each original field as form data before Base64. */
+ export function hydraClientBasic(clientId, clientSecret) {
+   const formField = value => new URLSearchParams({ value }).toString().slice('value='.length)
+@@ -17,7 +45,7 @@ async function checkHydraClient({ adminUrl, publicUrl, client: input, mode }, cr
+     client = Object.values(parseIdentityClients(JSON.stringify([input]), mode))[0]
+     base = new URL(parseIdentityUrl(adminUrl, mode, 'HYDRA_ADMIN_URL', { root: true, admin: true }))
+     issuer = new URL(parseIdentityUrl(publicUrl, mode, 'HYDRA_PUBLIC_URL', { root: true }))
+-  } catch { throw new Error('Invalid Hydra bootstrap configuration') }
++  } catch { throw new HydraClientCheckError('INVALID_CONFIG') }
+   const { clientId, clientSecret } = client
+   const desired = {
+     client_id: clientId, client_name: client.name, client_secret: clientSecret,
+@@ -29,18 +57,21 @@ async function checkHydraClient({ adminUrl, publicUrl, client: input, mode }, cr
+     metadata: { integration: 'website-identity', issuer: issuer.href,
+       secretFingerprint: createHash('sha256').update(clientSecret).digest('hex') },
+   }
+-  const request = (path, options = {}) => fetch(new URL(path, base), {
++  const request = (path, options = {}) => fetchHydra(new URL(path, base), {
+     ...options, redirect: 'manual', signal: AbortSignal.timeout(1000),
+   })
+   let response = await request(`/admin/clients/${clientId}`)
++  if (response.status === 404 && !create) throw new HydraClientCheckError('CLIENT_MISSING')
+   if (response.status === 404 && create) {
+     response = await request('/admin/clients', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify(desired) })
+     // A competing bootstrap may have created the same client. Recheck exact state.
+     if (response.status === 409) response = await request(`/admin/clients/${clientId}`)
+   }
+-  if (!response.ok) throw new Error(`Hydra client initialization failed (HTTP ${response.status})`)
+-  const actual = await response.json()
++  if (!response.ok) throw new HydraClientCheckError('CHECK_FAILED')
++  const actual = await responseJson(response)
++  if (!actual || typeof actual !== 'object' || Array.isArray(actual) || typeof actual.scope !== 'string')
++    throw new HydraClientCheckError('CHECK_FAILED')
+   const lists = ['redirect_uris', 'grant_types', 'response_types', 'post_logout_redirect_uris']
+   const scalars = ['client_id', 'subject_type', 'token_endpoint_auth_method']
+   const lifespans = ['authorization_code_grant_access_token_lifespan', 'authorization_code_grant_id_token_lifespan']
+@@ -52,20 +83,20 @@ async function checkHydraClient({ adminUrl, publicUrl, client: input, mode }, cr
+       Object.entries(desired.metadata).some(([key, value]) => actual.metadata?.[key] !== value) ||
+       ['allowed_cors_origins', 'audience'].some(key => actual[key]?.length) ||
+       ['frontchannel_logout_uri', 'backchannel_logout_uri', 'jwks_uri'].some(key => actual[key])) {
+-    throw new Error('Existing Hydra client configuration conflict; explicit operator repair is required')
++    throw new HydraClientCheckError('CLIENT_CONFLICT')
+   }
+   // A non-existent random code cannot issue a token, but proves the stored client secret
+   // is valid. Hydra does not return stored secrets through its administrative GET API.
+-  const probe = await fetch(new URL('/oauth2/token', publicUrl), {
++  const probe = await fetchHydra(new URL('/oauth2/token', publicUrl), {
+     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded',
+       Authorization: hydraClientBasic(clientId, clientSecret) },
+     body: new URLSearchParams({ grant_type: 'authorization_code', code: randomBytes(32).toString('base64url'),
+       redirect_uri: desired.redirect_uris[0], code_verifier: randomBytes(32).toString('base64url') }),
+     redirect: 'manual', signal: AbortSignal.timeout(1000),
+   })
+-  const result = await probe.json()
+-  if (probe.status !== 400 || result.error !== 'invalid_grant') {
+-    throw new Error('Existing Hydra client secret conflict or protocol service unavailable')
++  const result = await responseJson(probe)
++  if (probe.status !== 400 || result?.error !== 'invalid_grant') {
++    throw new HydraClientCheckError('CREDENTIAL_PROBE_FAILED')
+   }
+   return { clientId: desired.client_id }
+ }
+diff --git a/scripts/runtime/hydra-client.test.mjs b/scripts/runtime/hydra-client.test.mjs
+index e37c751..0eba93a 100644
+--- a/scripts/runtime/hydra-client.test.mjs
++++ b/scripts/runtime/hydra-client.test.mjs
+@@ -2,15 +2,19 @@ import assert from 'node:assert/strict'
+ import { createServer } from 'node:http'
+ import test from 'node:test'
+ import { createHash } from 'node:crypto'
+-import { ensureHydraClient, verifyHydraClient } from './hydra-client.mjs'
++import { ensureHydraClient, verifyHydraClient, HydraClientCheckError } from './hydra-client.mjs'
++import { verifyRuntimeHydraClient } from './applications.mjs'
++import { reporter } from './output.mjs'
+ 
+ async function fixture(run) {
+   const clients = new Map()
+   const secrets = new Map()
+   const calls = []
++  let override
+   const server = createServer(async (request, response) => {
+     calls.push([request.method, request.url])
+     response.setHeader('Content-Type', 'application/json')
++    if (override?.(request, response)) return
+     if (request.url === '/oauth2/token') {
+       const basic = Buffer.from((request.headers.authorization ?? '').replace(/^Basic /, ''), 'base64').toString()
+       const separator = basic.indexOf(':')
+@@ -45,7 +49,8 @@ async function fixture(run) {
+   try {
+     await run({ adminUrl: `http://127.0.0.1:${server.address().port}`, publicUrl: `http://127.0.0.1:${server.address().port}`,
+       mode: 'local', client: { clientId: 'sample-app', name: 'Sample', redirectUri: 'http://127.0.0.1:18765/callback', postLogoutRedirectUri: 'http://127.0.0.1:18765/signed-out', scopes: ['openid','profile','email'], clientSecret: 'fixture-client-secret' },
+-      calls, getClient: (id = 'sample-app') => clients.get(id), setSecret: (id, secret) => secrets.set(id, secret) })
++      calls, getClient: (id = 'sample-app') => clients.get(id), setSecret: (id, secret) => secrets.set(id, secret),
++      override: handler => { override = handler } })
+   } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)) }
+ }
+ 
+@@ -57,7 +62,7 @@ test('OAuth Basic form encoding preserves special characters and raw secret fing
+       await verifyHydraClient(options)
+       assert.equal(state.getClient().metadata.secretFingerprint, createHash('sha256').update(clientSecret).digest('hex'))
+       state.setSecret(state.client.clientId, `${clientSecret}-wrong`)
+-      await assert.rejects(verifyHydraClient(options), /secret conflict/)
++      await assert.rejects(verifyHydraClient(options), { kind: 'CREDENTIAL_PROBE_FAILED' })
+       assert.equal(state.calls.filter(([method, path]) => method === 'POST' && path === '/admin/clients').length, 1)
+     })
+   }
+@@ -91,7 +96,7 @@ test('registers independent explicit clients without changing another client', a
+     assert.notEqual(state.getClient().metadata.secretFingerprint, state.getClient('second-app').metadata.secretFingerprint)
+     assert.equal(state.calls.filter(([method, path]) => method === 'POST' && path === '/admin/clients').length, 2)
+     const before = state.calls.length
+-    await assert.rejects(ensureHydraClient({ ...state, client: { ...state.client, clientId: 'ex-outline' } }), /configuration/)
++    await assert.rejects(ensureHydraClient({ ...state, client: { ...state.client, clientId: 'ex-outline' } }), { kind: 'INVALID_CONFIG' })
+     assert.equal(state.calls.length, before)
+   })
+ })
+@@ -104,24 +109,166 @@ test('rejects changed callbacks, privileges, or secret rather than overwriting a
+     await fixture(async state => {
+       await ensureHydraClient(state)
+       change(state.getClient())
+-      await assert.rejects(ensureHydraClient(state), /conflict/)
++      await assert.rejects(ensureHydraClient(state), { kind: 'CLIENT_CONFLICT' })
+       assert.equal(state.calls.filter(([method, path]) => method !== 'GET' && path !== '/oauth2/token').length, 1)
+     })
+   }
+ })
+ 
+ test('read-only runtime verify refuses missing clients without creating or updating', async () => fixture(async state => {
+-  await assert.rejects(verifyHydraClient(state), /initialization failed/)
++  await assert.rejects(verifyHydraClient(state), error => {
++    assert.ok(error instanceof HydraClientCheckError)
++    assert.equal(error.kind, 'CLIENT_MISSING')
++    return true
++  })
+   assert.equal(state.calls.filter(([method]) => method !== 'GET').length, 0)
+   await ensureHydraClient(state)
+   const before = state.calls.filter(([method, path]) => method === 'POST' && path === '/admin/clients').length
+   await verifyHydraClient(state)
+   assert.equal(state.calls.filter(([method, path]) => method === 'POST' && path === '/admin/clients').length, before)
+ }))
++test('unexpected admin HTTP and invalid JSON fail safely without classifying a client as missing', async () => {
++  for (const [method, path, status, body] of [
++    ['GET', '/admin/clients/sample-app', 503, '{"private":"response-secret"}'],
++    ['GET', '/admin/clients/sample-app', 200, '{not-json'],
++    ['POST', '/admin/clients', 404, '{"private":"response-secret"}'],
++  ]) await fixture(async state => {
++    state.override((request, response) => {
++      if (request.method !== method || request.url !== path) return false
++      response.statusCode = status
++      response.end(body)
++      return true
++    })
++    await assert.rejects(method === 'POST' ? ensureHydraClient(state) : verifyHydraClient(state), error => {
++      assert.ok(error instanceof HydraClientCheckError)
++      assert.equal(error.kind, 'CHECK_FAILED')
++      assert.doesNotMatch(error.message, /response-secret|not-json|127\.0\.0\.1/)
++      return true
++    })
++    assert.equal(state.calls.some(([called]) => called === 'PUT'), false)
++    if (method === 'GET') assert.equal(state.calls.some(([called]) => called === 'POST'), false)
++  })
++})
++test('malformed client metadata yields a stable check failure', async () => fixture(async state => {
++  await ensureHydraClient(state)
++  state.getClient().scope = 42
++  await assert.rejects(verifyHydraClient(state), { kind: 'CHECK_FAILED' })
++}))
++test('token JSON distinguishes a failed credential probe from an unreadable response', async () => {
++  for (const [status, body, kind] of [
++    [401, '{"error":"invalid_client","private":"response-secret"}', 'CREDENTIAL_PROBE_FAILED'],
++    [503, '{"error":"temporarily_unavailable","private":"response-secret"}', 'CREDENTIAL_PROBE_FAILED'],
++    [503, '{bad-json', 'CHECK_FAILED'],
++  ]) await fixture(async state => {
++    await ensureHydraClient(state)
++    state.override((request, response) => {
++      if (request.url !== '/oauth2/token') return false
++      response.statusCode = status
++      response.end(body)
++      return true
++    })
++    await assert.rejects(verifyHydraClient(state), error => {
++      assert.equal(error.kind, kind)
++      assert.doesNotMatch(error.message, /response-secret|bad-json|127\.0\.0\.1/)
++      return true
++    })
++    assert.equal(state.calls.filter(([method, path]) => method === 'POST' && path === '/admin/clients').length, 1)
++    assert.equal(state.calls.some(([method]) => method === 'PUT'), false)
++  })
++})
++test('a concurrent explicit registration is rechecked and never overwritten', async () => fixture(async state => {
++  await ensureHydraClient(state)
++  let getCount = 0
++  state.override((request, response) => {
++    if (request.method === 'GET' && request.url === '/admin/clients/sample-app' && getCount++ === 0) {
++      response.statusCode = 404; response.end('{}'); return true
++    }
++    if (request.method === 'POST' && request.url === '/admin/clients') {
++      response.statusCode = 409; response.end('{}'); return true
++    }
++    return false
++  })
++  assert.deepEqual(await ensureHydraClient(state), { clientId: 'sample-app' })
++  assert.equal(state.calls.some(([method]) => method === 'PUT'), false)
++}))
++test('real loopback missing-client result keeps its runtime classification when wording changes', async () => fixture(async state => {
++  const runtimeState = { profile: state.mode, internal: { hydra: state.adminUrl },
++    config: { issuer: state.publicUrl }, clients: { [state.client.clientId]: state.client } }
++  await assert.rejects(verifyRuntimeHydraClient(runtimeState, async options => {
++    try { return await verifyHydraClient(options) }
++    catch (error) {
++      Object.defineProperty(error, 'message', { value: 'unrelated new wording with Bearer private-token' })
++      throw error
++    }
++  }, { ready: async () => {} }), error => {
++    assert.equal(error.code, 'HYDRA_CLIENT_MISSING')
++    assert.doesNotMatch(error.message, /private-token|unrelated/)
++    return true
++  })
++  assert.deepEqual(state.calls, [['GET', '/admin/clients/sample-app']])
++}))
++test('token 5xx keeps the existing conflict diagnosis without leaking its response', async () => fixture(async state => {
++  await ensureHydraClient(state)
++  state.override((request, response) => {
++    if (request.url !== '/oauth2/token') return false
++    response.statusCode = 503
++    response.end('{"error":"temporarily_unavailable","private":"response-secret"}')
++    return true
++  })
++  const runtimeState = { profile: state.mode, internal: { hydra: state.adminUrl },
++    config: { issuer: state.publicUrl }, clients: { [state.client.clientId]: state.client } }
++  const terminal = [], persisted = []
++  await assert.rejects(verifyRuntimeHydraClient(runtimeState, verifyHydraClient, { ready: async () => {} }), error => {
++    assert.equal(error.code, 'HYDRA_CLIENT_CONFLICT')
++    reporter({ write: line => terminal.push(line), persist: line => persisted.push(line) }).failure(error)
++    for (const line of [...terminal, ...persisted]) assert.doesNotMatch(line, /response-secret|fixture-client-secret|127\.0\.0\.1/)
++    return true
++  })
++  assert.equal(state.calls.filter(([method, path]) => method === 'POST' && path === '/admin/clients').length, 1)
++}))
++test('check kinds are closed and immutable', () => {
++  const error = new HydraClientCheckError('CLIENT_MISSING')
++  assert.throws(() => { error.kind = 'CLIENT_CONFLICT' }, TypeError)
++  assert.equal(error.kind, 'CLIENT_MISSING')
++  assert.throws(() => new HydraClientCheckError('FUTURE_KIND'), TypeError)
++})
++test('admin and token network rejection preserve only a safe diagnostic cause', async t => {
++  const originalFetch = globalThis.fetch
++  let failedPath
++  t.mock.method(globalThis, 'fetch', (url, options) => {
++    if (new URL(url).pathname === failedPath) return Promise.reject(Object.assign(new Error('Bearer private-token at private-url'), {
++      cause: { code: 'ECONNREFUSED', message: 'response-secret' },
++    }))
++    return originalFetch(url, options)
++  })
++  for (const path of ['/admin/clients/sample-app', '/oauth2/token']) await fixture(async state => {
++    if (path === '/oauth2/token') await ensureHydraClient(state)
++    failedPath = path
++    await assert.rejects(verifyHydraClient(state), error => {
++      assert.equal(error.kind, 'NETWORK_FAILURE')
++      assert.equal(error.cause.cause.code, 'ECONNREFUSED')
++      assert.doesNotMatch(error.message, /private-token|private-url|response-secret/)
++      return true
++    })
++    assert.equal(state.calls.some(([method]) => method === 'PUT'), false)
++    failedPath = undefined
++  })
++})
++test('admin and token timeouts are network failures without request details', async () => {
++  for (const path of ['/admin/clients/sample-app', '/oauth2/token']) await fixture(async state => {
++    if (path === '/oauth2/token') await ensureHydraClient(state)
++    state.override((request) => request.url === path)
++    await assert.rejects(verifyHydraClient(state), error => {
++      assert.equal(error.kind, 'NETWORK_FAILURE')
++      assert.doesNotMatch(error.message, /127\.0\.0\.1|fixture-client-secret/)
++      return true
++    })
++  })
++})
+ test('generic clients reject unsafe callbacks before contacting Hydra', async () => fixture(async state => {
+   for (const redirectUri of ['http://localhost:18765/callback', 'http://127.0.0.1:18765/a/../callback']) {
+     const before = state.calls.length
+-    await assert.rejects(ensureHydraClient({ ...state, client: { ...state.client, redirectUri } }), /configuration/)
++    await assert.rejects(ensureHydraClient({ ...state, client: { ...state.client, redirectUri } }), { kind: 'INVALID_CONFIG' })
+     assert.equal(state.calls.length, before)
+   }
+ }))
+diff --git a/scripts/runtime/settings.test.mjs b/scripts/runtime/settings.test.mjs
+index 93568ca..821ce6c 100644
+--- a/scripts/runtime/settings.test.mjs
++++ b/scripts/runtime/settings.test.mjs
+@@ -7,8 +7,9 @@ import { join } from 'node:path'
+ import { createServer } from 'node:net'
+ import { readRuntimeConfiguration, databaseUrl, defaults } from './settings.mjs'
+ import { convertValues, convertConfiguration, serializeEnvironment, verifyOriginalTargets } from './convert.mjs'
+-import { redact, diagnostic, reporter, runtimeFailure } from './output.mjs'
++import { redact, diagnostic, reporter, runtimeFailure, RuntimeError } from './output.mjs'
+ import { verifyApplications, verifyRuntimeHydraClient } from './applications.mjs'
++import { HydraClientCheckError } from './hydra-client.mjs'
+ import { composeEnvironment, Services } from './services.mjs'
+ import { root } from './shared.mjs'
+ import { NativeApplications, verifyNativeClient } from './native.mjs'
+@@ -95,18 +96,58 @@ test('startup diagnostics name the failed check and corrective step without refe
+ 
+ test('Hydra startup separates missing clients, configuration conflicts and network failures', async t => {
+   const state = fixture(t).read()
+-  for (const [error, code] of [
+-    [new Error('Hydra client initialization failed (HTTP 404)'), 'HYDRA_CLIENT_MISSING'],
+-    [new Error('Existing Hydra client configuration conflict; explicit operator repair is required'), 'HYDRA_CLIENT_CONFLICT'],
+-    [new Error('Existing Hydra client secret conflict or protocol service unavailable'), 'HYDRA_CLIENT_CONFLICT'],
+-    [new Error('Invalid Hydra bootstrap configuration'), 'HYDRA_CONFIG_INVALID'],
+-    [Object.assign(new Error('private-token'), { cause: { code: 'ECONNREFUSED' } }), 'ECONNREFUSED (连接被拒绝)'],
++  for (const [kind, code] of [
++    ['CLIENT_MISSING', 'HYDRA_CLIENT_MISSING'], ['CLIENT_CONFLICT', 'HYDRA_CLIENT_CONFLICT'],
++    ['CREDENTIAL_PROBE_FAILED', 'HYDRA_CLIENT_CONFLICT'], ['INVALID_CONFIG', 'HYDRA_CONFIG_INVALID'],
++    ['CHECK_FAILED', 'HYDRA_CLIENT_CHECK_FAILED'],
++  ]) {
++    const error = new HydraClientCheckError(kind)
++    Object.defineProperty(error, 'message', { value: 'changed Bearer private-token' })
++    await assert.rejects(verifyRuntimeHydraClient(state, async () => { throw error }, { ready: async () => {} }), failure => {
++      assert.equal(failure.code, code)
++      assert.match(failure.message, /Hydra/)
++      assert.doesNotMatch(failure.message, /private-token|docs\/runtime\.md/)
++      return true
++    })
++  }
++  for (const error of [
++    { kind: 'CLIENT_MISSING', message: 'Hydra client initialization failed (HTTP 404)' },
++    { kind: 'CLIENT_MISSING', cause: { code: 'ECONNREFUSED' } },
++    Object.assign(new Error('private-token'), { kind: 'FUTURE_KIND' }),
++    Object.assign(new Error('private-token'), { code: 'UNSAFE_PRIVATE_CODE' }),
+   ]) await assert.rejects(verifyRuntimeHydraClient(state, async () => { throw error }, { ready: async () => {} }), failure => {
+-    assert.equal(failure.code, code)
+-    assert.match(failure.message, /Hydra/)
+-    assert.doesNotMatch(failure.message, /private-token|docs\/runtime\.md/)
++    assert.equal(failure.code, 'HYDRA_CLIENT_CHECK_FAILED')
++    assert.doesNotMatch(failure.message, /private-token|UNSAFE_PRIVATE_CODE/)
++    return true
++  })
++  for (const error of [new HydraClientCheckError('NETWORK_FAILURE', { cause: { code: 'ECONNREFUSED', message: 'Bearer private-token' } }),
++    Object.assign(new Error('private-token'), { cause: { code: 'ECONNREFUSED' } })]) {
++    await assert.rejects(verifyRuntimeHydraClient(state, async () => { throw error }, { ready: async () => {} }), failure => {
++      assert.equal(failure.code, 'ECONNREFUSED (连接被拒绝)')
++      assert.doesNotMatch(failure.message, /private-token/)
++      return true
++    })
++  }
++  for (const cause of [{ code: 'UNSAFE_PRIVATE_CODE', message: 'Bearer private-token' },
++    { cause: { code: 'UNSAFE_PRIVATE_CODE' }, errors: [{ code: 'UNSAFE_PRIVATE_CODE' }] },
++    new Error('postgres://private:credential@host/exre')]) {
++    await assert.rejects(verifyRuntimeHydraClient(state, async () => {
++      throw new HydraClientCheckError('NETWORK_FAILURE', { cause })
++    }, { ready: async () => {} }), failure => {
++      assert.equal(failure.code, 'HYDRA_CLIENT_CHECK_FAILED')
++      assert.doesNotMatch(failure.message, /private-token|credential|UNSAFE_PRIVATE_CODE/)
++      return true
++    })
++  }
++  const terminal = [], persisted = []
++  const unsafe = new HydraClientCheckError('NETWORK_FAILURE', { cause: new Error('Bearer private-token response-secret http://secret.invalid/') })
++  await assert.rejects(verifyRuntimeHydraClient(state, async () => { throw unsafe }, { ready: async () => {} }), failure => {
++    reporter({ write: line => terminal.push(line), persist: line => persisted.push(line) }).failure(failure)
++    for (const line of [...terminal, ...persisted]) assert.doesNotMatch(line, /private-token|response-secret|secret\.invalid/)
+     return true
+   })
++  await assert.rejects(verifyRuntimeHydraClient(state, async () => {}, { ready: async () => { throw new RuntimeError('DEPLOYMENT_HYDRA_NOT_READY') } }),
++    { code: 'DEPLOYMENT_HYDRA_NOT_READY' })
+   const calls = []
+   await verifyApplications(state, { tools: { node: process.execPath }, verifySchemas: async () => {},
+     execute: async (spec, options) => { calls.push(spec.name); options.onLog(spec.name, '检查完成') }, verifyClient: async () => {}, ready: async () => {}, onLog: () => {} })
+diff --git a/tests/runtime/native-health.test.ts b/tests/runtime/native-health.test.ts
+index f8a4738..7cba5a7 100644
+--- a/tests/runtime/native-health.test.ts
++++ b/tests/runtime/native-health.test.ts
+@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
+ import { join } from 'node:path'
+ import { afterEach, expect, test, vi } from 'vitest'
+ import { deploymentBinding } from '../../scripts/runtime/deployment.mjs'
++import { HydraClientCheckError } from '../../scripts/runtime/hydra-client.mjs'
+ import { verifyNativeHealth } from '../../scripts/runtime/native.mjs'
+ 
+ const probes = vi.hoisted(() => ({
+@@ -96,7 +97,7 @@ test('native health accepts zero configured clients while still checking Website
+ 
+ test('native health rejects a missing explicitly configured client before the Website check CLI', async () => {
+   const state = nativeState()
+-  probes.client.mockRejectedValueOnce(new Error('Hydra client initialization failed (HTTP 404)'))
++  probes.client.mockRejectedValueOnce(new HydraClientCheckError('CLIENT_MISSING'))
+   await expect(verifyNativeHealth(state)).rejects.toMatchObject({ code: 'HYDRA_CLIENT_MISSING' })
+   expect(probes.execute).not.toHaveBeenCalled()
+ })

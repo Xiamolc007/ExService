@@ -32,7 +32,6 @@ export default defineConfig({
     server: { deps: { inline: ['@fastify/autoload'] } },
     environment: 'node',
     testTimeout: 60_000,
-    // Outline has its own test runner and disposable database workflow.
     include: [
       'tests/**/*.test.{ts,tsx}',
       'apps/web/src/**/*.test.{ts,tsx}',
@@ -41,6 +40,6 @@ export default defineConfig({
       'packages/components/src/**/*.test.{ts,tsx}',
       'packages/sdk/src/**/*.test.{ts,tsx}',
     ],
-    exclude: [...configDefaults.exclude, '**/dist/**', 'apps/outline/**', 'vendor/**', 'output/**'],
+    exclude: [...configDefaults.exclude, '**/dist/**', 'vendor/**', 'output/**'],
   },
 })
