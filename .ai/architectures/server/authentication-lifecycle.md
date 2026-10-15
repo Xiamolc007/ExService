@@ -18,6 +18,8 @@ _最后更新：2026-10-16_
 
 完善在事务外哈希密码，在事务内复核 grant、邮箱唯一及外部身份关系；成功重读返回原结果。主动关联要求当前账号、会话、浏览器和真实 attempt/ticket；解绑使旧关联意图失效，保留账号与密码。Cfx 基础消费约束见 `.ai/knowledge/cfx/identity-lifecycle.md`，浏览器与异步资源陷阱见 `.ai/knowledge/registration/browser-credentials-and-settlement.md`。
 
+关联 API 插件在 `cancelCfxAttempt` 成功返回 cancelled、failed 或 expired 时，按 attempt 与浏览器绑定失效对应关联意图；未消费的意图立即释放容量。错误来源或绑定的取消不能释放他人容量。返回 consumed 表示证明已移交给关联事务，取消不撤回该写入；正在消费的意图保留容量直到事务结束。基础 Cfx 模块不反向依赖关联业务。
+
 ## 社区申请与决定
 
 提交从真实 session 推导 UUID，按当前社区要求核验关联，保存账户与外部身份快照、表单和附件。申请归属、历史只读及唯一规则集中于数据模型。审核员必须有该社区的明确授权，平台 admin 不隐含审核资格。

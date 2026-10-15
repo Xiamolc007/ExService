@@ -204,6 +204,14 @@ export class IdentityLinkService {
       }),
     )
   }
+  invalidateCfxAttempt(context: CfxBrowserContext, attemptId: string): void {
+    for (const intent of this.intents) {
+      if (intent.attemptId !== attemptId || intent.context?.bindingDigest !== context.bindingDigest) continue
+      intent.invalid = true
+      // In-flight consumption owns its reservation until the transaction settles.
+      if (!intent.consuming) this.intents.delete(intent)
+    }
+  }
   private async lockOwner(tx: SqlExecutor, session: SessionIdentity) {
     const row = (
       await tx.query<{ disabled_at: number | null }>(
