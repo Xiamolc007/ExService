@@ -8,6 +8,8 @@
 
 `apps/web/public/clickups/fields/` 中 Type、Domain、额外文件链接三个 UUID 命名 JSON 是公开字段定义的唯一编辑来源；Server 构建时校验并打包同一份配置。修改字段名称、选项或顺序后需重新构建并重启。options 与 prepare 按实际 ClickUp 字段、option ID 和任务类型适用范围核对，可用性按依赖的反馈类型给出；缺少操作 Tag 仅使对应操作不可用。字段身份、类型或业务关系变更仍需修改受控映射。当前目标 Space 未确认存在「新增」「修改」「删除」Tag；真实提交前须显式准备并复核，不在提交流程中自动创建。
 
+字段身份清单和纯 JSON 解析由 `scripts/support-field-definition.mjs` 统一提供，原生 Node 构建复制与 Server 的 `field-config.ts` 共用同一实现。构建在三份定义全部通过后复制原字节；运行加载逐文件捕获失败，仅移除不可用字段。解析负责选项排序和归一化，文件路径、复制与降级仍由各自适配器负责；编译后的 Server 仍从仓库根 `scripts/` 加载该纯模块。
+
 `CLICKUP_TOKEN` 从根配置与受支持进程变量进入 Server，不能进入 Web、Outline、Hydra 或构建环境。缺少或非法 token 不阻止其他 Website 功能；全部反馈 operation 仍注册，options 返回安全不可用状态。外部错误正文与凭据不进入响应。接收 wire 预算参与 Nginx 配置计算。
 
 options 的 `area` 默认 development，两个 area 的元数据缓存和故障隔离；服务端 preflight 按 form kind 派生真实目标，客户端不能覆盖列表或状态。community 使用固定「反馈/投诉」列表、Feedback TaskType、待处理状态，按 kind 写「反馈」「投诉」Tag；只依赖用户和大文件字段，不要求 Type/Domain。Tag 仅在显式准备阶段创建，用户提交时缺失只禁用对应类型。旧 development v2 的远端 Tag 核对保留原操作 Tag 集合，不把新的社区分类当作旧任务的冲突。
@@ -18,11 +20,15 @@ options 的 `area` 默认 development，两个 area 的元数据缓存和故障�
 
 新提交经 `normalizePrepare` 校验 `FeedbackPrepare` 的 intake 条件；持久记录经 `normalizeStoredPrepare` 校验 `FeedbackForm` 的快照形状，并共用正文与附件规范化规则。新增必填条件不能使已有冻结记录失效；具体分类规则见 `.ai/databases/data-model.md`。
 
-prepare 固化 v2 表单、昵称快照、生成的正文、附件清单，以及包含目标 List、TaskType、状态、字段 ID／值／类型和操作 Tag 的创建载荷及摘要。后续推进和回读使用冻结载荷，不依据当前目标常量或更新后的字段 JSON 重新计算。服务端核验字段、任务类型和归属；Bug 不含 Domain，仅 `feature` 可含 Domain，所有类型均不写 Category。`feature` 创建标准 Task（`custom_item_id=0`）；仅 `asset`、`content` 接受操作值，其中新增、修改、删除映射同名中文 Tag，「其他」及其余类型不写操作 Tag。数据职责见 `.ai/databases/data-model.md`。逐文件上传在认证及归属检查后消费字节，复用公共 multipart 生命周期，并核对实际长度、SHA-256、文件名和 MIME。
+prepare 固化带版本的表单、昵称快照、生成的正文、附件清单，以及包含目标 List、TaskType、状态、字段 ID／值／类型和操作 Tag 的创建载荷及摘要。后续推进和回读使用冻结载荷，不依据当前目标常量或更新后的字段 JSON 重新计算。服务端核验字段、任务类型和归属；Bug 不含 Domain，仅 `feature` 可含 Domain，所有类型均不写 Category。`feature` 创建标准 Task（`custom_item_id=0`）；仅 `asset`、`content` 接受操作值，其中新增、修改、删除映射同名中文 Tag，「其他」及其余类型不写操作 Tag。数据职责见 `.ai/databases/data-model.md`。逐文件上传在认证及归属检查后消费字节，复用公共 multipart 生命周期，并核对实际长度、SHA-256、文件名和 MIME。
+
+`apps/server/src/domains/support/frozen-payload.ts` 统一验证历史载荷并核对远端任务，读取、推进和维护共用验证结果。v2 保留冻结目标与字段映射的历史兼容；v3 以追加保留的历史 profile 与当前写入 profile 核验目标和字段，具名身份及大文件字段必须来自同一条 profile。切换目标或字段前保留原 profile；匿名远端核对拒绝全部已知历史及当前用户字段中的非空或不可解析值，不能从匿名载荷缺少字段推断身份字段已经安全。摘要用于损坏检测，不是防止数据库写入者重算摘要的签名。
 
 大文件补充信息是可选多行原始文本，最多 16 KiB UTF-8，允许多个链接、提取码与说明；只有非空白内容才随表单提交，保留已提交文本的首尾空白和换行。它不触发下载或解析链接。完整大小限制和输入规则见上述 Spec。
 
 浏览器依次接收附件、推进创建、推进附件同步，每次 advance 至多一个外部写请求。expectedRevision 小于当前值时只返回状态，不能把重放应用到下一步骤。父行锁和 attempt UUID 在发送前固化认领，外部调用在短事务外执行；结果提交核对 attempt、boot ID 和状态，防止迟到响应覆盖维护裁决。
+
+`apps/server/src/domains/support/lifecycle.ts` 在父行锁下统一应用正常推进与人工维护的结果，负责完成条件、revision、attempt/failure 清理及附件字节释放。正常结果使用 attempt 与 boot 栅栏，维护结论使用 attempt 与预读 revision；过期或旧 boot 的在途尝试通过独立 reconcile 条件转为核对。外部调用与维护证据验证留在各自入口。创建已保存任务 ID 后不能按明确未写入处理；附件上传虽已有任务 ID，明确拒绝且未保存附件远端 ID 时仍可失败并保留字节供显式重试。
 
 创建请求一并传入操作 Tag，不另加补 Tag 写步骤。创建响应的 task ID 先保存，再只读核对远端类型、List、标题、状态、用户字段、填写字段、操作 Tag 和正文。任务与全部附件都保存成功结果才 completed。成功附件释放暂存字节，失败和未知结果保留原任务与字节。外部明确拒绝才允许用户重试；超时、断线、5xx 或无法解析的成功结果进入 verification_required，不依据“没查到”重新写入。
 
@@ -33,6 +39,8 @@ GET、HEAD 和 lookup 不认领、清理或写远端。过期在途读取只派�
 ## 浏览器恢复与维护
 
 `apps/web/src/pages/Support/feedback/` 使用 RHF/Zod 与 ExUI Modal。`App` 路由树外的 `FeedbackProvider` 按需加载并保留两个入口的反馈表单，统一认领进行中的命令；站内切换页面只隐藏弹窗，不卸载提交任务。各类型草稿在所属 Modal 内分别留存；返回类型选择不混入别的类型字段或附件。关闭有内容且尚未提交的草稿先在同一 Modal 确认继续填写或放弃，确认放弃后清空草稿。prepare 开始后类型和匿名状态锁定；提交期间可通过关闭按钮、Esc 或遮罩直接关闭，原提交和附件继续推进。重新点击任一反馈入口时只用 ExMessage 提示正在上传，不打开 Modal。
+
+同目录 `kind-rules.ts` 集中八类 kind 的 area、字段适用性与展示文案，Modal、Zod 和恢复流程共同消费。未知 kind 不按非社区补集推断 development；表单序列化与还原继续按生成 Contract 的判别 union 保留明确形状。该规则属于 Website 反馈流程，不进入 Common。
 
 提交期间仅原主按钮显示 Spinner 与「提交中」，不渲染进度 Block、提交编号或常驻 loading 通知。任务和全部附件完成后通过 ExMessage 提示成功、清空表单并关闭弹窗；已关闭的弹窗不会因失败重新打开。明确失败保留原提交并提供「重试」；超时、断线或远端结果待确认时提示核对，并只提供「核对进度」，不能直接再次写入。缺失附件仍可重新选择并核对摘要；恢复后的可继续步骤使用同一个主按钮。
 
