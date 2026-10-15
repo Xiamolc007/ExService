@@ -35,7 +35,7 @@ async (page) => {
     await page.goto(`${origin}/aboutus`)
     const belief = page.getByRole('article', { name: '我们的理念' })
     await belief.getByRole('alert').waitFor()
-    assert(await page.locator('#about-content > article:not([aria-label="我们的理念"]) a').count() === 5, 'Body failure removed metadata entries')
+    assert(await page.locator('#about-content > article:not([aria-label="我们的理念"]) a').count() === 6, 'Body failure removed metadata entries')
     await belief.getByRole('button', { name: '重试', exact: true }).click()
     await belief.getByRole('alert').waitFor()
     await page.unroute(bodyPattern)

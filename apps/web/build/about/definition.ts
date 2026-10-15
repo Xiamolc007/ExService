@@ -1,15 +1,16 @@
 import { dirname, resolve, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { ContentDefinition, ContentEntry } from '../content/compiler.ts'
-import { aboutComponents, communitySchema, homeSchema, mediaSchema, memberSchema, projectSchema, sectionSchema, relatedSchema } from './schema.ts'
+import { aboutComponents, communitySchema, donationCatalogSchema, homeSchema, mediaSchema, memberSchema, projectSchema, sectionSchema, relatedSchema } from './schema.ts'
 import { httpsUrl } from '../content/schema.ts'
 import type { AboutPage, AboutRegistry, AboutSection, RelatedRefs } from '../../src/content/about/types.ts'
 
-export const fixedPages = { 'index.mdx': 'home', 'communities/index.mdx': 'communities', 'projects/index.mdx': 'projects', 'team.mdx': 'team', 'story.mdx': 'story', 'media/index.mdx': 'media' } as const
+export const fixedPages = { 'index.mdx': 'home', 'communities/index.mdx': 'communities', 'projects/index.mdx': 'projects', 'team.mdx': 'team', 'story.mdx': 'story', 'media/index.mdx': 'media', 'donations.mdx': 'donations' } as const
 export const pageUrl = (section: string) => section === 'home' ? '/aboutus' : `/aboutus/${section}`
 export const aboutCollections = {
   aboutHome: { files: ['index.mdx'], schema: homeSchema },
-  aboutSections: { files: ['communities/index.mdx', 'projects/index.mdx', 'team.mdx', 'story.mdx', 'media/index.mdx'], schema: sectionSchema },
+  aboutDonationCatalog: { files: ['donations/items.yaml'], schema: donationCatalogSchema },
+  aboutSections: { files: ['communities/index.mdx', 'projects/index.mdx', 'team.mdx', 'story.mdx', 'media/index.mdx', 'donations.mdx'], schema: sectionSchema },
   aboutCommunities: { files: ['communities/*.mdx', '!communities/index.mdx'], schema: communitySchema },
   aboutProjects: { files: ['projects/*.mdx', '!projects/index.mdx'], schema: projectSchema },
   aboutMembers: { files: ['members/*.mdx'], schema: memberSchema },
@@ -31,6 +32,9 @@ function project(entries: ContentEntry[]): AboutRegistry {
   const mediaEntry = entries.find(entry => entry.collection === 'aboutMedia')
   if (!mediaEntry) throw new Error('about/media/items.yaml: Missing media catalog')
   const media = mediaSchema.parse(mediaEntry.data).items
+  const donationEntry = entries.find(entry => entry.collection === 'aboutDonationCatalog')
+  if (!donationEntry) throw new Error('about/donations/items.yaml: Missing donation catalog')
+  const donationCatalog = donationCatalogSchema.parse(donationEntry.data)
   for (const item of media) add('media', item.id, item.draft, mediaEntry)
   for (const entry of entries) {
     const kind = { aboutCommunities: 'communities', aboutProjects: 'projects', aboutMembers: 'members' }[entry.collection]
@@ -52,7 +56,7 @@ function project(entries: ContentEntry[]): AboutRegistry {
     if (value === undefined) return
     for (const [kind, ids] of Object.entries(relatedSchema.parse(value))) for (const id of ids ?? []) reference(entry, kind, id, draft)
   }
-  const urls = new Map(entries.filter(entry => entry.collection !== 'aboutMembers' && entry.collection !== 'aboutMedia').map(entry => {
+  const urls = new Map(entries.filter(entry => !['aboutMembers', 'aboutMedia', 'aboutDonationCatalog'].includes(entry.collection)).map(entry => {
     const section = fixedPages[entry.id as keyof typeof fixedPages]
     const url = section ? pageUrl(section) : `/aboutus/${entry.collection === 'aboutCommunities' ? 'communities' : 'projects'}/${entry.data.slug}`
     return [url, entry] as const
@@ -96,6 +100,12 @@ function project(entries: ContentEntry[]): AboutRegistry {
     if (section === 'home') {
       const { draft: _, ...data } = homeSchema.parse(entry.data)
       pages.push({ ...data, id: entry.id, url: '/aboutus', section, kind: 'home' })
+    } else if (section === 'donations') {
+      const { draft: _, ...data } = sectionSchema.parse(entry.data)
+      pages.push({ ...data, id: entry.id, url: pageUrl(section), section, kind: 'donations',
+        channels: donationCatalog.channels.filter(item => !item.draft).map(({ draft: _, ...item }) => item),
+        donors: donationCatalog.donors.filter(item => !item.draft).map(({ draft: _, ...item }) => item),
+      })
     } else if (section) {
       const { draft: _, ...data } = sectionSchema.parse(entry.data)
       pages.push({ ...data, id: entry.id, url: pageUrl(section), section, kind: 'section' })
@@ -127,6 +137,7 @@ export const aboutDefinition: ContentDefinition = {
     if (/^projects\/[a-z0-9-]+\.mdx$/.test(file)) return { collection: 'aboutProjects', schema: projectSchema }
     if (/^members\/[a-z0-9-]+\.mdx$/.test(file)) return { collection: 'aboutMembers', schema: memberSchema }
     if (file === 'media/items.yaml') return { collection: 'aboutMedia', schema: mediaSchema }
+    if (file === 'donations/items.yaml') return { collection: 'aboutDonationCatalog', schema: donationCatalogSchema }
     return undefined
   },
   project,

@@ -11,6 +11,7 @@ vi.mock('../../content/about/registry', () => {
   const pages = [
     { id: 'index.mdx', url: '/aboutus', title: '关于 Exre', description: 'Intro', section: 'home', kind: 'home', hero: { headline: '共同创造', summary: 'Summary' }, introHeading: '认识我们' },
     ...['communities', 'projects', 'team', 'story', 'media'].map(section => ({ id: `${section}.mdx`, url: `/aboutus/${section}`, section, kind: 'section', title: { communities: '社区', projects: '项目', team: '团队', story: '历程', media: 'Media' }[section], description: `${section} introduction` })),
+    { id: 'donations.mdx', url: '/aboutus/donations', section: 'donations', kind: 'donations', title: '捐赠', description: '捐赠信息', channels: [], donors: [] },
     { id: 'project.mdx', url: '/aboutus/projects/example-project', section: 'projects', kind: 'project', slug: 'example-project', title: '项目故事占位', description: '项目介绍', status: 'unknown', order: 0 },
     { id: 'community.mdx', url: '/aboutus/communities/example-community', section: 'communities', kind: 'community', slug: 'example-community', title: '社区故事占位', description: '社区介绍', status: 'unknown', order: 0 },
   ]
@@ -30,13 +31,13 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 function show(path: string) { return render(<ThemeProvider><MemoryRouter initialEntries={[path]}><AboutUs /></MemoryRouter></ThemeProvider>) }
-it('shows an introduction and all five section links from the home', async () => {
+it('shows an introduction and all six section links from the home', async () => {
   show('/aboutus')
   expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('共同创造')
   await screen.findByText('正文 index.mdx')
   expect(screen.getAllByRole('link').some(link => link.getAttribute('href') === '/aboutus/media')).toBe(true)
 })
-it('shows one text hero, six ordered modules and five section targets without the old home navigation', async () => {
+it('shows one text hero, seven ordered modules and six section targets without the old home navigation', async () => {
   show('/aboutus')
   await screen.findByText('正文 index.mdx')
   expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
@@ -46,9 +47,18 @@ it('shows one text hero, six ordered modules and five section targets without th
   expect(screen.queryByRole('link', { name: /向下滚动|认识 Exre|探索我们的社区/ })).toBeNull()
   expect(document.querySelector('canvas')).toBeNull()
   const grid = document.getElementById('about-content')!
-  expect([...grid.children].map(child => child.getAttribute('aria-label'))).toEqual(['社区', '项目', '我们的理念', '团队', 'Media', '历程'])
-  expect(within(grid).getAllByRole('link').map(link => link.getAttribute('href'))).toEqual(['/aboutus/communities', '/aboutus/projects', '/aboutus/team', '/aboutus/media', '/aboutus/story'])
+  expect([...grid.children].map(child => child.getAttribute('aria-label'))).toEqual(['社区', '项目', '我们的理念', '团队', 'Media', '历程', '捐赠'])
+  expect(within(grid).getAllByRole('link').map(link => link.getAttribute('href'))).toEqual(['/aboutus/communities', '/aboutus/projects', '/aboutus/team', '/aboutus/media', '/aboutus/story', '/aboutus/donations'])
   expect(within(screen.getByRole('article', { name: '我们的理念' })).getByText('正文 index.mdx')).toBeTruthy()
+})
+it('opens the donation section from its home card and keeps the section navigation active', async () => {
+  show('/aboutus')
+  fireEvent.click(within(screen.getByRole('article', { name: '捐赠' })).getByRole('link'))
+  expect(await screen.findByRole('heading', { level: 1, name: '捐赠' })).toBeTruthy()
+  expect(within(screen.getByRole('navigation', { name: 'About 栏目' })).getByRole('link', { name: '捐赠' }).getAttribute('aria-current')).toBe('page')
+  expect(await screen.findByText('正文 donations.mdx')).toBeTruthy()
+  expect(screen.getByText('捐赠渠道仍在整理中。')).toBeTruthy()
+  expect(screen.getByText('捐赠者信息仍在整理中。')).toBeTruthy()
 })
 it('focuses the home heading when navigating from a section', async () => {
   // jsdom has no document layout; supply the scroll extent used by the real restoration hook.

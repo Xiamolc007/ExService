@@ -9,6 +9,7 @@ export const sections = [
   { key: 'home', title: '概览', url: '/aboutus' }, { key: 'communities', title: '社区', url: '/aboutus/communities' },
   { key: 'projects', title: '项目', url: '/aboutus/projects' }, { key: 'team', title: '团队', url: '/aboutus/team' },
   { key: 'story', title: '历程', url: '/aboutus/story' }, { key: 'media', title: 'Media', url: '/aboutus/media' },
+  { key: 'donations', title: '捐赠', url: '/aboutus/donations' },
 ] as const
 export function AboutNavigation({ page }: { page: AboutPage }) {
   const { section, url } = page

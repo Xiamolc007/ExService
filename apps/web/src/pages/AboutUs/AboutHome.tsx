@@ -10,8 +10,8 @@ import styles from './AboutHome.module.scss'
 
 type HomePage = Extract<AboutPage, { kind: 'home' }>
 type EntryKey = Exclude<AboutSection, 'home'>
-const entries = { communities: '走进我们的社区', projects: '探索项目', team: '认识团队与贡献者', media: '探索音乐与影像', story: '回看 Exre 历程' }
-const imageLabels = { communities: '社区影像', projects: '项目影像', team: '团队影像', media: '音乐与影像', story: '历程影像' }
+const entries = { communities: '走进我们的社区', projects: '探索项目', team: '认识团队与贡献者', media: '探索音乐与影像', story: '回看 Exre 历程', donations: '查看捐赠信息' }
+const imageLabels = { communities: '社区影像', projects: '项目影像', team: '团队影像', media: '音乐与影像', story: '历程影像', donations: '捐赠图片' }
 const lineBreaks = (text: string) => text.replaceAll('\\n', '\n')
 
 export function AboutHome({ page, state, components, retry }: { page: HomePage; state: ContentState; components: MDXComponents; retry: () => void }) {
@@ -31,13 +31,14 @@ export function AboutHome({ page, state, components, retry }: { page: HomePage; 
       <EntryCard page={page} section="team" />
       <EntryCard page={page} section="media" />
       <EntryCard page={page} section="story" />
+      <EntryCard page={page} section="donations" />
     </section>
   </>
 }
 
 function EntryCard({ page, section }: { page: HomePage; section: EntryKey }) {
   // Fixed public section pages are required by the About definition at build time.
-  const target = aboutRegistry.pages.find(item => item.kind === 'section' && item.section === section)!
+  const target = aboutRegistry.pages.find(item => (item.kind === 'section' || item.kind === 'donations') && item.section === section)!
   const rawImage = page.cardImages?.[section]
   const image = rawImage ? aboutImage(rawImage) : undefined
   const visual = <HomeImage key={image?.src ?? 'placeholder'} image={image} label={imageLabels[section]} />
@@ -49,7 +50,7 @@ function EntryCard({ page, section }: { page: HomePage; section: EntryKey }) {
     </Link>
   </div>
   return <article className={`${styles.story} ${styles[section]}`} aria-label={target.title}>
-    {section === 'team' ? <>{caption}{visual}</> : <>{visual}{caption}</>}
+    {section === 'team' || section === 'donations' ? <>{caption}{visual}</> : <>{visual}{caption}</>}
   </article>
 }
 

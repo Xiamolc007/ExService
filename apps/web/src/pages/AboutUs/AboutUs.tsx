@@ -8,6 +8,7 @@ import type { AboutPage } from '../../content/about/types'
 import { useContent } from '../../content/useContent'
 import { AboutNavigation } from './AboutNavigation'
 import { AboutHome } from './AboutHome'
+import { Donations } from './Donations'
 import { AboutBody, aboutMdxComponents, RelatedContent, type OpenMember } from './AboutBody'
 import { MediaList } from './MediaList'
 import { MemberModal } from './MemberModal'
@@ -50,6 +51,7 @@ function AboutPageView({ page }: { page: AboutPage }) {
       {page.section === 'projects' && page.kind === 'section' && <EntityList kind="project" />}
       {page.section === 'team' && <TeamList openMember={openMember} />}
       {page.section === 'media' && <MediaList key={page.id} openMember={openMember} />}
+      {page.kind === 'donations' && <Donations page={page} />}
       {(page.kind === 'community' || page.kind === 'project') && <div className={styles.reading}><RelatedContent related={page.related} openMember={openMember} />
         {page.kind === 'community' && page.joinUrl && (page.joinUrl.startsWith('/') ? <Link to={page.joinUrl}>了解加入方式</Link> : <a href={page.joinUrl} target="_blank" rel="noopener noreferrer">了解加入方式</a>)}
         {page.kind === 'project' && page.publicUrl && <a href={page.publicUrl} target="_blank" rel="noopener noreferrer">前往项目公开页面</a>}

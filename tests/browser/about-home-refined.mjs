@@ -29,7 +29,7 @@ async (page) => {
     assert((await page.evaluate(() => window.__aboutWebglCalls)).length === 0, 'Home created a WebGL context')
     assert(!requests.some(url => /\/AboutHero\.|\/hero\/(renderer|shape|bloom|light)|\/renderer-/.test(url)), 'Home requested the old renderer')
     const targets = await page.locator('#about-content > article a').evaluateAll(links => links.map(link => link.getAttribute('href')))
-    assert(JSON.stringify(targets) === JSON.stringify(['/aboutus/communities', '/aboutus/projects', '/aboutus/team', '/aboutus/media', '/aboutus/story']), 'Section targets or order changed')
+    assert(JSON.stringify(targets) === JSON.stringify(['/aboutus/communities', '/aboutus/projects', '/aboutus/team', '/aboutus/media', '/aboutus/story', '/aboutus/donations']), 'Section targets or order changed')
     for (const width of [1440, 768, 390, 320]) {
       await page.setViewportSize({ width, height: 900 })
       for (const theme of ['light', 'dark']) {
@@ -83,7 +83,14 @@ async (page) => {
     assert(await page.getByText('来源待补充').count() > 0, 'Media missing-source state disappeared')
     await page.goto(`${origin}/aboutus`)
     await ready()
-    return { status: 'PASS', rows, rendererRequested: false, webglCalls: 0, navigation: 'PASS', rootFontScaleAndLongCopy: 'PASS', reducedMotion: 'PASS', memberModal: 'PASS', mediaFilter: 'PASS', note: 'Root-font scaling is checked; native browser toolbar zoom is not automated.' }
+    await page.getByRole('article', { name: '捐赠', exact: true }).getByRole('link').click()
+    await page.getByRole('heading', { name: '捐赠', level: 1, exact: true }).waitFor()
+    await page.getByText('捐赠渠道仍在整理中。', { exact: true }).waitFor()
+    await page.getByText('捐赠者信息仍在整理中。', { exact: true }).waitFor()
+    assert(await page.getByRole('navigation', { name: 'About 栏目' }).getByRole('link', { name: '捐赠', exact: true }).getAttribute('aria-current') === 'page', 'Donation navigation is not active')
+    await page.goto(`${origin}/aboutus`)
+    await ready()
+    return { status: 'PASS', rows, rendererRequested: false, webglCalls: 0, navigation: 'PASS', rootFontScaleAndLongCopy: 'PASS', reducedMotion: 'PASS', memberModal: 'PASS', mediaFilter: 'PASS', donations: 'PASS', note: 'Root-font scaling is checked; native browser toolbar zoom is not automated.' }
   } finally {
     page.off('request', record)
   }

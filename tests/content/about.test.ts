@@ -20,6 +20,52 @@ async function homeFields(definition: typeof aboutDefinition, fields: Record<str
   const source = await readFile(path, 'utf8')
   await writeFile(path, source.replace(/^---\r?\n([\s\S]*?)\r?\n---/, (_, frontmatter: string) => `---\n${stringify({ ...parse(frontmatter), ...fields })}---`))
 }
+async function donationFields(definition: typeof aboutDefinition, fields: Record<string, unknown>) {
+  await writeFile(join(definition.root, 'donations.mdx'), '---\ntitle: 捐赠\ndescription: 捐赠信息\n---\n\n介绍正文。')
+  await mkdir(join(definition.root, 'donations'), { recursive: true })
+  await writeFile(join(definition.root, 'donations/items.yaml'), stringify(fields))
+}
+it('projects a donation route with defaults and resolves donation author links', async () => {
+  const definition = await fixture()
+  await donationFields(definition, {})
+  const home = await readFile(join(definition.root, 'index.mdx'), 'utf8')
+  await writeFile(join(definition.root, 'index.mdx'), home + '\n<AboutLink target="page:donations">捐赠</AboutLink>\n')
+  const donation = ((await readContent(definition)).data as AboutRegistry).pages.find(page => page.section === 'donations')
+  expect(donation).toMatchObject({ kind: 'donations', url: '/aboutus/donations', channels: [], donors: [] })
+})
+it('publishes approved donation channels and donor details while excluding drafts and private QR assets', async () => {
+  const definition = await fixture()
+  await mkdir(join(definition.root, 'assets'), { recursive: true })
+  await writeFile(join(definition.root, 'assets/private-qr.png'), Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64'))
+  await donationFields(definition, {
+    channels: [{ id: 'public', name: '渠道', url: 'https://example.com/support' }, { id: 'private', name: '未发布渠道', draft: true, qrCode: { src: 'assets/private-qr.png', alt: '未发布二维码', width: 1, height: 1 } }],
+    donors: [{ id: 'first', nickname: '昵称甲', date: '2026-10-12' }, { id: 'private', nickname: '未发布昵称', date: '2026-10-11', draft: true }],
+  })
+  const result = await readContent(definition)
+  const donation = (result.data as AboutRegistry).pages.find(page => page.section === 'donations')
+  expect(donation).toMatchObject({ channels: [{ id: 'public', name: '渠道', url: 'https://example.com/support' }], donors: [{ id: 'first', nickname: '昵称甲', date: '2026-10-12' }] })
+  expect(JSON.stringify(result.data)).not.toMatch(/未发布|private-qr/)
+  expect(result.assets).toEqual({})
+})
+it.each([
+  { channels: [{ id: 'missing', name: '缺少入口' }] },
+  { channels: [{ id: 'unsafe', name: '入口', url: 'javascript:alert(1)' }] },
+  { channels: [{ id: 'credentials', name: '入口', url: 'https://user:secret@example.com/' }] },
+  { donors: [{ id: 'blank', nickname: ' ', date: '2026-10-12' }] },
+  { donors: [{ id: 'date', nickname: '昵称', date: '2026-02-30' }] },
+  { donors: [{ id: 'duplicate', nickname: '甲', date: '2026-10-12' }, { id: 'duplicate', nickname: '乙', date: '2026-10-11' }] },
+  { channels: [{ id: 'duplicate', name: '甲', url: 'https://example.com/a' }, { id: 'duplicate', name: '乙', url: 'https://example.com/b' }] },
+])('rejects invalid donation metadata: %j', async fields => {
+  const definition = await fixture()
+  await donationFields(definition, fields)
+  await expect(readContent(definition)).rejects.toThrow('about/donations/items.yaml')
+})
+it('checks nested QR resources and donation home metadata through the real compiler', async () => {
+  const definition = await fixture()
+  await homeFields(definition, { entryHeadlines: { donations: '感谢支持' }, entryDescriptions: { donations: '渠道与捐赠者信息' } })
+  await donationFields(definition, { channels: [{ id: 'qr', name: '二维码', qrCode: { src: 'assets/missing-qr.png', alt: '捐赠二维码', width: 1, height: 1 } }] })
+  await expect(readContent(definition)).rejects.toThrow('Missing asset assets/missing-qr.png')
+})
 it('keeps the new home fields optional in the real registry projection', async () => {
   const definition = await fixture()
   await homeFields(definition, { hero: { headline: 'Headline', summary: 'Summary' }, entryHeadlines: undefined, cardImages: undefined })

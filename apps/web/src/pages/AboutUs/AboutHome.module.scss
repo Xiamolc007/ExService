@@ -30,18 +30,18 @@
 .note { border-top: 1px solid var(--exui-border-divider); margin-top: 1.5rem; padding-top: 1.25rem; }
 .note strong { font-size: .75rem; font-weight: var(--exui-font-weight-medium); }
 .note div { margin-top: .5rem; font-size: .8125rem; line-height: 1.85; color: var(--exui-text-secondary); }
-.team { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: 4rem; align-items: center; }
-.team .caption { padding: 0; }
-.team .visual { aspect-ratio: 1.55; }
-.team h2 { font-size: clamp(2rem, 3.4vw, 3rem); }
-.team .description { max-width: 21rem; }
+.team, .donations { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: 4rem; align-items: center; }
+.team .caption, .donations .caption { padding: 0; }
+.team .visual, .donations .visual { aspect-ratio: 1.55; }
+.team h2, .donations h2 { font-size: clamp(2rem, 3.4vw, 3rem); }
+.team .description, .donations .description { max-width: 21rem; }
 .media .visual { background: var(--exui-surface-tertiary); }
 @media (max-width: 63.99rem) {
   .hero { gap: 2rem; padding-block: 4rem 3rem; }
   .hero h1 { font-size: 4rem; }
   .lead { font-size: 1.25rem; }
   .stories { gap: 4rem 1.5rem; }
-  .communities .captionLink, .team { gap: 2rem; }
+  .communities .captionLink, .team, .donations { gap: 2rem; }
   .belief { padding: 2rem; }
   .visual { border-radius: 1.5rem; }
 }
@@ -62,7 +62,7 @@
   .story h2 { font-size: 1.875rem; }
   .belief { padding: 1.75rem; border-radius: 1.25rem; }
   .belief h2 { font-size: 2.125rem; }
-  .team { grid-template-columns: 1fr; gap: 1.75rem; }
-  .team .visual { aspect-ratio: 4 / 3; }
+  .team, .donations { grid-template-columns: 1fr; gap: 1.75rem; }
+  .team .visual, .donations .visual { aspect-ratio: 4 / 3; }
 }
 @media (prefers-reduced-motion: reduce) { .entry { transition: none; } }

@@ -1,12 +1,15 @@
-export type AboutSection = 'home' | 'communities' | 'projects' | 'team' | 'story' | 'media'
+export type AboutSection = 'home' | 'communities' | 'projects' | 'team' | 'story' | 'media' | 'donations'
 export type ContentImageData = import('@workspace/components').ContentImageProps['image']
 export interface RelatedRefs { communities?: string[]; projects?: string[]; members?: string[]; media?: string[]; milestones?: string[] }
 export type CommunityStatus = 'active' | 'archived' | 'planned' | 'unknown'
 export type ProjectStatus = 'concept' | 'development' | 'released' | 'archived' | 'unknown'
+export interface AboutDonationChannel { id: string; name: string; description?: string; url?: string; qrCode?: ContentImageData }
+export interface AboutDonor { id: string; nickname: string; date: string }
 interface PageBase { id: string; url: string; section: AboutSection; title: string; description: string; eyebrow?: string }
 export type AboutPage = PageBase & (
   | { kind: 'home'; hero: { headline: string; summary: string; lead?: string; eyebrow?: string; image?: ContentImageData }; introHeading: string; entryDescriptions?: Partial<Record<Exclude<AboutSection, 'home'>, string>>; entryHeadlines?: Partial<Record<Exclude<AboutSection, 'home'>, string>>; cardImages?: Partial<Record<Exclude<AboutSection, 'home'>, ContentImageData>> }
   | { kind: 'section' }
+  | { kind: 'donations'; channels: AboutDonationChannel[]; donors: AboutDonor[] }
   | { kind: 'community'; slug: string; status: CommunityStatus; order: number; cover?: ContentImageData; related?: RelatedRefs; joinUrl?: string }
   | { kind: 'project'; slug: string; status: ProjectStatus; order: number; cover?: ContentImageData; related?: RelatedRefs; publicUrl?: string }
 )

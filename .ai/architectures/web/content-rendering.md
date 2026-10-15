@@ -38,9 +38,17 @@ flowchart LR
 
 ## About 适配
 
-`apps/web/build/about/` 持有社区、项目、成员、Media schema，固定页要求和引用图。`apps/web/src/content/about/` 适配注册表、语义目标和资源 URL；`apps/web/src/pages/AboutUs/` 持有页面布局、栏目目录、成员 Modal、Media 筛选与阅读位置。
+`apps/web/build/about/` 持有社区、项目、成员、Media 与捐赠 schema，固定页要求和引用图。`apps/web/src/content/about/` 适配注册表、语义目标和资源 URL；`apps/web/src/pages/AboutUs/` 持有页面布局、栏目目录、成员 Modal、Media 筛选、捐赠展示与阅读位置。
 
-About 入口及正文分别懒加载。成员只拥有正文 id，不创建个人路由；简介 Modal 不改变 URL。阅读位置按 Router location key 保存于模块内有限 Map，离开 About 再后退仍能恢复，页面刷新不持久化该状态。
+About 入口及正文分别懒加载。成员只拥有正文 id，不创建个人路由；简介 Modal 不改变 URL。阅读位置按 Router location key 保存于模块内有限 Map，离开 About 再后退仍能恢复，页面刷新不持久化该状态。位置由 scroll 事件记录；离开时不再读取 window.scrollY，因为目的页 DOM 已可能缩短文档并将位置压缩，cleanup 再保存会覆盖原阅读位置。
+
+首页由 `AboutHome.tsx` 渲染文字 Hero 与品牌叙事布局：社区宽幅主视觉、项目与理念并列、团队横向展开、Media 与历程并列，最后是全宽捐赠入口。理念直接渲染首页完整 MDX，加载与失败恢复入口位于该区。其余六个栏目从现有注册表取得路由与缺省文案，图片独立于链接，未提供或加载失败均为同尺寸普通占位。
+
+捐赠栏目使用固定 `/aboutus/donations` 路由。介绍正文来自 `donations.mdx`，渠道与昵称/日期清单来自 `donations/items.yaml`，公开投影后交给 `Donations.tsx` 展示。清单沿用独立 meta 集合且禁用 Macro，不作为正文 import 暴露；否则 Fumadocs 的 frontmatter export 会把子条目 draft 原始字段送入浏览器。实际构建测试同时检查注册表与所有正文 chunk 均无草稿昵称、渠道及独占二维码资源。页面不处理支付或自动查询捐赠记录。
+
+首页不挂载 About 栏目导航、面包屑、Hero 操作按钮或 Canvas；`AboutHero.tsx` 与 `hero/` 文件不再由首页导入。首页处于正常文档流，不抵消顶栏高度。前进导航使用 h1 入口焦点；`about-content` id 保留在故事网格，兼容旧 hash，并按顶栏高度留出滚动边距。浏览器后退仍由原有 location key 机制恢复阅读位置。
+
+子页的 `AboutNavigation` 根据当前页面元数据在栏目栏左侧渲染面包屑，右侧保留栏目链接或手机目录。正文不再重复面包屑；详情页的父栏目保持 `aria-current="location"`。长面包屑允许换行，目录按钮保留自身宽度。About 标题统一使用 ExUI 粗体 token；`AboutBody` 的局部样式同时覆盖页面正文与通过 Portal 展示的成员正文，不修改通用内容组件的字重。首页仅局部替换 Callout 的展示，保留作者 title、kind 与正文，不改变子页或通用内容组件。
 
 静态内容不调用 Website Server、不新增 HTTP Contract 或数据库。现有 `/docs/` 仍归 Outline；文档搜索、侧栏和版本切换没有附带在这套基础渲染中。
 
