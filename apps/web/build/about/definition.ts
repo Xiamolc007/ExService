@@ -1,17 +1,19 @@
 import { dirname, resolve, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { ContentDefinition, ContentEntry } from '../content/compiler'
-import { aboutComponents, communitySchema, homeSchema, mediaSchema, memberSchema, projectSchema, sectionSchema, relatedSchema } from './schema'
-import { httpsUrl } from '../content/schema'
-import type { AboutPage, AboutRegistry, AboutSection, RelatedRefs } from '../../src/content/about/types'
+import type { ContentDefinition, ContentEntry } from '../content/compiler.ts'
+import { aboutComponents, communitySchema, donationCatalogSchema, homeSchema, mediaPageSchema, mediaSchema, memberSchema, sectionSchema, teamSchema, relatedSchema } from './schema.ts'
+import { httpsUrl } from '../content/schema.ts'
+import type { AboutPage, AboutRegistry, AboutSection, RelatedRefs } from '../../src/content/about/types.ts'
 
-export const fixedPages = { 'index.mdx': 'home', 'communities/index.mdx': 'communities', 'projects/index.mdx': 'projects', 'team.mdx': 'team', 'story.mdx': 'story', 'media/index.mdx': 'media' } as const
+export const fixedPages = { 'index.mdx': 'home', 'communities/index.mdx': 'communities', 'team.mdx': 'team', 'story.mdx': 'story', 'media/index.mdx': 'media', 'donations.mdx': 'donations' } as const
 export const pageUrl = (section: string) => section === 'home' ? '/aboutus' : `/aboutus/${section}`
 export const aboutCollections = {
   aboutHome: { files: ['index.mdx'], schema: homeSchema },
-  aboutSections: { files: ['communities/index.mdx', 'projects/index.mdx', 'team.mdx', 'story.mdx', 'media/index.mdx'], schema: sectionSchema },
+  aboutTeam: { files: ['team.mdx'], schema: teamSchema },
+  aboutMediaPage: { files: ['media/index.mdx'], schema: mediaPageSchema },
+  aboutDonationCatalog: { files: ['donations/items.yaml'], schema: donationCatalogSchema },
+  aboutSections: { files: ['communities/index.mdx', 'story.mdx', 'donations.mdx'], schema: sectionSchema },
   aboutCommunities: { files: ['communities/*.mdx', '!communities/index.mdx'], schema: communitySchema },
-  aboutProjects: { files: ['projects/*.mdx', '!projects/index.mdx'], schema: projectSchema },
   aboutMembers: { files: ['members/*.mdx'], schema: memberSchema },
   aboutMedia: { files: ['media/items.yaml'], schema: mediaSchema },
 }
@@ -31,17 +33,28 @@ function project(entries: ContentEntry[]): AboutRegistry {
   const mediaEntry = entries.find(entry => entry.collection === 'aboutMedia')
   if (!mediaEntry) throw new Error('about/media/items.yaml: Missing media catalog')
   const media = mediaSchema.parse(mediaEntry.data).items
+  const donationEntry = entries.find(entry => entry.collection === 'aboutDonationCatalog')
+  if (!donationEntry) throw new Error('about/donations/items.yaml: Missing donation catalog')
+  const donationCatalog = donationCatalogSchema.parse(donationEntry.data)
   for (const item of media) add('media', item.id, item.draft, mediaEntry)
   for (const entry of entries) {
-    const kind = { aboutCommunities: 'communities', aboutProjects: 'projects', aboutMembers: 'members' }[entry.collection]
+    if (entry.id === 'story.mdx') {
+      const grouped = entry.analysis.components.some(component => component.name === 'StoryChapter')
+      for (const component of entry.analysis.components) {
+        if (component.name === 'Timeline' && component.children?.some(name => name !== (grouped ? 'StoryChapter' : 'Milestone'))) fail(entry, 'Timeline must directly contain its chapters or legacy milestones')
+        if (component.name === 'StoryChapter' && (component.parent !== 'Timeline' || !component.children?.length || component.children.some(name => name !== 'Milestone'))) fail(entry, 'StoryChapter must directly contain Milestone events and belong to Timeline')
+        if (component.name === 'Milestone' && component.parent !== (grouped ? 'StoryChapter' : 'Timeline')) fail(entry, 'Milestones must directly belong to their chapter or legacy Timeline')
+      }
+    }
+    const kind = { aboutCommunities: 'communities', aboutMembers: 'members' }[entry.collection]
     if (kind) {
       const id = String(entry.data.slug)
       if (basename(entry.id, '.mdx') !== id) fail(entry, 'slug must match the file basename')
       add(kind, id, entry.draft, entry)
     }
-    for (const component of entry.analysis.components) if (component.name === 'Milestone') {
-      if (entry.id !== 'story.mdx') fail(entry, 'Milestone belongs to story.mdx')
-      add('milestones', String(component.props.id), entry.draft, entry)
+    for (const component of entry.analysis.components) if (component.name === 'Milestone' || component.name === 'StoryChapter') {
+      if (entry.id !== 'story.mdx') fail(entry, `${component.name} belongs to story.mdx`)
+      if (component.name === 'Milestone') add('milestones', String(component.props.id), entry.draft, entry)
     }
   }
   const reference = (entry: ContentEntry, kind: string, id: string, draft = entry.draft) => {
@@ -52,9 +65,9 @@ function project(entries: ContentEntry[]): AboutRegistry {
     if (value === undefined) return
     for (const [kind, ids] of Object.entries(relatedSchema.parse(value))) for (const id of ids ?? []) reference(entry, kind, id, draft)
   }
-  const urls = new Map(entries.filter(entry => entry.collection !== 'aboutMembers' && entry.collection !== 'aboutMedia').map(entry => {
+  const urls = new Map(entries.filter(entry => !['aboutMembers', 'aboutMedia', 'aboutDonationCatalog'].includes(entry.collection)).map(entry => {
     const section = fixedPages[entry.id as keyof typeof fixedPages]
-    const url = section ? pageUrl(section) : `/aboutus/${entry.collection === 'aboutCommunities' ? 'communities' : 'projects'}/${entry.data.slug}`
+    const url = section ? pageUrl(section) : `/aboutus/communities/${entry.data.slug}`
     return [url, entry] as const
   }))
   const link = (entry: ContentEntry, url: string) => {
@@ -69,7 +82,7 @@ function project(entries: ContentEntry[]): AboutRegistry {
     }
     const target = path ? urls.get(path) : entry
     if (!target || (!entry.draft && target.draft)) fail(entry, `Unknown internal link: ${url}`)
-    if (anchor && !(target!.analysis.headings.includes(anchor) || (target!.id === 'story.mdx' && anchor.startsWith('milestone-') && byKind.get('milestones')?.has(anchor.slice(10))) || (target!.id === 'media/index.mdx' && anchor.startsWith('media-') && byKind.get('media')?.get(anchor.slice(6))?.draft === false))) fail(entry, `Unknown anchor: ${url}`)
+    if (anchor && !(target!.analysis.headings.includes(anchor) || (target!.id === 'team.mdx' && anchor === 'join') || (target!.id === 'story.mdx' && anchor.startsWith('milestone-') && byKind.get('milestones')?.has(anchor.slice(10))) || (target!.id === 'media/index.mdx' && anchor.startsWith('media-') && byKind.get('media')?.get(anchor.slice(6))?.draft === false))) fail(entry, `Unknown anchor: ${url}`)
   }
   for (const entry of entries) {
     related(entry, entry.data.related)
@@ -82,7 +95,7 @@ function project(entries: ContentEntry[]): AboutRegistry {
         if (!id || extra.length) fail(entry, 'Invalid AboutLink target')
         if (kind === 'page') { if (!Object.values(fixedPages).includes(id as AboutSection)) fail(entry, `Unknown page:${id}`) }
         else {
-          const group = { community: 'communities', project: 'projects', media: 'media', milestone: 'milestones' }[kind ?? '']
+          const group = { community: 'communities', media: 'media', milestone: 'milestones' }[kind ?? '']
           if (!group) fail(entry, 'Unknown AboutLink target kind')
           reference(entry, group!, id!)
         }
@@ -96,15 +109,24 @@ function project(entries: ContentEntry[]): AboutRegistry {
     if (section === 'home') {
       const { draft: _, ...data } = homeSchema.parse(entry.data)
       pages.push({ ...data, id: entry.id, url: '/aboutus', section, kind: 'home' })
+    } else if (section === 'team') {
+      const { draft: _, ...data } = teamSchema.parse(entry.data)
+      pages.push({ ...data, id: entry.id, url: pageUrl(section), section, kind: 'team' })
+    } else if (section === 'media') {
+      const { draft: _, ...data } = mediaPageSchema.parse(entry.data)
+      pages.push({ ...data, id: entry.id, url: pageUrl(section), section, kind: 'media' })
+    } else if (section === 'donations') {
+      const { draft: _, ...data } = sectionSchema.parse(entry.data)
+      pages.push({ ...data, id: entry.id, url: pageUrl(section), section, kind: 'donations',
+        channels: donationCatalog.channels.filter(item => !item.draft).map(({ draft: _, ...item }) => item),
+        donors: donationCatalog.donors.filter(item => !item.draft).map(({ draft: _, ...item }) => item),
+      })
     } else if (section) {
       const { draft: _, ...data } = sectionSchema.parse(entry.data)
       pages.push({ ...data, id: entry.id, url: pageUrl(section), section, kind: 'section' })
     } else if (entry.collection === 'aboutCommunities') {
       const { draft: _, ...data } = communitySchema.parse(entry.data)
       pages.push({ ...data, id: entry.id, url: `/aboutus/communities/${data.slug}`, section: 'communities', kind: 'community' })
-    } else if (entry.collection === 'aboutProjects') {
-      const { draft: _, ...data } = projectSchema.parse(entry.data)
-      pages.push({ ...data, id: entry.id, url: `/aboutus/projects/${data.slug}`, section: 'projects', kind: 'project' })
     }
   }
   return {
@@ -122,11 +144,13 @@ export const aboutDefinition: ContentDefinition = {
   namespace: 'about', root: resolve(dirname(fileURLToPath(import.meta.url)), '../../content/about'), components: aboutComponents,
   classify(file) {
     if (file === 'index.mdx') return { collection: 'aboutHome', schema: homeSchema }
+    if (file === 'team.mdx') return { collection: 'aboutTeam', schema: teamSchema }
+    if (file === 'media/index.mdx') return { collection: 'aboutMediaPage', schema: mediaPageSchema }
     if (Object.hasOwn(fixedPages, file)) return { collection: 'aboutSections', schema: sectionSchema }
     if (/^communities\/[a-z0-9-]+\.mdx$/.test(file)) return { collection: 'aboutCommunities', schema: communitySchema }
-    if (/^projects\/[a-z0-9-]+\.mdx$/.test(file)) return { collection: 'aboutProjects', schema: projectSchema }
     if (/^members\/[a-z0-9-]+\.mdx$/.test(file)) return { collection: 'aboutMembers', schema: memberSchema }
     if (file === 'media/items.yaml') return { collection: 'aboutMedia', schema: mediaSchema }
+    if (file === 'donations/items.yaml') return { collection: 'aboutDonationCatalog', schema: donationCatalogSchema }
     return undefined
   },
   project,

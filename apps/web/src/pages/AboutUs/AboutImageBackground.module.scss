@@ -1,0 +1,7 @@
+.background {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background: url('/images/heros/donations/sequoia-dark.jpg') center / cover no-repeat;
+}

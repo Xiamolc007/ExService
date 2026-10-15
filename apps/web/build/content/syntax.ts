@@ -5,7 +5,7 @@ import type { Node, Parent } from 'unist'
 import type { Expression, Program } from 'estree'
 
 export interface Schema { parse(value: unknown): unknown }
-export interface StaticComponent { name: string; props: Record<string, unknown> }
+export interface StaticComponent { name: string; props: Record<string, unknown>; parent?: string; children?: string[] }
 export interface ContentAnalysis { links: string[]; components: StaticComponent[]; headings: string[] }
 
 // Evaluate only literal syntax. MDX is repository-authored, never an input sandbox.
@@ -47,7 +47,7 @@ export function analyzeMdx(body: string, components: Record<string, Schema>): Co
   const result: ContentAnalysis = { links: [], components: [], headings: [] }
   const definitions = new Map<string, string>()
   const slugger = new GithubSlugger()
-  visit(tree, node => {
+  visit(tree, (node, _index, parent) => {
     const author = node as AuthorNode
     const fail = (reason: string): never => { throw new Error(`${author.position?.start.line ?? 1}:${author.position?.start.column ?? 1} ${reason}`) }
     if (['mdxjsEsm', 'mdxFlowExpression', 'mdxTextExpression', 'html'].includes(node.type)) fail('Unsupported MDX expression/import/HTML')
@@ -73,7 +73,8 @@ export function analyzeMdx(body: string, components: Record<string, Schema>): Co
       }
     }
     components[author.name!]!.parse(props)
-    result.components.push({ name: author.name!, props })
+    const childNames = 'children' in author ? (author as Parent).children.filter(child => child.type !== 'text' || plainText(child).trim()).map(child => (child as AuthorNode).name ?? child.type) : []
+    result.components.push({ name: author.name!, props, parent: (parent as AuthorNode | undefined)?.name ?? parent?.type, children: childNames })
   })
   visit(tree, 'linkReference', node => {
     const url = definitions.get(node.identifier.toLowerCase())
