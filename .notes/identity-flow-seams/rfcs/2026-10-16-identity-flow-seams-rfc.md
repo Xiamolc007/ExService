@@ -1,6 +1,6 @@
 # 身份授权、账户接入与关联展示的流程 seam
 
-- 状态：RFC 提议，待独立架构审查
+- 状态：已通过独立架构审查，A/B 已实施并完成独立本地验证
 - 日期：2026-10-16
 - 范围：架构审查报告的 01–04 项；分两阶段落地
 - 依据：`api/openapi.yaml`、`.ai/decisions/auth/01-public-registration-and-community-access.md`、`.ai/databases/decisions/08-account-identity-and-community-membership.md`、`.ai/architectures/server/authentication-lifecycle.md`、`.ai/architectures/web/authentication-flow.md` 及当前源码。报告为 `architecture-review-20261016-012436.html`；本 RFC 的源码位置均相对仓库根目录。

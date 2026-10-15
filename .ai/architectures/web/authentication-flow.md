@@ -11,7 +11,7 @@ packages/components
   登录与注册表单 / AuthModal / IdentityLinksPanel / CompleteJoinApplicationModal / JoinReviewDialog
           ↑ props 与回调
 apps/web
-  AuthFlow / PublicRegistrationFlow / CfxAuthorization / AuthProvider / 路由页面
+  AuthFlow / PublicRegistrationFlow / useThirdPartySignIn / CfxAuthorization / AuthProvider / 路由页面
           ↓
   @workspace/api-client
 ```
@@ -52,7 +52,7 @@ PublicRegistrationFlow 在应用层控制 email、code、profile、registered。
 
 旧 `/register?code=` 仅说明流程已调整并删除 code，不自动消费。数字码、密码、grant 和 Cfx ticket 只在内存保存，返回或关闭清理，不写日志、路由 state 或浏览器存储。
 
-CfxAuthorization 支持本地手工加密结果与 redirect；授权在新标签打开，被拦截时保留再次打开入口。只有可见页面串行轮询，取消、owner 变化与卸载使旧 generation 失效。真实 ticket 交给对应业务 operation，显示的外部资料不能替代证明。已有账户的 Cfx 登录与普通登录使用同一安装本站会话逻辑，撤销旧会话期间保持表单锁定；公开注册成功不创建会话。
+CfxAuthorization 支持本地手工加密结果与 redirect；授权在新标签打开，被拦截时保留再次打开入口。只有可见页面串行轮询，取消、owner 变化与卸载使旧 generation 失效。真实 ticket 交给 `apps/web/src/auth/useThirdPartySignIn.ts`，由生成 Client 请求 Cfx sign-in；显示的外部资料不能替代证明。该流程按 Contract 的 signed-in、registration-required、account-exists 三种结果作唯一 typed 分流，登录和注册容器只通过 presentation 回调决定导航、提示和资料完善。共享流程持有提交锁，直至本站会话安装结算；失效、卸载、owner 更换或父流程代次改变后，迟到结果不安装会话，内存中的 grant 与可重试结果被清除。会话变更携带来源；自身写入新 token、安装期间旧会话失效的 HTTP 同步和父容器正在安装密码会话的预期变化不误判为外部换号。专用 SSO 接收流程仍不挂载 Cfx。
 
 注册成功清空敏感材料并使用 `ExMessage.info` 提示，随后一次性前往普通登录。页面 replace 到 `/login`，只用内存路由 state 传邮箱；弹窗切换原容器。手动前往登录或卸载清理自动切换计时器，不创建会话，不带入 SSO 上下文。资格检查与持续错误的通知规则统一见 `.ai/rules/frontend-notifications.md`。
 
@@ -70,7 +70,7 @@ JoinReviewPage 从本人 review-access 取得明确授权社区，平台 admin �
 
 ## 本站会话
 
-普通登录成功后，若浏览器仍保存另一账号的 token，先撤销旧会话；明确的 `SESSION_INVALID` 表示旧会话已无效，可继续登录，其他撤销失败保留旧 token 并提供重试。写入前再次核对浏览器 token 未被其他页面替换，再把新 token 写入 `localStorage` 的 `exwebsite.auth.token`；成功写入后才整页导航或继续当前 OIDC challenge。`AuthProvider` 在启动与其他标签页 storage 事件后调用 `/auth/me` 恢复身份；浏览器存储本身不作为身份依据，旧 token 的迟到资料与错误不能覆盖后来保存的新会话。
+普通密码登录和 Cfx 登录共用 `apps/web/src/auth/session-install.ts` 的本站会话安装。若浏览器仍保存另一账号的 token，先由专用生成 Client 携带捕获的旧 token 撤销旧会话；此请求的 401 只同步当前浏览器会话，不抢先跳转登录页。明确的 `SESSION_INVALID` 表示旧会话已无效，可继续登录；其他撤销失败保留旧 token 并提供重试。成功撤销后若当前流程已取消，只清除仍与捕获值匹配的旧 token。写入前再次核对浏览器 token 未被其他页面替换，再把新 token 写入 `localStorage` 的 `exwebsite.auth.token`；成功写入后才整页导航或继续当前 OIDC challenge。`AuthProvider` 在启动与其他标签页 storage 事件后调用 `/auth/me` 恢复身份；浏览器存储本身不作为身份依据，旧 token 的迟到资料与错误不能覆盖后来保存的新会话。
 
 明确的 `SESSION_INVALID` 只删除仍与本次请求匹配的 token，避免迟到响应清掉较新的登录；资料页读取或修改收到此错误时同步更新顶栏认证状态。临时网络错误保留 token 并显示可重试状态，资料读取失败也结束等待并允许重试。
 
@@ -94,7 +94,7 @@ JoinReviewPage 从本人 review-access 取得明确授权社区，平台 admin �
 
 设置资料只缓存在内存，按当前 token 归属并用请求代次拒绝迟到结果。重新打开会刷新，明确失效或账号切换会清空。保存成功先采用服务器返回的完整本人资料，再调用既有 `AuthContext.refreshProfile()` 同步顶栏；顶栏刷新失败不会回滚已经保存的设置。退出仍交给 `AuthContext.logout()`。设置状态与认证状态的职责依据见 `.ai/decisions/web/04-settings-state-separate-from-auth-context.md`。
 
-关联账户分区由 IdentityLinksExperience 独立读取，不受本人资料或通知偏好错误阻断。当前平台关联存在时不静默替换；Cfx disabled 仍展示和允许确认解绑。社区影响读取未完成或失败时明确显示未知影响，解绑不删除成员资格。关联 POST 结果不确定时 GET 本人关联校准界面，不盲目重复授权。token owner 变化立即卸载旧分区，迟到结果不能覆盖新账户。
+关联账户分区由 `apps/web/src/settings/IdentityLinksExperience.tsx` 独立读取，不受本人资料或通知偏好错误阻断。它按 provider 将服务器列表投影为共享 `IdentityLinksPanel` 的条目和动作配置；共享组件只展示，Cfx 授权由 Web 注入，Google、QQ 仍禁用。已有当前关联不静默替换；Cfx disabled 仍展示和允许确认解绑。社区影响按 provider 保存，只统计已加入且 `requiredProviders` 匹配该 provider 的社区；可解绑项在读取未完成或失败时明示影响未知，当前 Cfx 分区提供重试，解绑不删除成员资格。关联 POST 或解绑 DELETE 后都 GET 本人关联核实，即使写请求报错也用重读判断结果；重读未确认时锁定同一 provider 的重复操作并提供显式重读，不盲目重用 ticket。token owner 变化使旧分区及请求代次失效，AbortSignal 与捕获的 owner 防止迟到结果覆盖新账户。
 
 ## SSO 接收流程
 
