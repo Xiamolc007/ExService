@@ -23,6 +23,10 @@ _最后更新：2026-10-15_
 
 跨模块结构见 `.ai/architectures/overview.md`；业务术语见 `.ai/CONTEXT.md`；账号、申请与邀请数据规则见 `.ai/databases/data-model.md`；决策索引见 `.ai/decisions/README.md`。
 
+## 支持中心
+
+支持中心的已接受边界与实现范围见 `.ai/decisions/support-center/01-authenticated-support-and-clickup-view.md`，内容与会话接线见 `.ai/architectures/web/content-rendering.md`。页面实现不代表反馈提交或 ClickUp 外部接入已完整验收；初始技术设计与 RFC 保留在 `.notes/support-center/`。
+
 ## 知识归属
 
 | 位置 | 内容 |

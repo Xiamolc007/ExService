@@ -23,6 +23,7 @@ _最后更新：2026-10-15_
 | `.ai/decisions/web/02-react-route-skeleton.md` | Web | 已接受。 |
 | `.ai/decisions/web/03-exui-as-component-and-theme-source.md` | Web | 已接受。 |
 | `.ai/decisions/web/04-settings-state-separate-from-auth-context.md` | Web | 已实现。 |
+| `.ai/decisions/support-center/01-authenticated-support-and-clickup-view.md` | 支持中心 | 页面与访问边界已实现，反馈提交待实现。 |
 | `.ai/decisions/contract-tests/01-assert-raw-handler-output.md` | 测试 | 已接受。 |
 | `.ai/decisions/contract-tests/02-contract-as-sole-schema-source.md` | 测试 | 已接受。 |
 

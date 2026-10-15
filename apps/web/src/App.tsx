@@ -16,7 +16,9 @@ import { JoinReviewPage } from '@web/src/pages/JoinReviewPage'
 import { DocsPage } from '@web/src/pages/DocsPage'
 import { SignedOutPage } from '@web/src/pages/IdentityPage/SignedOutPage'
 import { OidcPage } from '@web/src/pages/IdentityPage/OidcPage'
+import { SupportAccess } from './routes/SupportAccess'
 const AboutUs = lazy(() => import('./pages/AboutUs/AboutUs').then(module => ({ default: module.AboutUs })))
+const SupportRoutes = lazy(() => import('./pages/Support/SupportRoutes').then(module => ({ default: module.SupportRoutes })))
 
 /**
  * 路由表：认证和 SSO 页面使用独立布局，其余页面共用站点顶栏。
@@ -39,6 +41,7 @@ export function App() {
           <Route path="/docs" element={<DocsPage />} />
           <Route path="/about" element={<Navigate to="/aboutus" replace />} />
           <Route path="/aboutus/*" element={<ContentBoundary returnUrl="/"><Suspense fallback={<p role="status" style={{ padding: '3rem' }}>正在加载介绍…</p>}><AboutUs /></Suspense></ContentBoundary>} />
+          <Route path="/support/*" element={<SupportAccess><ContentBoundary returnUrl="/"><Suspense fallback={<p role="status" style={{ padding: '3rem' }}>正在加载支持中心…</p>}><SupportRoutes /></Suspense></ContentBoundary></SupportAccess>} />
           <Route path="/communities/rifling-911" element={<JoinPage />} />
           <Route path="/communities/caep" element={<CAEPJoinPage />} />
           <Route path="/join/rifling-911" element={<JoinPage />} />
