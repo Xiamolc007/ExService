@@ -34,18 +34,18 @@ function normalizeValidatedPrepare(input: StoredPrepare): StoredPrepare {
   if (!title || [...title].length > 200 || /[\x00-\x1f\x7f-\x9f]/.test(title)) throw new FeedbackError('FEEDBACK_INVALID_INPUT')
   const largeFileInfo = f.largeFileInfo && f.largeFileInfo.trim() ? f.largeFileInfo : null
   if (largeFileInfo !== null && utf8Bytes(largeFileInfo) > 16384) throw new FeedbackError('FEEDBACK_TOO_LARGE')
-  const analysis = f.kind === 'bug' ? composeBug(f.details) : analyzeRequest(f.contentText)
+  const analysis = f.kind === 'bug' ? composeBug(f.details, f.contentFormat) : analyzeRequest(f.contentText, f.contentFormat)
   if (!analysis.valid) throw new FeedbackError(analysis.reason === 'too_large' ? 'FEEDBACK_TOO_LARGE' : 'FEEDBACK_INVALID_INPUT')
   let form: FeedbackForm
   switch (f.kind) {
-    case 'bug': form = { kind: 'bug', title, typeOptionId: f.typeOptionId, largeFileInfo, details: { description: f.details.description, reproductionSteps: f.details.reproductionSteps, expectedResult: f.details.expectedResult, actualResult: f.details.actualResult, frequency: f.details.frequency } }; break
-    case 'feature': form = { kind: 'feature', title, typeOptionId: f.typeOptionId, departmentOptionId: f.departmentOptionId, largeFileInfo, contentText: f.contentText }; break
-    case 'asset': form = { kind: 'asset', title, typeOptionId: f.typeOptionId, action: f.action, largeFileInfo, contentText: f.contentText }; break
-    case 'request': form = { kind: 'request', title, typeOptionId: f.typeOptionId, largeFileInfo, contentText: f.contentText }; break
-    case 'content': form = { kind: 'content', title, action: f.action, largeFileInfo, contentText: f.contentText }; break
-    case 'campaign': form = { kind: 'campaign', title, largeFileInfo, contentText: f.contentText }; break
-    case 'suggestion': form = { kind: 'suggestion', title, largeFileInfo, contentText: f.contentText }; break
-    case 'complaint': form = { kind: 'complaint', title, largeFileInfo, contentText: f.contentText, anonymous: f.anonymous }; break
+    case 'bug': form = { kind: 'bug', title, typeOptionId: f.typeOptionId, largeFileInfo, details: { description: f.details.description, reproductionSteps: f.details.reproductionSteps, expectedResult: f.details.expectedResult, actualResult: f.details.actualResult, frequency: f.details.frequency }, ...(f.contentFormat && {contentFormat:f.contentFormat}) }; break
+    case 'feature': form = { kind: 'feature', title, typeOptionId: f.typeOptionId, departmentOptionId: f.departmentOptionId, largeFileInfo, contentText: f.contentText, ...(f.contentFormat && {contentFormat:f.contentFormat}) }; break
+    case 'asset': form = { kind: 'asset', title, typeOptionId: f.typeOptionId, action: f.action, largeFileInfo, contentText: f.contentText, ...(f.contentFormat && {contentFormat:f.contentFormat}) }; break
+    case 'request': form = { kind: 'request', title, typeOptionId: f.typeOptionId, largeFileInfo, contentText: f.contentText, ...(f.contentFormat && {contentFormat:f.contentFormat}) }; break
+    case 'content': form = { kind: 'content', title, action: f.action, largeFileInfo, contentText: f.contentText, ...(f.contentFormat && {contentFormat:f.contentFormat}) }; break
+    case 'campaign': form = { kind: 'campaign', title, largeFileInfo, contentText: f.contentText, ...(f.contentFormat && {contentFormat:f.contentFormat}) }; break
+    case 'suggestion': form = { kind: 'suggestion', title, largeFileInfo, contentText: f.contentText, ...(f.contentFormat && {contentFormat:f.contentFormat}) }; break
+    case 'complaint': form = { kind: 'complaint', title, largeFileInfo, contentText: f.contentText, anonymous: f.anonymous, ...(f.contentFormat && {contentFormat:f.contentFormat}) }; break
   }
   const ids = new Set<string>()
   let total = 0
@@ -57,7 +57,7 @@ function normalizeValidatedPrepare(input: StoredPrepare): StoredPrepare {
   if (total > FEEDBACK_LIMITS.totalFileBytes) throw new FeedbackError('FEEDBACK_TOO_LARGE')
   return { submissionKey: input.submissionKey, form, attachments }
 }
-export function content(form: FeedbackForm): string { return (form.kind === 'bug' ? composeBug(form.details) : analyzeRequest(form.contentText)).markdown }
+export function content(form: FeedbackForm): string { return (form.kind === 'bug' ? composeBug(form.details, form.contentFormat) : analyzeRequest(form.contentText, form.contentFormat)).markdown }
 export function normalizeAdvance(value:unknown):FeedbackAdvance {
   if(!advanceValidator(value))throw new FeedbackError('FEEDBACK_INVALID_INPUT')
   const input=value as FeedbackAdvance

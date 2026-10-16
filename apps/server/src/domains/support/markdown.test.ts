@@ -3,6 +3,23 @@ import { analyzeRequest } from '@workspace/common/feedback-content'
 import { finalMarkdown, equivalentMarkdown } from './markdown.js'
 
 describe('support Markdown verification', () => {
+  it('compares GFM tables structurally and preserves task checked state', () => {
+    const marker = '11111111-1111-4111-8111-111111111111'
+    const expected = finalMarkdown('| Step | State |\n| --- | --- |\n| one | ready |\n\n- [x] done\n- [ ] waiting\n\n~~old~~', marker)
+    const spacing = finalMarkdown('|Step|State|\n|---|---|\n|one|ready|\n\n- [X] done\n- [ ] waiting\n\n~~old~~', marker)
+    expect(equivalentMarkdown(expected, spacing, 'markdown')).toBe(true)
+    expect(equivalentMarkdown(expected, spacing.replace('[X]', '[ ]'), 'markdown')).toBe(false)
+    expect(equivalentMarkdown(expected, spacing.replace('~~old~~', 'old'), 'markdown')).toBe(false)
+  })
+  it('compares Markdown autolinks as links while retaining legacy plain URL readback', () => {
+    const marker = '11111111-1111-4111-8111-111111111111'
+    const expected = finalMarkdown('Visit https://example.com', marker)
+    const remote = finalMarkdown('Visit <https://example.com>', marker)
+    expect(equivalentMarkdown(expected, remote, 'markdown')).toBe(true)
+    expect(equivalentMarkdown(expected, finalMarkdown('Visit [https://example.com](https://evil.example)', marker), 'markdown')).toBe(false)
+    const legacy = finalMarkdown(analyzeRequest('Visit https://example.com').markdown, marker)
+    expect(equivalentMarkdown(legacy, remote)).toBe(true)
+  })
   it('checks structure and exact submission marker in remote content', () => {
     const markdown = finalMarkdown(analyzeRequest('# text').markdown, '11111111-1111-4111-8111-111111111111')
     expect(markdown).toContain('ExWebsite 提交编号：11111111-1111-4111-8111-111111111111')

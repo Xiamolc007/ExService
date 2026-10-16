@@ -1,0 +1,13 @@
+.field { min-width: 0; border: 1px solid var(--exui-border-default); border-radius: var(--density-control-radius); background: var(--exui-surface-primary); }
+.field:focus-within { outline: 2px solid var(--exui-border-focus, var(--exui-text-primary)); outline-offset: 2px; }
+.field[data-invalid] { border-color: var(--exui-feedback-error); }
+.field[data-readonly] { background: var(--exui-surface-secondary); }
+.content { padding: .75rem 1rem; font-size: .875rem; }
+.legacy { min-height: 5rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.legacy.primary { min-height: 12rem; }
+.content :global(.tiptap) { min-height: 5rem; outline: none; overflow-wrap: anywhere; }
+.primary :global(.tiptap) { min-height: 12rem; }
+.content :global(.tiptap) > :first-child { margin-top: 0; }
+.content :global(.tiptap) > :last-child { margin-bottom: 0; }
+.error { padding: 0 1rem .5rem; color: var(--exui-feedback-error); font-size: .8125rem; }
+.error p { margin: .25rem 0; }

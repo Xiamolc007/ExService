@@ -7,6 +7,11 @@ import { FeedbackProvider, useFeedback } from './FeedbackProvider'
 import type { FeedbackSnapshot } from './flow'
 import { writeToken } from '../../../auth/storage'
 
+
+function pasteMarkdown(node: HTMLElement, text: string) {
+  fireEvent.paste(node, { clipboardData: { files: [], getData: (type: string) => type === 'text/plain' ? text : '' } })
+}
+
 const { options, lookup, get, prepare } = vi.hoisted(() => ({ options: vi.fn(), lookup: vi.fn(), get: vi.fn(), prepare: vi.fn() }))
 vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
 const originalScroll = Element.prototype.scrollIntoView
@@ -35,6 +40,22 @@ function mount(area: 'development' | 'community' = 'development') {
 }
 function mountCommunity() { mount('community') }
 
+it('submits formatted editor content as Markdown and keeps rich paste downgrade silent', async () => {
+  options.mockResolvedValue({ ...good, kinds: [{ kind: 'suggestion', available: true, reason: null }], actions: [] })
+  prepare.mockImplementationOnce(() => new Promise(() => {}))
+  mountCommunity()
+  fireEvent.click((await screen.findByText('反馈和建议')).closest('button')!)
+  fireEvent.change(screen.getByLabelText('标题'), { target: { value: 'Markdown 建议' } })
+  const content = screen.getByRole('textbox', { name: '内容' })
+  fireEvent.paste(content, { clipboardData: { files: [], getData: (type: string) => type === 'text/html' ? '<p><span style="color:red"><strong>加粗正文</strong></span></p>' : '加粗正文' } })
+  expect(content.querySelector('strong')?.textContent).toBe('加粗正文')
+  expect(screen.queryByText(/降级|粘贴为纯文本|简化不兼容/)).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '提交' }))
+  await waitFor(() => expect(prepare).toHaveBeenCalledOnce())
+  expect(prepare.mock.calls[0]?.[0].form).toEqual({ kind: 'suggestion', title: 'Markdown 建议', contentText: '**加粗正文**', contentFormat: 'markdown', largeFileInfo: null })
+  expect(content.getAttribute('contenteditable')).toBe('false')
+})
+
 afterEach(() => { cleanup(); sessionStorage.clear(); localStorage.clear(); vi.clearAllMocks() })
 
 it('shows the community cards and keeps anonymity only in the complaint draft', async () => {
@@ -51,15 +72,15 @@ it('shows the community cards and keeps anonymity only in the complaint draft', 
   expect(anonymous.getAttribute('aria-checked')).toBe('false')
   fireEvent.click(anonymous)
   expect(anonymous.getAttribute('aria-checked')).toBe('true')
-  fireEvent.change(screen.getByLabelText('内容'), { target: { value: '投诉正文' } })
+  pasteMarkdown(screen.getByLabelText('内容'), '投诉正文')
   fireEvent.click(screen.getByRole('button', { name: '返回选择类型' }))
   fireEvent.click(screen.getByText('反馈和建议').closest('button')!)
   expect(screen.queryByRole('switch', { name: '匿名提交' })).toBeNull()
-  expect((screen.getByLabelText('内容') as HTMLTextAreaElement).value).toBe('')
+  expect(screen.getByLabelText('内容').textContent).toBe('')
   fireEvent.click(screen.getByRole('button', { name: '返回选择类型' }))
   fireEvent.click(screen.getByText('投诉').closest('button')!)
   expect(screen.getByRole('switch', { name: '匿名提交' }).getAttribute('aria-checked')).toBe('true')
-  expect((screen.getByLabelText('内容') as HTMLTextAreaElement).value).toBe('投诉正文')
+  expect(screen.getByLabelText('内容').textContent).toBe('投诉正文')
 })
 it('confirms discarding an anonymous-only complaint draft and resets the switch', async () => {
   options.mockResolvedValue({ ...good, kinds: [{ kind: 'suggestion', available: true, reason: null }, { kind: 'complaint', available: true, reason: null }], actions: [] })
@@ -94,11 +115,11 @@ it('freezes complaint anonymity when submit begins and preserves it in prepare p
   mountCommunity()
   fireEvent.click((await screen.findByText('投诉')).closest('button')!)
   fireEvent.change(screen.getByLabelText('标题'), { target: { value: '投诉标题' } })
-  fireEvent.change(screen.getByLabelText('内容'), { target: { value: '投诉正文' } })
+  pasteMarkdown(screen.getByLabelText('内容'), '投诉正文')
   fireEvent.click(screen.getByRole('switch', { name: '匿名提交' }))
   fireEvent.click(screen.getByRole('button', { name: '提交' }))
   await waitFor(() => expect(prepare).toHaveBeenCalledOnce())
-  expect(prepare.mock.calls[0]?.[0].form).toEqual({ kind: 'complaint', title: '投诉标题', contentText: '投诉正文', largeFileInfo: null, anonymous: true })
+  expect(prepare.mock.calls[0]?.[0].form).toEqual({ contentFormat: 'markdown', kind: 'complaint', title: '投诉标题', contentText: '投诉正文', largeFileInfo: null, anonymous: true })
   expect((screen.getByRole('switch', { name: '匿名提交' }) as HTMLButtonElement).disabled).toBe(true)
   expect(sessionStorage.getItem('exwebsite.feedback.community.v1')).toContain('submissionKey')
   expect(sessionStorage.getItem('exwebsite.feedback.v2')).toBeNull()
@@ -109,10 +130,10 @@ it('sends a suggestion without an anonymous property', async () => {
   mountCommunity()
   fireEvent.click((await screen.findByText('反馈和建议')).closest('button')!)
   fireEvent.change(screen.getByLabelText('标题'), { target: { value: '服务建议' } })
-  fireEvent.change(screen.getByLabelText('内容'), { target: { value: '可以增加说明' } })
+  pasteMarkdown(screen.getByLabelText('内容'), '可以增加说明')
   fireEvent.click(screen.getByRole('button', { name: '提交' }))
   await waitFor(() => expect(prepare).toHaveBeenCalledOnce())
-  expect(prepare.mock.calls[0]?.[0].form).toEqual({ kind: 'suggestion', title: '服务建议', contentText: '可以增加说明', largeFileInfo: null })
+  expect(prepare.mock.calls[0]?.[0].form).toEqual({ contentFormat: 'markdown', kind: 'suggestion', title: '服务建议', contentText: '可以增加说明', largeFileInfo: null })
   expect(screen.queryByRole('switch', { name: '匿名提交' })).toBeNull()
 })
 it('does not offer the previous account frozen complaint for replay after a session switch', async () => {
@@ -122,7 +143,7 @@ it('does not offer the previous account frozen complaint for replay after a sess
   mountCommunity()
   fireEvent.click((await screen.findByText('投诉')).closest('button')!)
   fireEvent.change(screen.getByLabelText('标题'), { target: { value: 'A 的投诉' } })
-  fireEvent.change(screen.getByLabelText('内容'), { target: { value: 'A 的私密正文' } })
+  pasteMarkdown(screen.getByLabelText('内容'), 'A 的私密正文')
   fireEvent.click(screen.getByRole('switch', { name: '匿名提交' }))
   fireEvent.click(screen.getByRole('button', { name: '提交' }))
   await waitFor(() => expect(lookup).toHaveBeenCalledOnce())
@@ -175,8 +196,8 @@ it('shows six types, isolates drafts and confirms closing', async () => {
   const request = (await screen.findByText('需求')).closest('button')!
   expect(screen.getByText('Bug 反馈').closest('button')).toBeTruthy()
   fireEvent.click(request)
-  const content = screen.getByLabelText('内容') as HTMLTextAreaElement
-  fireEvent.change(content, { target: { value: '# 字面文本' } })
+  const content = screen.getByLabelText('内容')
+  pasteMarkdown(content, '# 标题草稿')
   fireEvent.click(screen.getByRole('button', { name: '返回选择类型' }))
   fireEvent.click(screen.getByText('Bug 反馈').closest('button')!)
   expect(screen.queryByLabelText('部门')).toBeNull()
@@ -184,18 +205,18 @@ it('shows six types, isolates drafts and confirms closing', async () => {
   expect(screen.queryByRole('button', { name: '关闭' })).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: '返回选择类型' }))
   fireEvent.click(screen.getByText('需求').closest('button')!)
-  expect((screen.getByLabelText('内容') as HTMLTextAreaElement).value).toBe('# 字面文本')
+  expect(screen.getByLabelText('内容').textContent).toBe('标题草稿')
   fireEvent.click(screen.getByRole('button', { name: '关闭反馈表单' }))
   expect(await screen.findByText('放弃未提交内容？')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: '继续填写' }))
   await waitFor(() => expect(screen.queryByRole('dialog', { name: '放弃未提交内容？' })).toBeNull())
-  expect((screen.getByLabelText('内容') as HTMLTextAreaElement).value).toBe('# 字面文本')
+  expect(screen.getByLabelText('内容').textContent).toBe('标题草稿')
   fireEvent.click(screen.getByRole('button', { name: '关闭反馈表单' }))
   fireEvent.click(screen.getByRole('button', { name: '放弃内容' }))
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   fireEvent.click(screen.getByRole('button', { name: '功能和需求' }))
   fireEvent.click((await screen.findByText('需求')).closest('button')!)
-  expect((screen.getByLabelText('内容') as HTMLTextAreaElement).value).toBe('')
+  expect(screen.getByLabelText('内容').textContent).toBe('')
 })
 it('requires the Bug problem category and keeps other classification fields optional', async () => {
   options.mockResolvedValue(good)
@@ -204,7 +225,7 @@ it('requires the Bug problem category and keeps other classification fields opti
   const category = screen.getByRole('combobox', { name: '问题分类' })
   expect(category.getAttribute('aria-required')).toBe('true')
   fireEvent.change(screen.getByLabelText('标题'), { target: { value: '车库异常' } })
-  fireEvent.change(screen.getByLabelText('问题描述'), { target: { value: '取车后车辆没有出现' } })
+  pasteMarkdown(screen.getByLabelText('问题描述'), '取车后车辆没有出现')
   fireEvent.click(screen.getByRole('button', { name: '提交' }))
   expect(await screen.findByText('请选择问题分类', { selector: '[data-slot="field-error"]' })).toBeTruthy()
   fireEvent.keyDown(category, { key: 'ArrowDown' })

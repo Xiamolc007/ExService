@@ -25,7 +25,6 @@ import {
   Skeleton,
   Spinner,
   Switch,
-  Textarea,
 } from "@exre/exui";
 import { ClickUpFieldInput, FileUploader } from "@workspace/components";
 import { ArrowLeft } from "lucide-react";
@@ -46,7 +45,9 @@ import {
   toFeedbackForm,
   type FeedbackDraft,
   type FeedbackKind,
+  type MarkdownField,
 } from "./schema";
+import { FeedbackMarkdownField } from './FeedbackMarkdownField';
 import styles from "./FeedbackModal.module.scss";
 import { useFeedback } from "./FeedbackProvider";
 import { actions, fieldGuidance } from "./feedbackFormConfig";
@@ -116,6 +117,7 @@ function hasContent(draft: FeedbackDraft): boolean {
       ([key, value]) =>
         key !== "files" &&
         key !== "largeFileInfoEnabled" &&
+        key !== "contentFormat" &&
         typeof value === "string" &&
         Boolean(value.trim()),
     )
@@ -396,12 +398,17 @@ export function FeedbackModal({ area, open, onOpenChange: setOpen, returnFocus }
             </FieldDescription>
           )}
           {textarea ? (
-            <Textarea
-              {...form.register(name)}
-              {...common}
-              className={primary ? styles.primaryInput : styles.secondaryInput}
-              rows={primary ? 8 : 3}
-            />
+            <Controller name={name as MarkdownField} control={form.control} render={({ field: controlled }) => (
+              <FeedbackMarkdownField key={`${kind}-${name}`} id={common.id} label={label} value={controlled.value}
+                contentFormat={form.getValues('contentFormat')} placeholder={placeholder} primary={primary}
+                disabled={locked} required={!optional} invalid={Boolean(error)} describedBy={describedBy}
+                onChange={controlled.onChange} onBlur={controlled.onBlur} inputRef={controlled.ref}
+                onValidationChange={message => {
+                  const editorErrors = form.getValues('editorErrors');
+                  if (editorErrors[name as MarkdownField] === (message ?? undefined)) return;
+                  form.setValue('editorErrors', { ...editorErrors, [name]: message ?? undefined }, { shouldValidate: true });
+                }} />
+            )} />
           ) : (
             <Input {...form.register(name)} {...common} />
           )}

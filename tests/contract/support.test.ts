@@ -13,6 +13,61 @@ afterEach(async()=>{await Promise.all(apps.splice(0).map(a=>a.close()));await Pr
 async function setup(){const f=await createTestAuth();fixtures.push(f);const s=await supportFixture(f);const app=createApp({...f,clickupServices:s.fake.service,supportServices:s.support});apps.push(app);const rawResults=new Map<string,unknown>();app.addHook('preSerialization',async(request,reply,payload)=>{const operation=request.routeOptions.schema?.operationId;if(typeof operation==='string'&&operation.includes('SupportFeedback')&&reply.statusCode<300)rawResults.set(operation,structuredClone(payload));return payload});await app.ready();const session=await f.authServices.login({email:'support@example.com',password:'valid password'});return {f,...s,app,rawResults,headers:{authorization:`Bearer ${session.token}`}}}
 async function multipart(bytes:Buffer,name='file',filename='a.txt',type='text/plain'){const form=new FormData();form.append(name,new Blob([Uint8Array.from(bytes)],{type}),filename);const r=new Response(form);return {headers:{'content-type':r.headers.get('content-type')!},payload:Buffer.from(await r.arrayBuffer())}}
 describe('support Contract HTTP and raw handlers',()=>{
+  it('rejects Markdown that would absorb the frozen submission footer',async()=>{
+    const {app,support,userId,headers,f}=await setup()
+    const reply={header:vi.fn().mockReturnThis(),code:vi.fn().mockReturnThis()} as unknown as Parameters<typeof serviceHandlers.prepareSupportFeedback>[1]
+    const base=requestInput()
+    for(const body of ['```txt\nhello','~~~txt\nhello']) {
+      const input={...base,submissionKey:randomUUID(),form:{...base.form,contentFormat:'markdown' as const,contentText:body}}
+      expect((await app.inject({method:'POST',url:'/api/support/feedback/submissions',headers,payload:input})).statusCode).toBe(400)
+      await expect(serviceHandlers.prepareSupportFeedback({server:{supportServices:support},body:input,authSession:{userId}} as unknown as ApiRequest<'prepareSupportFeedback'>,reply)).rejects.toMatchObject({code:'FEEDBACK_INVALID_INPUT'})
+    }
+    const closed={...base,submissionKey:randomUUID(),form:{...base.form,contentFormat:'markdown' as const,contentText:'```html\n<script>literal</script>\n```'}}
+    const response=await app.inject({method:'POST',url:'/api/support/feedback/submissions',headers,payload:closed})
+    expect(response.statusCode).toBe(201)
+    const row=(await f.db.query<{final_markdown:string}>('SELECT final_markdown FROM support_feedback_submissions WHERE id=$1',[response.json().id])).rows[0]!
+    expect(row.final_markdown).toContain('```\n\n---\n\nExWebsite 提交编号：')
+  })
+  it('preserves Markdown with content rule 1 in HTTP, raw handlers and frozen rows while legacy replay stays literal',async()=>{
+    const {app,support,userId,headers,f,fake}=await setup()
+    const reply={header:vi.fn().mockReturnThis(),code:vi.fn().mockReturnThis()} as unknown as Parameters<typeof serviceHandlers.prepareSupportFeedback>[1]
+    const legacy=requestInput()
+    legacy.form.contentText='**bold**'
+    const old=await app.inject({method:'POST',url:'/api/support/feedback/submissions',headers,payload:legacy})
+    expect(old.statusCode).toBe(201)
+    expect(old.json().form).toEqual(legacy.form)
+    const oldRow=(await f.db.query<{content_rule_version:number;user_markdown:string}>('SELECT content_rule_version,user_markdown FROM support_feedback_submissions WHERE id=$1',[old.json().id])).rows[0]!
+    expect(oldRow.content_rule_version).toBe(1)
+    expect(oldRow.user_markdown).toBe('\\*\\*bold\\*\\*')
+    const newInput={...requestInput(),form:{...requestInput().form,contentFormat:'markdown' as const,contentText:'**bold**\n\n- [x] done'}}
+    const response=await app.inject({method:'POST',url:'/api/support/feedback/submissions',headers,payload:newInput})
+    expect(response.statusCode).toBe(201)
+    expect(validateSnapshot(response.json())).toBe(true)
+    expect(response.json().form.contentFormat).toBe('markdown')
+    const raw=await serviceHandlers.prepareSupportFeedback({server:{supportServices:support},body:newInput,authSession:{userId}} as unknown as ApiRequest<'prepareSupportFeedback'>,reply)
+    expect(validateSnapshot(raw)).toBe(true)
+    expect(raw.form).toEqual(newInput.form)
+    const row=(await f.db.query<{content_rule_version:number;form_version:number;user_markdown:string;final_markdown:string}>('SELECT content_rule_version,form_version,user_markdown,final_markdown FROM support_feedback_submissions WHERE id=$1',[response.json().id])).rows[0]!
+    expect(row.content_rule_version).toBe(1)
+    expect(row.form_version).toBe(2)
+    expect(row.user_markdown).toBe(newInput.form.contentText)
+    expect(row.final_markdown).toContain(newInput.form.contentText)
+    const replay=await app.inject({method:'POST',url:'/api/support/feedback/submissions',headers,payload:newInput})
+    expect(replay.statusCode).toBe(200)
+    expect(replay.json().id).toBe(response.json().id)
+    expect((await app.inject({method:'POST',url:'/api/support/feedback/submissions',headers,payload:{...legacy,form:{...legacy.form,contentFormat:'markdown'}}})).statusCode).toBe(409)
+    expect((await support.advance(userId,old.json().id,{expectedRevision:old.json().revision,intent:'continue'})).snapshot.status).toBe('completed')
+    expect(fake.createTask).toHaveBeenCalledWith(expect.any(String),expect.objectContaining({markdown_content:expect.stringContaining(oldRow.user_markdown)}))
+    const bugInput={submissionKey:randomUUID(),form:{kind:'bug' as const,title:'Markdown bug',typeOptionId:typeOption,largeFileInfo:null,contentFormat:'markdown' as const,details:{description:'**broken**',reproductionSteps:'- [x] reproduce',expectedResult:'`ready`',actualResult:'~~wrong~~',frequency:null}},attachments:[]}
+    const bug=await app.inject({method:'POST',url:'/api/support/feedback/submissions',headers,payload:bugInput})
+    expect(bug.statusCode).toBe(201)
+    expect(validateSnapshot(bug.json())).toBe(true)
+    const bugRow=(await f.db.query<{content_rule_version:number;user_markdown:string}>('SELECT content_rule_version,user_markdown FROM support_feedback_submissions WHERE id=$1',[bug.json().id])).rows[0]!
+    expect(bugRow.content_rule_version).toBe(1)
+    expect(bugRow.user_markdown).toContain('## 问题描述\n\n**broken**')
+    expect(bugRow.user_markdown).toContain('## 复现步骤\n\n- [x] reproduce')
+    expect((await support.advance(userId,bug.json().id,{expectedRevision:bug.json().revision,intent:'continue'})).snapshot.status).toBe('completed')
+  })
   it('serves community options and validates v3 forms in HTTP and raw handlers',async()=>{
     const {app,support,userId,headers}=await setup()
     const reply={header:vi.fn().mockReturnThis(),code:vi.fn().mockReturnThis()} as unknown as Parameters<typeof serviceHandlers.prepareSupportFeedback>[1]

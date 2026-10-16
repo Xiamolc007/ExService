@@ -15,7 +15,7 @@ export type CommunityProfile = Readonly<{
   userFieldId: string
   largeFileFieldId: string
 }>
-export type ValidatedFrozenTask = { payload: FrozenTaskPayload; formVersion: 2 | 3; userFieldIds: ReadonlySet<string> }
+export type ValidatedFrozenTask = { payload: FrozenTaskPayload; formVersion: 2 | 3; contentFormat: 'markdown' | undefined; userFieldIds: ReadonlySet<string> }
 export type FrozenTaskColumns = {
   task_payload_json: string
   task_payload_sha256: string
@@ -86,7 +86,7 @@ export function validateStoredTask(row: FrozenTaskColumns, form: FeedbackForm, a
   if (payload.task.tags.length !== tagCount || requiredTag && payload.task.tags[0] !== requiredTag ||
       payload.task.tags.some(tag => typeof tag !== 'string' || !tag || tag.length > 255 || /[\x00-\x1f\x7f]/.test(tag))) corrupt()
   const userFieldIds = new Set([...historicalCommunityProfiles, active].map(profile => profile.userFieldId))
-  return { payload, formVersion: community ? 3 : 2, userFieldIds }
+  return { payload, formVersion: community ? 3 : 2, contentFormat: form.contentFormat, userFieldIds }
 }
 
 export function matchesFrozenTask(remote: ClickUpTask, frozen: ValidatedFrozenTask, taskId: string): boolean {
@@ -94,7 +94,7 @@ export function matchesFrozenTask(remote: ClickUpTask, frozen: ValidatedFrozenTa
   const expected = payload.task
   if (remote.id !== taskId || remote.list.id !== payload.listId || (remote.custom_item_id ?? 0) !== expected.custom_item_id ||
       remote.name !== expected.name || remote.status.status !== expected.status ||
-      !equivalentMarkdown(expected.markdown_content, remote.markdown_description)) return false
+      !equivalentMarkdown(expected.markdown_content, remote.markdown_description, frozen.contentFormat)) return false
   const controlled = new Set([...operationTags, ...expected.tags, ...(frozen.formVersion === 3 ? ['反馈', '投诉'] : [])])
   const actualTags = remote.tags.filter(tag => controlled.has(tag))
   if (actualTags.length !== expected.tags.length || actualTags.some(tag => !expected.tags.includes(tag))) return false

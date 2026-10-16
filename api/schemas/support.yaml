@@ -27,6 +27,9 @@ FeedbackRequestForm:
       type: string
       minLength: 1
       maxLength: 65536
+    contentFormat: &contentFormat
+      type: string
+      const: markdown
 FeedbackBugDetails:
   type: object
   additionalProperties: false
@@ -86,6 +89,7 @@ FeedbackBugForm:
     largeFileInfo: *a4
     details:
       $ref: ../openapi.yaml#/components/schemas/FeedbackBugDetails
+    contentFormat: *contentFormat
 FeedbackFeatureForm:
   type: object
   additionalProperties: false
@@ -98,6 +102,7 @@ FeedbackFeatureForm:
       $ref: ../openapi.yaml#/components/schemas/NullableUuid
     largeFileInfo: *a4
     contentText: { type: string, minLength: 1, maxLength: 65536 }
+    contentFormat: *contentFormat
 FeedbackAssetForm:
   type: object
   additionalProperties: false
@@ -109,6 +114,7 @@ FeedbackAssetForm:
     action: &action { type: string, enum: [add, modify, delete, other] }
     largeFileInfo: *a4
     contentText: { type: string, minLength: 1, maxLength: 65536 }
+    contentFormat: *contentFormat
 FeedbackContentForm:
   type: object
   additionalProperties: false
@@ -119,6 +125,7 @@ FeedbackContentForm:
     action: *action
     largeFileInfo: *a4
     contentText: { type: string, minLength: 1, maxLength: 65536 }
+    contentFormat: *contentFormat
 FeedbackCampaignForm:
   type: object
   additionalProperties: false
@@ -128,6 +135,7 @@ FeedbackCampaignForm:
     title: *a1
     largeFileInfo: *a4
     contentText: { type: string, minLength: 1, maxLength: 65536 }
+    contentFormat: *contentFormat
 FeedbackSuggestionForm:
   type: object
   additionalProperties: false
@@ -136,6 +144,7 @@ FeedbackSuggestionForm:
     kind: { type: string, const: suggestion }
     title: *a1
     contentText: { type: string, minLength: 1, maxLength: 65536 }
+    contentFormat: *contentFormat
     largeFileInfo: *a4
 FeedbackComplaintForm:
   type: object
@@ -145,6 +154,7 @@ FeedbackComplaintForm:
     kind: { type: string, const: complaint }
     title: *a1
     contentText: { type: string, minLength: 1, maxLength: 65536 }
+    contentFormat: *contentFormat
     largeFileInfo: *a4
     anonymous: { type: boolean }
 FeedbackForm:

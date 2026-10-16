@@ -8,6 +8,11 @@ import { FeedbackProvider, useFeedback } from './FeedbackProvider'
 import type { FeedbackSnapshot } from './flow'
 import { writeToken } from '../../../auth/storage'
 
+
+function pasteMarkdown(node: HTMLElement, text: string) {
+  fireEvent.paste(node, { clipboardData: { files: [], getData: (type: string) => type === 'text/plain' ? text : '' } })
+}
+
 const port = vi.hoisted(() => ({ prepare: vi.fn(), get: vi.fn(), lookup: vi.fn(), upload: vi.fn(), advance: vi.fn() }))
 vi.mock('./api', () => ({
   getFeedbackOptions: async () => ({ available: true, reason: null, fields: [], actions: [], limits: {}, kinds: ['suggestion', 'complaint'].map(kind => ({ kind, available: true, reason: null })) }),
@@ -32,7 +37,7 @@ async function start(waitForLoading = true) {
   fireEvent.click(screen.getByRole('button', { name: '投诉和建议' }))
   fireEvent.click((await screen.findByText('反馈和建议')).closest('button')!)
   fireEvent.change(screen.getByLabelText('标题'), { target: { value: '体验建议' } })
-  fireEvent.change(screen.getByLabelText('内容'), { target: { value: '改善提交体验' } })
+  pasteMarkdown(screen.getByLabelText('内容'), '改善提交体验')
   fireEvent.click(screen.getByRole('button', { name: '提交' }))
   if (waitForLoading) await waitFor(() => expect(screen.queryByRole('button', { name: '提交中' })).not.toBeNull())
 }
@@ -68,13 +73,13 @@ it('preserves the unsent current draft when SPA navigation hides its modal', asy
   fireEvent.click(screen.getByRole('button', { name: '投诉和建议' }))
   fireEvent.click((await screen.findByText('反馈和建议')).closest('button')!)
   fireEvent.change(screen.getByLabelText('标题'), { target: { value: '尚未提交的建议' } })
-  fireEvent.change(screen.getByLabelText('内容'), { target: { value: '切换页面后继续填写' } })
+  pasteMarkdown(screen.getByLabelText('内容'), '切换页面后继续填写')
   fireEvent.click(screen.getByText('离开支持中心'))
   expect(screen.getByRole('heading', { name: '其他页面' })).toBeTruthy()
   fireEvent.click(screen.getByRole('link', { name: '返回支持中心' }))
   fireEvent.click(screen.getByRole('button', { name: '投诉和建议' }))
   await waitFor(() => expect((screen.queryByLabelText('标题') as HTMLInputElement | null)?.value).toBe('尚未提交的建议'))
-  expect((screen.getByLabelText('内容') as HTMLTextAreaElement).value).toBe('切换页面后继续填写')
+  expect(screen.getByLabelText('内容').textContent).toBe('切换页面后继续填写')
 })
 
 it('continues after closing and blocks both entrances until the submission finishes', async () => {

@@ -1,5 +1,6 @@
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
+import remarkGfm from 'remark-gfm'
 import { utf8Bytes } from '@workspace/common/feedback-content'
 
 const FINAL_CONTENT_BYTES = 66560
@@ -8,7 +9,8 @@ export function finalMarkdown(userMarkdown: string, submissionId: string): strin
   if (utf8Bytes(result) > FINAL_CONTENT_BYTES) throw new Error('Feedback content exceeds final byte limit')
   return result
 }
-const parser = unified().use(remarkParse)
+const legacyParser = unified().use(remarkParse)
+const gfmParser = unified().use(remarkParse).use(remarkGfm)
 function isText(value: unknown): value is { type: 'text'; value: string } {
   return value !== null && typeof value === 'object' && 'type' in value && value.type === 'text' && 'value' in value && typeof value.value === 'string'
 }
@@ -44,7 +46,11 @@ function canonical(value: unknown, remoteLinks = false): unknown {
   return typeof value === 'string' ? value.replace(/\r\n?/g, '\n') : value
 }
 /** Accept visible newlines and exact remote URL autolinks; preserve other AST structure. */
-export function equivalentMarkdown(expected: string, remote: string): boolean {
+export function equivalentMarkdown(expected: string, remote: string, format?: 'markdown'): boolean {
   if (utf8Bytes(remote) > FINAL_CONTENT_BYTES) return false
-  return JSON.stringify(canonical(parser.parse(expected))) === JSON.stringify(canonical(parser.parse(remote), true))
+  const parser = format === 'markdown' ? gfmParser : legacyParser
+  // GFM parses bare URLs as links on both sides. Legacy content was escaped
+  // before submission and still needs ClickUp's remote-only autolink allowance.
+  const remoteLinks = format !== 'markdown'
+  return JSON.stringify(canonical(parser.parse(expected))) === JSON.stringify(canonical(parser.parse(remote), remoteLinks))
 }

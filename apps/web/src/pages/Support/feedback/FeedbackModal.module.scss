@@ -19,8 +19,6 @@
 .back { justify-self: start; margin-left: -.5rem; }
 .optional { color: var(--exui-text-secondary); font-size: .75rem; font-weight: 400; }
 .select { width: 100%; }
-.primaryInput { min-height: calc(8lh + 1rem); resize: vertical; }
-.secondaryInput { min-height: calc(3lh + 1rem); resize: vertical; }
 .formSkeleton { display: grid; gap: 1rem; }
 .skeletonLine { width: 40%; height: 1rem; border-radius: .25rem; }
 .skeletonDescription { width: 100%; height: 2.5rem; margin-top: .25rem; border-radius: .25rem; }

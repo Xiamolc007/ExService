@@ -6093,6 +6093,10 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 65536
+          },
+          "contentFormat": {
+            "type": "string",
+            "const": "markdown"
           }
         }
       },
@@ -6210,6 +6214,10 @@
           },
           "details": {
             "$ref": "#/components/schemas/FeedbackBugDetails"
+          },
+          "contentFormat": {
+            "type": "string",
+            "const": "markdown"
           }
         }
       },
@@ -6256,6 +6264,10 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 65536
+          },
+          "contentFormat": {
+            "type": "string",
+            "const": "markdown"
           }
         }
       },
@@ -6308,6 +6320,10 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 65536
+          },
+          "contentFormat": {
+            "type": "string",
+            "const": "markdown"
           }
         }
       },
@@ -6356,6 +6372,10 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 65536
+          },
+          "contentFormat": {
+            "type": "string",
+            "const": "markdown"
           }
         }
       },
@@ -6394,6 +6414,10 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 65536
+          },
+          "contentFormat": {
+            "type": "string",
+            "const": "markdown"
           }
         }
       },
@@ -6421,6 +6445,10 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 65536
+          },
+          "contentFormat": {
+            "type": "string",
+            "const": "markdown"
           },
           "largeFileInfo": {
             "oneOf": [
@@ -6460,6 +6488,10 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 65536
+          },
+          "contentFormat": {
+            "type": "string",
+            "const": "markdown"
           },
           "largeFileInfo": {
             "oneOf": [

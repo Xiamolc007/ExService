@@ -1540,6 +1540,8 @@ export interface components {
             typeOptionId: components["schemas"]["NullableUuid"];
             largeFileInfo: null | string;
             contentText: string;
+            /** @constant */
+            contentFormat?: "markdown";
         };
         /** @enum {string} */
         FeedbackArea: "development" | "community";
@@ -1557,6 +1559,8 @@ export interface components {
             typeOptionId: components["schemas"]["NullableUuid"];
             largeFileInfo: null | string;
             details: components["schemas"]["FeedbackBugDetails"];
+            /** @constant */
+            contentFormat?: "markdown";
         };
         FeedbackFeatureForm: {
             /** @constant */
@@ -1566,6 +1570,8 @@ export interface components {
             departmentOptionId: components["schemas"]["NullableUuid"];
             largeFileInfo: null | string;
             contentText: string;
+            /** @constant */
+            contentFormat?: "markdown";
         };
         FeedbackAssetForm: {
             /** @constant */
@@ -1576,6 +1582,8 @@ export interface components {
             action: "add" | "modify" | "delete" | "other";
             largeFileInfo: null | string;
             contentText: string;
+            /** @constant */
+            contentFormat?: "markdown";
         };
         FeedbackContentForm: {
             /** @constant */
@@ -1585,6 +1593,8 @@ export interface components {
             action: "add" | "modify" | "delete" | "other";
             largeFileInfo: null | string;
             contentText: string;
+            /** @constant */
+            contentFormat?: "markdown";
         };
         FeedbackCampaignForm: {
             /** @constant */
@@ -1592,12 +1602,16 @@ export interface components {
             title: string;
             largeFileInfo: null | string;
             contentText: string;
+            /** @constant */
+            contentFormat?: "markdown";
         };
         FeedbackSuggestionForm: {
             /** @constant */
             kind: "suggestion";
             title: string;
             contentText: string;
+            /** @constant */
+            contentFormat?: "markdown";
             largeFileInfo: null | string;
         };
         FeedbackComplaintForm: {
@@ -1605,6 +1619,8 @@ export interface components {
             kind: "complaint";
             title: string;
             contentText: string;
+            /** @constant */
+            contentFormat?: "markdown";
             largeFileInfo: null | string;
             anonymous: boolean;
         };
