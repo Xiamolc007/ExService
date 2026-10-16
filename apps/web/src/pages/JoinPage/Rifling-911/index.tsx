@@ -1,26 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
-import {
-  Accordion,
-  AccordionItem,
-  AccordionTrigger,
-  AccordionContent,
-  Button,
-  ExMessage,
-} from "@exre/exui";
-import { ArrowUpRight, CircleCheck } from "lucide-react";
+import { useState } from "react";
+import { Button } from "@exre/exui";
+import { ArrowUpRight } from "lucide-react";
 import { HalftoneDots } from "@paper-design/shaders-react";
-import { ExAxiosError } from "@workspace/sdk/http/browser";
-import {
-  CompleteJoinApplicationModal,
-  type CompleteJoinApplicationModalHandle,
-  type JoinApplicationDraft,
-  type JoinApplicationType,
-} from "@workspace/components";
-import {
-  JoinApplicationTextLimitError,
-  submitApplication,
-} from "@web/src/join/client";
 import { communityDestinations, communityLinks } from "@web/src/join/community";
 import { getJoinHeroImages } from "@web/src/join/hero-images";
 import styles from "@web/src/pages/JoinPage/Rifling-911/JoinPage.module.scss";
@@ -29,102 +10,6 @@ const heroImages = getJoinHeroImages("rifling-911");
 
 export function JoinPage() {
   const [heroIndex, setHeroIndex] = useState(0);
-  const [applicationType, setApplicationType] =
-    useState<JoinApplicationType | null>(null);
-  const [step, setStep] = useState(0),
-    [received, setReceived] = useState(false),
-    [busy, setBusy] = useState(false);
-  const [serverAction, setServerAction] = useState<"query" | "login" | null>(
-    null,
-  );
-  const pending = useRef(false),
-    live = useRef(false),
-    form = useRef<CompleteJoinApplicationModalHandle>(null);
-  const trigger = useRef<HTMLButtonElement | null>(null);
-  const drafts = useRef<
-    Partial<
-      Record<
-        JoinApplicationType,
-        {
-          values: NonNullable<
-            ReturnType<CompleteJoinApplicationModalHandle["getDraft"]>
-          >;
-          step: number;
-        }
-      >
-    >
-  >({});
-  useEffect(() => {
-    live.current = true;
-    return () => {
-      live.current = false;
-    };
-  }, []);
-  function open(type: JoinApplicationType, button: HTMLButtonElement) {
-    if (pending.current) return;
-    trigger.current = button;
-    setReceived(false);
-    setServerAction(null);
-    setStep(drafts.current[type]?.step ?? 0);
-    setApplicationType(type);
-  }
-  function close() {
-    if (!pending.current) {
-      if (applicationType && !received) {
-        const values = form.current?.getDraft();
-        if (values) drafts.current[applicationType] = { values, step };
-      }
-      setApplicationType(null);
-      setReceived(false);
-      setServerAction(null);
-    }
-  }
-  async function submit(draft: JoinApplicationDraft) {
-    if (pending.current) return;
-    pending.current = true;
-    setBusy(true);
-    setServerAction(null);
-    try {
-      const result = await submitApplication(draft);
-      if (!live.current) return;
-      if (result.status === "received") {
-        delete drafts.current[draft.form.applicationType];
-        setReceived(true);
-        ExMessage.info("申请已收到，请等待社区审核安排");
-        return;
-      }
-    } catch (error) {
-      if (!live.current) return;
-      if (error instanceof JoinApplicationTextLimitError) { form.current?.setError(error.message); return; }
-      const status = error instanceof ExAxiosError ? error.status : undefined;
-      const code = error instanceof ExAxiosError ? error.code : undefined;
-      if (
-        status === 409 &&
-        code === "JOIN_APPLICATION_EXISTS"
-      ) {
-        form.current?.setError("该邮箱已有申请，不能重复提交", "email");
-        setServerAction("query");
-      } else if (status === 409 && code === "EMAIL_IN_USE") {
-        form.current?.setError("该邮箱已有正式账号，请前往登录", "email");
-        setServerAction("login");
-      } else {
-        const message =
-          status === 429
-            ? "提交过于频繁，请稍后重试"
-            : status === 413
-              ? "申请文字资料或证明文件超出大小限制，请缩短回答或检查附件数量与大小后重试"
-              : status === 415
-                ? "证明文件格式不受支持，请检查后重试"
-                : status === 503
-                  ? "当前上传繁忙，请稍后重试"
-                  : error instanceof ExAxiosError ? "提交失败，请检查资料并重试" : "提交失败，请检查网络并重试";
-        form.current?.setError(message);
-      }
-    } finally {
-      pending.current = false;
-      if (live.current) setBusy(false);
-    }
-  }
   const heroImage = heroImages[heroIndex];
   const artwork = heroImage && (
     <HalftoneDots
@@ -179,32 +64,6 @@ export function JoinPage() {
             <br />
             找到属于你的角色，成为社区的一员。
           </p>
-          <div className={styles.actions} aria-label="申请入口">
-            <Button
-              className={styles.primaryAction}
-              disabled={busy}
-              onClick={(event) => open("new", event.currentTarget)}
-            >
-              新玩家申请 <ArrowUpRight aria-hidden="true" />
-            </Button>
-            <Button
-              className={styles.secondaryAction}
-              variant="outline"
-              disabled={busy}
-              onClick={(event) => open("experienced", event.currentTarget)}
-            >
-              调转申请 <ArrowUpRight aria-hidden="true" />
-            </Button>
-          </div>
-          <p className={styles.experienceNote}>
-            调转申请适用于拥有 100 小时以上相关经历的玩家
-          </p>
-          <p className={styles.query}>
-            已经提交过申请？{" "}
-            <Link to="/join/result">
-              查询申请结果 <ArrowUpRight aria-hidden="true" />
-            </Link>
-          </p>
         </div>
       </header>
       <div className={styles.information}>
@@ -229,7 +88,7 @@ export function JoinPage() {
         <section className={styles.section} aria-labelledby="join-requirements">
           <h2 id="join-requirements">申请须知</h2>
           <p>
-            申请前请阅读社区置顶指引，确认理解社区规则。如实填写完整资料，申请阶段不设置密码，也不会创建正式账号。
+            加入前请阅读社区置顶指引，确认理解社区规则。具体安排请联系社区工作人员。
           </p>
           <ul className={styles.requirements}>
             <li>
@@ -262,88 +121,8 @@ export function JoinPage() {
             </li>
           </ul>
           <p className={styles.finePrint}>
-            以上条件由社区人工审核，出生日期与申请人类型不会自动决定审核结果。
+            具体加入安排以社区通知为准。
           </p>
-        </section>
-        <section className={styles.section} aria-labelledby="join-process">
-          <h2 id="join-process">从申请到加入。</h2>
-          <ol className={styles.stages}>
-            <li>
-              <span aria-hidden="true">01</span>
-              <h3>提交完整申请</h3>
-              <p>了解条件，选择合适类别，填写完整资料。</p>
-            </li>
-            <li>
-              <span aria-hidden="true">02</span>
-              <h3>社区审核与安排</h3>
-              <p>等待人工审核，线上面试及学院由社区组织。</p>
-            </li>
-            <li>
-              <span aria-hidden="true">03</span>
-              <h3>查收邮箱邀请</h3>
-              <p>获批后验证邮箱，完善账号。</p>
-            </li>
-            <li>
-              <span aria-hidden="true">04</span>
-              <h3>跟进后续通知</h3>
-              <p>登录后关注学院或社区的后续安排。</p>
-            </li>
-          </ol>
-          <p className={styles.finePrint}>
-            审核同意不代表邮件已送达，未收到邀请可进入完善注册流程按提示重发。
-          </p>
-        </section>
-        <section
-          className={`${styles.section} ${styles.faq}`}
-          aria-labelledby="join-faq"
-        >
-          <h2 id="join-faq">你可能还想了解。</h2>
-          <Accordion
-            type="multiple"
-            defaultValue={["faq-1"]}
-            className={styles.accordion}
-          >
-            <AccordionItem value="faq-1">
-              <AccordionTrigger>没有经验也可以申请吗？</AccordionTrigger>
-              <AccordionContent>
-                <p>
-                  可以选择新玩家申请，按实际情况回答，后续指导由社区安排；已有相关经验的玩家选择调转申请。
-                </p>
-              </AccordionContent>
-            </AccordionItem>
-            <AccordionItem value="faq-2">
-              <AccordionTrigger>何时安排面试、何时能有结果？</AccordionTrigger>
-              <AccordionContent>
-                <p>
-                  以社区实际通知为准，不承诺固定时限。无法按时参加面试，请提前联系社区。等待期间可以阅读置顶指引、了解玩法和规则。
-                </p>
-              </AccordionContent>
-            </AccordionItem>
-            <AccordionItem value="faq-3">
-              <AccordionTrigger>还未满足条件怎么办？</AccordionTrigger>
-              <AccordionContent>
-                <p>
-                  请先了解条件并联系社区确认后续安排，资料与情况需要如实填写。
-                </p>
-              </AccordionContent>
-            </AccordionItem>
-            <AccordionItem value="faq-4">
-              <AccordionTrigger>可以更换类别或再次申请吗？</AccordionTrigger>
-              <AccordionContent>
-                <p>
-                  同一邮箱只能提交一次，拒绝、邀请到期和完成注册都不释放名额。请通过结果查询了解状态。
-                </p>
-              </AccordionContent>
-            </AccordionItem>
-            <AccordionItem value="faq-5">
-              <AccordionTrigger>未收到邀请或邀请到期怎么办？</AccordionTrigger>
-              <AccordionContent>
-                <p>
-                  已通过时前往完善注册，按既有流程检查资格或重发验证码；邀请到期请联系社区重新签发，无需重填申请。
-                </p>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
         </section>
         <section className={styles.contact} aria-labelledby="join-contact">
           <div>
@@ -365,52 +144,6 @@ export function JoinPage() {
           )}
         </section>
       </div>
-      {applicationType !== null && (
-        <CompleteJoinApplicationModal
-          key={applicationType}
-          ref={form}
-          open
-          applicationType={applicationType}
-          resultTitle="申请已收到"
-          initialDraft={drafts.current[applicationType]?.values}
-          busy={busy}
-          step={step}
-          onStepChange={setStep}
-          onOpenChange={(value) => {
-            if (!value) close();
-          }}
-          onSubmit={submit}
-          onCloseAutoFocus={(event) => {
-            event.preventDefault();
-            trigger.current?.focus();
-          }}
-          serverAction={
-            serverAction === "query" ? (
-              <Link to="/join/result">查询已有申请结果</Link>
-            ) : serverAction === "login" ? (
-              <Link to="/login">前往登录</Link>
-            ) : undefined
-          }
-        >
-          {received ? (
-            <section className={styles.applicationSuccess} aria-live="polite">
-              <CircleCheck
-                className={styles.successIcon}
-                strokeWidth={1.5}
-                aria-hidden="true"
-              />
-              <p className={styles.successLead}>资料提交成功</p>
-              <p>
-                申请资料已提交，接下来将等待安排远程语音面试。进行面试后，社区会确认申请结果，请留意申请邮箱与后续通知。
-              </p>
-              <Button asChild variant="outline">
-                <Link to="/join/result">查询申请结果</Link>
-              </Button>
-              <Button disabled>面试预约</Button>
-            </section>
-          ) : undefined}
-        </CompleteJoinApplicationModal>
-      )}
     </main>
   );
 }

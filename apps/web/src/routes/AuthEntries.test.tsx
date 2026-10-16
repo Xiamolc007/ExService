@@ -19,7 +19,7 @@ beforeEach(() => {
   vi.spyOn(ExMessage, 'info').mockReturnValue('info')
 })
 afterEach(() => { cleanup(); post.mockReset(); get.mockReset(); vi.restoreAllMocks(); mobile = false })
-function renderLayout() { return render(<MemoryRouter><AuthProvider><Routes><Route element={<RootLayout />}><Route path="/" element={<p>首页</p>} /><Route path="/join/rifling-911" element={<h1>申请加入页面</h1>} /></Route></Routes></AuthProvider></MemoryRouter>) }
+function renderLayout() { return render(<MemoryRouter><AuthProvider><Routes><Route element={<RootLayout />}><Route path="/" element={<p>首页</p>} /><Route path="/communities/rifling-911" element={<h1>社区页面</h1>} /></Route></Routes></AuthProvider></MemoryRouter>) }
 
 it.each([false, true])('preserves registration modal and restores its corresponding trigger for mobile=%s', async isMobile => {
   mobile = isMobile
@@ -37,12 +37,12 @@ it.each([false, true])('preserves registration modal and restores its correspond
   expect(get).not.toHaveBeenCalled()
 })
 
-it('closes the ordinary login dialog before navigating to Join', async () => {
+it('closes the ordinary login dialog before navigating to the community', async () => {
   const user = userEvent.setup()
   renderLayout()
   await user.click(await screen.findByRole('button', { name: '登录' }))
   await user.click(screen.getByRole('button', { name: '加入我们' }))
-  expect(await screen.findByRole('heading', { name: '申请加入页面' })).toBeTruthy()
+  expect(await screen.findByRole('heading', { name: '社区页面' })).toBeTruthy()
   expect(screen.queryByRole('dialog')).toBeNull()
   expect(post).not.toHaveBeenCalled()
 })

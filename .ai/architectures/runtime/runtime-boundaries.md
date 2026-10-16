@@ -42,7 +42,7 @@ Docker 调用将命令缺失、调用超时和已知引擎连接失败分别报�
 
 启动诊断直接给出服务、失败检查项、相关配置键与明确处理步骤，不把阅读文档作为恢复步骤。Website 检查 CLI 区分连接配置、认证、缺库、DNS/网络和结构未就绪；Hydra 区分缺失 client、配置冲突与网络故障。未知异常不回显原始消息，HTTP 错误 envelope 保持原 Contract。只读检查失败不能自动迁移、创建账号或覆盖身份。
 
-Nginx 的 `/api/` 请求体限额按 Contract 中申请的整份 multipart wire 预算与存储文件上限加 multipart 开销的较大值渲染，默认 64 MiB。`STORAGE_MAX_BYTES` 超过默认预算时同步提高代理限额；非法值或求和超出安全整数时拒绝渲染。代理放行不替代 Server 的单文件、累计字节、wire 和认证校验。`tests/contract/storage.test.ts` 经隔离 HTTPS Nginx、真实 Fastify 与临时 PostgreSQL 验证默认上限文件上传下载及两层超限拒绝；TLS 凭据仅来自公开测试夹具。
+Nginx 的 `/api/` 请求体限额按 Contract 中反馈附件的 wire 预算与存储文件上限加 multipart 开销的较大值渲染，不再读取已退役的申请上传 operation。默认允许 20 MiB 文件及 64 KiB multipart 开销。`STORAGE_MAX_BYTES` 超过默认预算时同步提高代理限额；非法值或求和超出安全整数时拒绝渲染。代理放行不替代 Server 的单文件、累计字节、wire 和认证校验。`tests/contract/storage.test.ts` 经隔离 HTTPS Nginx、真实 Fastify 与临时 PostgreSQL 验证默认上限文件上传下载及两层超限拒绝；TLS 凭据仅来自公开测试夹具。
 
 统一配置适配器在 local 和 deployment 中均要求 Website、Hydra 的应用监听地址为 `127.0.0.1`；部署的公网访问由 Nginx 终止并转发。
 

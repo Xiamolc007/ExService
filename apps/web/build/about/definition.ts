@@ -71,7 +71,7 @@ function project(entries: ContentEntry[]): AboutRegistry {
     return [url, entry] as const
   }))
   const link = (entry: ContentEntry, url: string) => {
-    if (httpsUrl.safeParse(url).success || url === '/join/rifling-911') return
+    if (httpsUrl.safeParse(url).success || url === '/communities/rifling-911') return
     if (!url.startsWith('/') && !url.startsWith('#')) fail(entry, `Invalid link: ${url}`)
     const hash = url.indexOf('#')
     const path = hash < 0 ? url : url.slice(0, hash)

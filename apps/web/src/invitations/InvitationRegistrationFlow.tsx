@@ -208,7 +208,7 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
     pendingFeedback.current = null
     target.setServerErrors(feedback.errors)
   }, [step])
-  const join = () => { invalidate(); if (onJoin) onJoin(); else navigate('/join/rifling-911') }
+  const join = () => { invalidate(); if (onJoin) onJoin(); else navigate('/communities/rifling-911') }
   return <>
     {step === 'email' && <InvitationEmailForm ref={emailForm} initialEmail={email} busy={busy} onSubmit={check} onEmailChange={invalidate} onLogin={login} onJoin={join} />}
     {step === 'code' && <InvitationCodeForm ref={codeForm} email={email} busy={busy} retry={retry} resendSeconds={Math.max(0, Math.ceil((resendUntil - clock) / 1000))} lockedSeconds={Math.max(0, Math.ceil((lockedUntil - clock) / 1000))} onVerify={verify} onResend={resend} onBack={back} />}

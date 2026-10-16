@@ -77,7 +77,6 @@ const INTERNAL_READ_ONLY_PATHS = new Set([
   '/',
   '/communities/rifling-911',
   '/communities/caep',
-  '/join/rifling-911',
 ])
 
 /**

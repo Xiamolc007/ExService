@@ -28,10 +28,9 @@ import styles from '@components/src/SiteHeader.module.scss'
 /** 站点导航项，共用 Website 内部路由。 */
 const NAV_ITEMS = [
   { to: '/docs/', label: 'Document' },
-  { to: '/gallery', label: 'Gallery' },
+  { to: '/products', label: 'Products' },
   { to: '/aboutus', label: 'About Us' },
   { to: '/support', label: 'Support' },
-  { to: '/join/rifling-911', label: 'Join' },
 ] as const
 const COMMUNITY_ITEMS = [
   { to: '/communities/rifling-911', label: 'Rifling 911' },
@@ -97,19 +96,13 @@ export function SiteHeader({ auth, mobileMenuButtonRef, glassAtTop = false, noti
                     <NavigationMenuLink asChild key={to}><Link to={to}>{label}</Link></NavigationMenuLink>)}
                 </NavigationMenuContent>
               </NavigationMenuItem>
-              {visibleItems.filter(({ to }) => to !== '/join/rifling-911').map(({ to, label }) => (
+              {visibleItems.map(({ to, label }) => (
                 <NavigationMenuItem key={to}>
                   <NavigationMenuLink asChild className={navigationMenuTriggerStyle()}>
                     <Link to={to} aria-current={(to === '/aboutus' && aboutActive) || (to === '/support' && supportActive) ? 'page' : undefined}>{label}</Link>
                   </NavigationMenuLink>
                 </NavigationMenuItem>
               ))}
-              <NavigationMenuItem>
-                <NavigationMenuTrigger>Join</NavigationMenuTrigger>
-                <NavigationMenuContent className={styles.dropdownMenu}>
-                  <NavigationMenuLink asChild><Link to="/join/rifling-911">Rifling 911</Link></NavigationMenuLink>
-                </NavigationMenuContent>
-              </NavigationMenuItem>
             </NavigationMenuList>
           </NavigationMenu>
         </div>

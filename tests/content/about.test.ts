@@ -15,6 +15,21 @@ async function fixture() {
   await cp(aboutDefinition.root, root, { recursive: true })
   return { ...aboutDefinition, root }
 }
+it('accepts an existing community entrance and rejects retired Join links in metadata and body', async () => {
+  const definition = await fixture()
+  const path = join(definition.root, 'communities/rifling-911.mdx')
+  const metadata = parse((await readFile(path, 'utf8')).split('---')[1]!)
+  const write = (joinUrl: string, body: string) => writeFile(path,
+    `---\n${stringify({ ...metadata, status: 'active', joinUrl })}---\n${body}`)
+  await write('/communities/rifling-911', '[Community](/communities/rifling-911)')
+  const registry = (await readContent(definition)).data as AboutRegistry
+  const community = registry.pages.find(page => page.kind === 'community' && page.slug === 'rifling-911')
+  expect(community && 'joinUrl' in community ? community.joinUrl : undefined).toBe('/communities/rifling-911')
+  await write('/join/rifling-911', 'Community story')
+  await expect(readContent(definition)).rejects.toThrow(/joinUrl/)
+  await write('/communities/rifling-911', '[Retired](/join/rifling-911)')
+  await expect(readContent(definition)).rejects.toThrow(/Unknown internal link/)
+})
 it('publishes independent community palettes and rejects unreadable shader colors', async () => {
   const definition = await fixture()
   const path = join(definition.root, 'communities/rifling-911.mdx')

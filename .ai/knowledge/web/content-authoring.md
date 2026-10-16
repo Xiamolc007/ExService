@@ -78,7 +78,7 @@ draft: true
 
 作者组件的属性必须是字符串或静态 JSON 形态值；不允许 import/export、任意表达式、事件属性、原始 HTML、展开或函数调用。组件白名单及属性契约在 About schema 中登记。MDX 是仓库编辑契约，不是执行不可信输入的沙箱。
 
-普通外链须为没有凭据的 HTTPS URL；内部链接、完整解码后的锚点、AboutLink 和 related 目标必须已存在。slug/id 直接校验原始 ASCII kebab-case 值，不自动修剪空格，防止校验结果与静态 JSX 渲染值不同。公开条目不能引用草稿；草稿仍需有效字段和存在的引用。加入入口只能用于 active 社区，且目标要通过校验。
+普通外链须为没有凭据的 HTTPS URL；内部链接、完整解码后的锚点、AboutLink 和 related 目标必须已存在。slug/id 直接校验原始 ASCII kebab-case 值，不自动修剪空格，防止校验结果与静态 JSX 渲染值不同。公开条目不能引用草稿；草稿仍需有效字段和存在的引用。加入入口只能用于 active 社区，且目标只能为现有 `/communities/rifling-911` 或 HTTPS 地址；正文与 joinUrl 均不接受已退役的 `/join/rifling-911`。
 
 图片放入该集合 assets 目录，提供非空 alt 与正整数宽高。路径不能跳出资源目录；替换失败的图片仍显示 fallback。发布前由作者核对真实比例、版权与图注，不把宽高存在校验当作图片内容验收。
 

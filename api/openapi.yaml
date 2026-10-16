@@ -28,22 +28,6 @@ paths:
     $ref: ./paths/system.yaml#/~1health
   /auth/captcha/challenges:
     $ref: ./paths/auth.yaml#/~1auth~1captcha~1challenges
-  /join/applications:
-    $ref: ./paths/join.yaml#/~1join~1applications
-  /join/applications/query:
-    $ref: ./paths/join.yaml#/~1join~1applications~1query
-  /admin/join/applications:
-    $ref: ./paths/join.yaml#/~1admin~1join~1applications
-  /admin/join/applications/{applicationId}:
-    $ref: ./paths/join.yaml#/~1admin~1join~1applications~1{applicationId}
-  /admin/join/applications/{applicationId}/approve:
-    $ref: ./paths/join.yaml#/~1admin~1join~1applications~1{applicationId}~1approve
-  /admin/join/applications/{applicationId}/reject:
-    $ref: ./paths/join.yaml#/~1admin~1join~1applications~1{applicationId}~1reject
-  /admin/join/applications/{applicationId}/invitations:
-    $ref: ./paths/join.yaml#/~1admin~1join~1applications~1{applicationId}~1invitations
-  /admin/join/applications/{applicationId}/attachments/{attachmentId}:
-    $ref: ./paths/join.yaml#/~1admin~1join~1applications~1{applicationId}~1attachments~1{attachmentId}
   /auth/invitations/check:
     $ref: ./paths/join.yaml#/~1auth~1invitations~1check
   /auth/invitations/code:

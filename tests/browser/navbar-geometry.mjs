@@ -3,7 +3,7 @@
 // DOM geometry needs a real browser; jsdom cannot detect this regression.
 export async function assertNavbarGeometry(tab, baseUrl) {
   const rows = [];
-  for (const path of ['/about', '/join/rifling-911', '/about']) {
+  for (const path of ['/about', '/communities/rifling-911', '/about']) {
     await tab.goto(new URL(path, baseUrl).href);
     await tab.playwright.getByRole('navigation', { name: '主导航' }).waitFor({ state: 'visible' });
     rows.push(await tab.playwright.evaluate(async () => {
@@ -32,7 +32,7 @@ export async function assertNavbarGeometry(tab, baseUrl) {
 
 export async function assertNavbarModalGeometry(tab, baseUrl) {
   const rows = [];
-  for (const path of ['/about', '/join/rifling-911']) {
+  for (const path of ['/about', '/communities/rifling-911']) {
     await tab.goto(new URL(path, baseUrl).href);
     const login = tab.playwright.getByRole('button', { name: '登录', exact: true });
     await login.waitFor({ state: 'visible' });

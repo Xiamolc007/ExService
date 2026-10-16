@@ -9,7 +9,6 @@ export function nginxConfiguration(state) {
   const origin = new URL(state.config.publicOrigin), issuer = new URL(state.config.issuer)
   if (origin.hostname === issuer.hostname || origin.port || issuer.port) throw new RuntimeError('NGINX_DISTINCT_HTTPS_HOSTS_REQUIRED')
   const contract = readContract(join(state.workspace, 'api/generated/openapi.json'))
-  const joinBytes = contract.paths['/join/applications'].post['x-fastify-config'].joinUpload.wireBytes
   const supportBytes = contract.paths['/support/feedback/submissions/{submissionId}/attachments/{attachmentId}'].put['x-fastify-config'].supportUpload.wireBytes
   const overheadBytes = contract.paths['/storage/uploads'].post['x-fastify-config'].storageUpload.wireOverheadBytes
   // Match the storage parser's default; the proxy ceiling includes multipart metadata.
@@ -17,10 +16,10 @@ export function nginxConfiguration(state) {
   const storageBytes = Number(raw === undefined || raw === '' ? 20 * 1024 * 1024 : raw)
   const storageWireBytes = storageBytes + overheadBytes
   if (raw !== undefined && raw !== '' && !/^[0-9]+$/.test(raw) ||
-      ![joinBytes, supportBytes, overheadBytes, storageBytes, storageWireBytes].every(value => Number.isSafeInteger(value) && value > 0))
+      ![supportBytes, overheadBytes, storageBytes, storageWireBytes].every(value => Number.isSafeInteger(value) && value > 0))
     throw new RuntimeError('NGINX_UPLOAD_BUDGET_INVALID', { keys: ['STORAGE_MAX_BYTES'] })
   const values = {
-    API_MAX_BODY_BYTES: String(Math.max(joinBytes, supportBytes, storageWireBytes)),
+    API_MAX_BODY_BYTES: String(Math.max(supportBytes, storageWireBytes)),
     SITE_HOST: origin.hostname, ISSUER_HOST: issuer.hostname, SITE_ROOT: join(state.workspace, 'apps/web/dist').replaceAll('\\', '/'),
     API_UPSTREAM: state.internal.website.replace(/\/$/, ''),
     HYDRA_UPSTREAM: state.values.HYDRA_INTERNAL_PUBLIC_URL?.replace(/\/$/, ''),

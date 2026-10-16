@@ -3,10 +3,9 @@ import Ajv from 'ajv'
 import { readContract } from '@tests/helpers/contract'
 import type { FastifyReply, FastifyRequest, RouteOptions } from 'fastify'
 import { createApp, serviceHandlers } from '@workspace/server'
-import { AuthError, type AuthErrorCode } from '@server/src/modules/auth/errors'
 import { StorageError, type StorageErrorCode } from '@server/src/modules/storage/errors'
-import { createTestAuth, newJoinApplication, type TestAuth } from '@tests/helpers/auth'
-import { joinMultipart, multipartBody, type TestPart } from '@tests/helpers/multipart'
+import { createTestAuth, type TestAuth } from '@tests/helpers/auth'
+import { multipartBody, type TestPart } from '@tests/helpers/multipart'
 import { createAppWithStorage, fileStorageFixture, type StorageTestFixture } from '@tests/helpers/storage'
 
 /**
@@ -15,7 +14,7 @@ import { createAppWithStorage, fileStorageFixture, type StorageTestFixture } fro
  * 覆盖三件旧测试没有明确断言的事：
  * 1. 提前终结输出的 envelope 在序列化前后都精确符合 Contract 的 ErrorEnvelope；
  * 2. 共享错误映射只能产出该 operation 在 Contract 已声明的状态码；
- * 3. 两条上传 operation 的 handler 原始返回值（序列化前）符合响应 schema。
+ * 3. 存储上传 operation 的 handler 原始返回值（序列化前）符合响应 schema。
  */
 
 const contract = readContract(new URL('../../api/generated/openapi.json', import.meta.url))
@@ -56,7 +55,6 @@ function observeRoute(operationId: string) {
 /** 提前终结适配只能输出数值状态码；Contract 的 `default` 不是可输出状态。 */
 const numericStatuses = (statuses: readonly string[]): string[] => statuses.filter(status => /^[1-9]\d{2}$/.test(status))
 
-const JOIN_UPLOAD_STATUSES = ['202', '400', '408', '409', '413', '415', '429', '500', '503']
 const STORAGE_UPLOAD_STATUSES = ['200', '400', '401', '408', '409', '413', '415', '500', '503']
 
 /**
@@ -69,13 +67,6 @@ const STORAGE_UPLOAD_STATUSES = ['200', '400', '401', '408', '409', '413', '415'
 describe('takeover status guard', () => {
   const declared = (statuses: readonly string[]): number[] => statuses.map(Number)
 
-  it('covers every status the join upload lifecycle can emit', () => {
-    const codes: AuthErrorCode[] = ['JOIN_UPLOAD_TIMEOUT', 'JOIN_UPLOAD_TOO_LARGE', 'JOIN_UPLOAD_BUSY', 'JOIN_UNSUPPORTED_MEDIA_TYPE', 'BAD_REQUEST']
-    for (const code of codes) {
-      expect(declared(JOIN_UPLOAD_STATUSES), code).toContain(new AuthError(code).statusCode)
-    }
-  })
-
   it('covers every status the storage upload lifecycle can emit', () => {
     const codes: StorageErrorCode[] = ['STORAGE_TIMEOUT', 'STORAGE_TOO_LARGE', 'STORAGE_INVALID_INPUT', 'STORAGE_UNSUPPORTED_MEDIA_TYPE']
     for (const code of codes) {
@@ -84,26 +75,12 @@ describe('takeover status guard', () => {
   })
 
   it('reports a status the contract never declares for these operations', () => {
-    // 负向对照：418 不在两条上传的声明集合里，守卫若失效就会静默丢掉 envelope。
-    expect(declared(JOIN_UPLOAD_STATUSES)).not.toContain(418)
+    // 负向对照：418 不在存储上传的声明集合里，守卫若失效就会静默丢掉 envelope。
     expect(declared(STORAGE_UPLOAD_STATUSES)).not.toContain(418)
   })
 })
 
 describe('declared response statuses and body limit', () => {
-  it('binds the takeover guard to the join upload statuses declared by the contract', async () => {
-    const f = await createTestAuth()
-    fixtures.push(f)
-    const { observed, hook } = observeRoute('submitJoinApplication')
-    const app = createApp({ ...f, logger: false })
-    app.addHook('onRoute', hook)
-    apps.push(app)
-    await app.ready()
-    expect(observed.statuses).toEqual([...JOIN_UPLOAD_STATUSES, 'default'].sort())
-    expect(numericStatuses(observed.statuses)).toEqual(JOIN_UPLOAD_STATUSES)
-    // bodyLimit 由 controller 独占赋值，数值与 Contract 的 wireBytes 一致。
-    expect(observed.route?.bodyLimit).toBe(67108864)
-  })
 
   it('binds the takeover guard to the storage upload statuses declared by the contract', async () => {
     const f = await createTestAuth()
@@ -121,26 +98,6 @@ describe('declared response statuses and body limit', () => {
 })
 
 describe('early takeover envelope', () => {
-  it('keeps admission failures on the normal Fastify error chain with Retry-After', async () => {
-    const f = await createTestAuth()
-    fixtures.push(f)
-    const app = createApp({ ...f })
-    apps.push(app)
-    await app.ready()
-    // 容量与限流都发生在占位之前：没有 session，不存在提前接管。
-    // `trustProxy` 默认为 false，转发头被忽略 —— 这里只是把回环 IP 的预算耗尽。
-    for (let i = 0; i < 60; i++) {
-      const query = await app.inject({ method: 'POST', url: '/api/join/applications/query', payload: { email: 'missing@example.com' } })
-      expect(query.statusCode).toBe(200)
-    }
-    const limited = await app.inject({ method: 'POST', url: '/api/join/applications', ...joinMultipart(newJoinApplication()) })
-    expect(limited.statusCode).toBe(429)
-    expect(limited.json().error.code).toBe('JOIN_RATE_LIMITED')
-    expect(limited.headers['cache-control']).toBe('no-store')
-    // 限流器按剩余窗口动态计算重试秒数，不能写死；只要求给出可用的整数。
-    expect(Number(limited.headers['retry-after'])).toBeGreaterThanOrEqual(1)
-    validate('ErrorEnvelope', limited.json())
-  })
 
   it('accepts the contract ErrorEnvelope and rejects extra, missing and mistyped fields', () => {
     const envelope = { error: { code: 'STORAGE_TIMEOUT', message: 'x', requestId: 'y' } }
@@ -190,25 +147,6 @@ function captureHandlerOutput(operationId: string) {
 }
 
 describe('raw upload handler output', () => {
-  it('returns the contract shape from the real join parser context before serialization', async () => {
-    const f = await createTestAuth()
-    fixtures.push(f)
-    const capture = captureHandlerOutput('submitJoinApplication')
-    const app = createApp({ ...f })
-    app.addHook('onRoute', capture.hook)
-    apps.push(app)
-    await app.ready()
-
-    const accepted = await app.inject({ method: 'POST', url: '/api/join/applications', ...joinMultipart(newJoinApplication('raw-join@example.com')) })
-    expect(accepted.statusCode, accepted.body).toBe(202)
-    expect(capture.calls()).toBe(1)
-    const raw = capture.captured[0] as { status: string }
-    validate('JoinApplicationReceived', raw)
-    expect(Object.keys(raw as object)).toEqual(['status'])
-    expect(raw.status).toBe('received')
-    // 序列化后的响应与原始返回值一致：这一层断言存在的理由就是发现被 schema 掩盖的漂移。
-    expect(accepted.json()).toEqual(raw)
-  })
 
   it('returns the contract shape from the real storage parser context before serialization', async () => {
     const f = await createTestAuth()
@@ -236,10 +174,6 @@ describe('raw upload handler output', () => {
   })
 
   it('rejects response values that violate the upload result schemas', () => {
-    expect(validateQuiet('JoinApplicationReceived', { status: 'received' })).toBe(true)
-    expect(validateQuiet('JoinApplicationReceived', {})).toBe(false)
-    expect(validateQuiet('JoinApplicationReceived', { status: 'accepted' })).toBe(false)
-    expect(validateQuiet('JoinApplicationReceived', { status: 'received', extra: 1 })).toBe(false)
     expect(validateQuiet('StorageUploadResult', { url: 'https://example.test/a' })).toBe(true)
     expect(validateQuiet('StorageUploadResult', {})).toBe(false)
     expect(validateQuiet('StorageUploadResult', { url: 1 })).toBe(false)

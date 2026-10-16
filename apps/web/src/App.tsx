@@ -11,8 +11,6 @@ import { AuthProvider } from '@web/src/auth/AuthContext'
 import { InvitationRegistrationPage } from '@web/src/pages/AuthPage/InvitationRegistrationPage'
 import { JoinPage } from '@web/src/pages/JoinPage/Rifling-911'
 import { CAEPJoinPage } from '@web/src/pages/JoinPage/CAEP'
-import { JoinResultPage } from '@web/src/pages/JoinResultPage'
-import { JoinReviewPage } from '@web/src/pages/JoinReviewPage'
 import { DocsPage } from '@web/src/pages/DocsPage'
 import { SignedOutPage } from '@web/src/pages/IdentityPage/SignedOutPage'
 import { OidcPage } from '@web/src/pages/IdentityPage/OidcPage'
@@ -44,11 +42,9 @@ export function App() {
           <Route path="/about" element={<Navigate to="/aboutus" replace />} />
           <Route path="/aboutus/*" element={<ContentBoundary returnUrl="/"><Suspense fallback={<p role="status" style={{ padding: '3rem' }}>正在加载介绍…</p>}><AboutUs /></Suspense></ContentBoundary>} />
           <Route path="/support/*" element={<SupportAccess><ContentBoundary returnUrl="/"><Suspense fallback={<p role="status" style={{ padding: '3rem' }}>正在加载支持中心…</p>}><SupportRoutes /></Suspense></ContentBoundary></SupportAccess>} />
+          <Route path="/communities" element={<Navigate to="/communities/rifling-911" replace />} />
           <Route path="/communities/rifling-911" element={<JoinPage />} />
           <Route path="/communities/caep" element={<CAEPJoinPage />} />
-          <Route path="/join/rifling-911" element={<JoinPage />} />
-          <Route path="/join/result" element={<JoinResultPage />} />
-          <Route path="/admin/join-applications" element={<JoinReviewPage />} />
           <Route path="/account/profile" element={<ProfilePage />} />
         </Route>
         <Route element={<RootLayout glassAtTop />}>

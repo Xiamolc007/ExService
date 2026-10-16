@@ -78,6 +78,7 @@ describe('notification-html-v1 rendering policy', () => {
     ['protocol relative', '<p><a href="//evil.example.com">x</a></p>'],
     ['external https', '<p><a href="https://example.com/docs">x</a></p>'],
     ['non-allowlisted internal path', '<p><a href="/account/profile">x</a></p>'],
+    ['retired Join path', '<p><a href="/join/rifling-911">报名</a></p>'],
     ['query string', '<p><a href="/communities/rifling-911?a=1">x</a></p>'],
     ['fragment', '<p><a href="/communities/rifling-911#top">x</a></p>'],
     ['path traversal', '<p><a href="/communities/../admin">x</a></p>'],
@@ -91,7 +92,6 @@ describe('notification-html-v1 rendering policy', () => {
     ['/', '<p><a href="/">首页</a></p>'],
     ['/communities/rifling-911', '<p><a href="/communities/rifling-911">Rifling</a></p>'],
     ['/communities/caep', '<p><a href="/communities/caep">CAEP</a></p>'],
-    ['/join/rifling-911', '<p><a href="/join/rifling-911">报名</a></p>'],
     ['trailing slash normalisation', '<p><a href="/communities/caep/">CAEP</a></p>'],
   ])('accepts the read-only internal path %s', (_label, html) => {
     const tree = parseNotificationContent(content(html))
