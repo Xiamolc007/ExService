@@ -16,12 +16,13 @@ export function CfxAuthorization({token,disabled=false,onActiveChange,onTicket}:
   const generation=useRef(0),mounted=useRef(false),attemptRef=useRef<Attempt|null>(null),timer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined)
   const controller=useRef<AbortController|null>(null),polling=useRef(false),creating=useRef(false)
   const manualCompleted=useRef(false)
+  const retryAt=useRef(0)
   const headers=token?{Authorization:`Bearer ${token}`} : undefined
   const current=(version:number)=>mounted.current&&generation.current===version
   const clearTimer=()=>{if(timer.current!==undefined)clearTimeout(timer.current);timer.current=undefined}
   const cancelAttempt=(id:string)=>api.DELETE('/auth/cfx/attempts/{id}',{params:{path:{id}},alert:false}).catch(()=>undefined)
   function stop(update=true) {
-    generation.current++;clearTimer();controller.current?.abort();controller.current=null;polling.current=false;manualCompleted.current=false
+    generation.current++;clearTimer();controller.current?.abort();controller.current=null;polling.current=false;manualCompleted.current=false;retryAt.current=0
     const old=attemptRef.current;attemptRef.current=null
     if(old)void cancelAttempt(old.attemptId)
     if(update){setAttempt(null);setBusy(creating.current);setError(null);onActiveChange?.(false)}
@@ -58,9 +59,13 @@ export function CfxAuthorization({token,disabled=false,onActiveChange,onTicket}:
     const active=attemptRef.current
     if(!active||!current(version)||polling.current||document.visibilityState!=='visible')return
     clearTimer()
-    if(Date.now()>=active.expiresAt){failed(version,null);return}
+    // Visibility changes may clear the timer without ending the server's retry window.
+    const remaining=retryAt.current-Date.now()
+    if(remaining>0){timer.current=setTimeout(()=>void poll(version),remaining);return}
+    retryAt.current=0
     polling.current=true
     try {
+      // Ready results have their own lifetime; the server owns expiry.
       const status=await api.GET('/auth/cfx/attempts/{id}',{params:{path:{id:active.attemptId}},signal:controller.current?.signal,alert:false})
       if(!current(version))return
       if(status.state==='ready'){
@@ -71,18 +76,26 @@ export function CfxAuthorization({token,disabled=false,onActiveChange,onTicket}:
       } else if(status.state==='pending'||status.state==='processing'){
         timer.current=setTimeout(()=>void poll(version),1000)
       } else failed(version,null)
-    } catch(issue){failed(version,issue)}finally{if(current(version))polling.current=false}
+    } catch(issue){
+      if(!current(version))return
+      if(issue instanceof ExAxiosError&&issue.code==='CFX_REQUEST_LIMITED'){
+        const seconds=issue.retryAfterSeconds
+        const delay=seconds!==undefined&&Number.isFinite(seconds)&&seconds>0?seconds*1000:1000
+        retryAt.current=Date.now()+delay
+        timer.current=setTimeout(()=>void poll(version),delay)
+      } else failed(version,issue)
+    } finally{if(current(version))polling.current=false}
   }
   async function manual(payload:string) {
     const active=attemptRef.current,version=generation.current
-    if(!active||busy||active.mode!=='manual')return
+    if(!active||busy||manualCompleted.current||active.mode!=='manual')return
     setBusy(true);setError(null)
     try {
       await api.POST('/auth/cfx/attempts/{id}/complete',{params:{path:{id:active.attemptId}},body:{payload},signal:controller.current?.signal,alert:false})
       if(!current(version))return
       manualCompleted.current=true
       await poll(version)
-    } catch(issue){failed(version,issue)}finally{if(current(version))setBusy(false)}
+    } catch(issue){failed(version,issue)}finally{if(current(version)&&!manualCompleted.current)setBusy(false)}
   }
   return <section aria-label="Cfx 授权">
     {!attempt&&<Button type="button" variant="outline" disabled={busy||disabled} onClick={()=>void begin()}>使用 Cfx</Button>}
