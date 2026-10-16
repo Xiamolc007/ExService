@@ -3,6 +3,7 @@ import type { TiptapIssue } from '../types'
 
 export interface MarkdownExtensionOptions {
   purpose: 'editing' | 'viewing' | 'conversion'
+  pasteMarkdown?: boolean
   onError?: (issues: readonly TiptapIssue[]) => void
   onNotice?: (notices: readonly TiptapIssue[]) => void
 }

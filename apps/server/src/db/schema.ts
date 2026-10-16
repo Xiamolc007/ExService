@@ -3,6 +3,73 @@ import { bigint, boolean, check, foreignKey, index, integer, pgTable, primaryKey
 
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' })
 
+export const supportFeedbackSubmissions = pgTable('support_feedback_submissions', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => authUsers.id, { onDelete: 'restrict' }),
+  submissionKey: text('submission_key').notNull(), nicknameSnapshot: text('nickname_snapshot').notNull(),
+  formKind: text('form_kind').notNull(), formVersion: integer('form_version').notNull(),
+  contentRuleVersion: integer('content_rule_version').notNull(), formJson: text('form_json').notNull(),
+  userMarkdown: text('user_markdown').notNull(), finalMarkdown: text('final_markdown').notNull(),
+  payloadSha256: text('payload_sha256').notNull(), taskPayloadJson: text('task_payload_json').notNull(), taskPayloadSha256: text('task_payload_sha256').notNull(), revision: bigint('revision', { mode: 'number' }).notNull(),
+  status: text('status').notNull(), attachmentCount: integer('attachment_count').notNull(),
+  totalAttachmentBytes: bigint('total_attachment_bytes', { mode: 'number' }).notNull(),
+  createdAt: bigint('created_at', { mode: 'number' }).notNull(), receiveExpiresAt: bigint('receive_expires_at', { mode: 'number' }).notNull(),
+  updatedAt: bigint('updated_at', { mode: 'number' }).notNull(), clickupTaskId: text('clickup_task_id'), targetListId: text('target_list_id').notNull(),
+  attemptId: text('attempt_id'), attemptKind: text('attempt_kind'), attemptAttachmentId: text('attempt_attachment_id'),
+  attemptStartedAt: bigint('attempt_started_at', { mode: 'number' }), attemptExpiresAt: bigint('attempt_expires_at', { mode: 'number' }),
+  attemptOwnerBootId: text('attempt_owner_boot_id'), failureCode: text('failure_code'), failurePhase: text('failure_phase'),
+  failureAttachmentId: text('failure_attachment_id'), retryNotBefore: bigint('retry_not_before', { mode: 'number' }),
+  maintenanceResolutionJson: text('maintenance_resolution_json'),
+}, t => [
+  uniqueIndex('support_feedback_key_unique').on(t.userId, t.submissionKey),
+  uniqueIndex('support_feedback_task_unique').on(t.clickupTaskId),
+  index('support_feedback_user_created_idx').on(t.userId, t.createdAt),
+  check('support_feedback_form_check', sql`((${t.formKind} in ('bug','feature','asset','request','content','campaign') and ${t.formVersion}=2) or (${t.formKind} in ('suggestion','complaint') and ${t.formVersion}=3)) and ${t.contentRuleVersion}=1`),
+  check('support_feedback_status_check', sql`${t.status} in ('receiving','ready','creating','uploading','failed','verification_required','completed')`),
+  check('support_feedback_revision_check', sql`${t.revision} between 0 and 9007199254740991`),
+  check('support_feedback_count_check', sql`${t.attachmentCount} between 0 and 5 and ${t.totalAttachmentBytes} between 0 and 104857600`),
+  check('support_feedback_digest_check', sql`${t.payloadSha256} ~ '^[0-9a-f]{64}$'`),
+  check('support_feedback_task_payload_digest_check', sql`${t.taskPayloadSha256} ~ '^[0-9a-f]{64}$'`),
+  check('support_feedback_time_check', sql`${t.createdAt} between 0 and 9007199168340991 and ${t.receiveExpiresAt}=${t.createdAt}+86400000 and ${t.updatedAt} between ${t.createdAt} and 9007199254740991 and (${t.retryNotBefore} is null or ${t.retryNotBefore} between 0 and 9007199254740991)`),
+  check('support_feedback_content_check', sql`octet_length(${t.userMarkdown}) between 1 and 65536 and octet_length(${t.finalMarkdown}) between 1 and 66560`),
+  check('support_feedback_attempt_check', sql`(
+    ${t.attemptId} is null and ${t.attemptKind} is null and ${t.attemptAttachmentId} is null and ${t.attemptStartedAt} is null and ${t.attemptExpiresAt} is null and ${t.attemptOwnerBootId} is null
+  ) or (
+    ${t.attemptId} is not null and ${t.attemptKind} is not null and ${t.attemptOwnerBootId} is not null and ${t.attemptStartedAt} is not null and ${t.attemptExpiresAt} is not null and ${t.attemptStartedAt} between 0 and 9007199254740991 and ${t.attemptExpiresAt} between ${t.attemptStartedAt} and 9007199254740991 and
+    ((${t.attemptKind}='create_task' and ${t.attemptAttachmentId} is null) or (${t.attemptKind}='upload_attachment' and ${t.attemptAttachmentId} is not null and ${t.clickupTaskId} is not null))
+  )`),
+  check('support_feedback_failure_check', sql`(${t.failureCode} is null and ${t.failurePhase} is null and ${t.failureAttachmentId} is null and ${t.retryNotBefore} is null) or (
+    ${t.failureCode} is not null and ${t.failurePhase} is not null and ${t.failureCode} in ('UPSTREAM_REJECTED','UPSTREAM_RATE_LIMITED','UPSTREAM_CONFIGURATION','UPSTREAM_UNKNOWN') and
+    ((${t.failurePhase}='create_task' and ${t.failureAttachmentId} is null) or (${t.failurePhase}='upload_attachment' and ${t.failureAttachmentId} is not null and ${t.clickupTaskId} is not null))
+  )`),
+  check('support_feedback_task_check', sql`${t.clickupTaskId} is null or ${t.clickupTaskId} ~ '^[A-Za-z0-9_-]{1,128}$'`),
+  check('support_feedback_completed_check', sql`${t.status}<>'completed' or (${t.clickupTaskId} is not null and ${t.attemptId} is null and ${t.failureCode} is null)`),
+])
+
+export const supportFeedbackAttachments = pgTable('support_feedback_attachments', {
+  submissionId: text('submission_id').notNull().references(() => supportFeedbackSubmissions.id, { onDelete: 'restrict' }),
+  id: text('id').notNull(), ordinal: integer('ordinal').notNull(), originalName: text('original_name').notNull(),
+  contentType: text('content_type').notNull(), byteLength: integer('byte_length').notNull(), sha256: text('sha256').notNull(),
+  bytes: bytea('bytes'), status: text('status').notNull(), remoteAttachmentId: text('remote_attachment_id'),
+  createdAt: bigint('created_at', { mode: 'number' }).notNull(), updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
+}, t => [
+  primaryKey({ columns: [t.submissionId, t.id] }),
+  uniqueIndex('support_attachment_ordinal_unique').on(t.submissionId, t.ordinal),
+  uniqueIndex('support_attachment_remote_unique').on(t.submissionId, t.remoteAttachmentId),
+  check('support_attachment_ordinal_check', sql`${t.ordinal} between 0 and 4`),
+  check('support_attachment_length_check', sql`${t.byteLength} between 1 and 20971520`),
+  check('support_attachment_sha_check', sql`${t.sha256} ~ '^[0-9a-f]{64}$'`),
+  check('support_attachment_time_check', sql`${t.createdAt} between 0 and 9007199254740991 and ${t.updatedAt} between ${t.createdAt} and 9007199254740991`),
+  check('support_attachment_metadata_check', sql`char_length(${t.originalName}) between 1 and 255 and char_length(${t.contentType}) between 1 and 127 and (${t.remoteAttachmentId} is null or char_length(${t.remoteAttachmentId}) between 1 and 256)`),
+  check('support_attachment_bytes_check', sql`(
+    ${t.status}='expected' and ${t.bytes} is null and ${t.remoteAttachmentId} is null
+  ) or (
+    ${t.status} in ('received','uploading','failed','verification_required') and ${t.bytes} is not null and octet_length(${t.bytes})=${t.byteLength} and ${t.remoteAttachmentId} is null
+  ) or (
+    ${t.status}='uploaded' and ${t.remoteAttachmentId} is not null and ${t.bytes} is null
+  )`),
+])
+
 export const authUsers = pgTable(
   'auth_users',
   {

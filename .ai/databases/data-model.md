@@ -61,6 +61,23 @@ erDiagram
 
 binding 创建使用同一会话锁并复核有效性。会话到期清理先为仍有效的 binding 写入撤销事件；没有 binding 的旧会话沿用到期清理规则。有关联的失效会话和 binding 保留为无效记录，直到所有撤销目标完成；完成后至少保留 24 小时供退出重试，未完成事件不受这个期限限制。清理先处理到期 flow 和超过保留期的已完成 outbox，再删除无相关事件的已撤销 binding，最后删除无引用的失效会话；删除前重新核对依赖。
 
+## 支持反馈模型
+
+投诉和建议扩展依据 `.notes/support-center/specs/2026-10-15-complaints-and-suggestions-design.md` 与 `.notes/support-center/rfcs/complaints-and-suggestions-rfc.md`：新增 suggestion、complaint 使用 v3，原六类保留 v2。仅 complaint 有必需 boolean anonymous；开启时对外任务省略用户身份字段，内部 user_id 仍用于归属和限流，昵称快照为空。匿名状态属于不可变表单，重放改变它属于载荷冲突。增量约束变更不得删除原反馈或附件；本站用户额度仍共同核对。
+
+新 Bug 提交必须选择有效的问题分类（Type）；功能分类、资源类型、需求分类和部门仍可选。此前已固化的 v2 Bug 可保留 null 分类，读取与继续推进使用原表单及任务载荷快照，不因新必填规则补写或改写记录。
+
+反馈采用独立的 `support_feedback_submissions` 和 `support_feedback_attachments`，不复用申请表或公开存储。六类 v2 的依据为 `.notes/support-center/specs/2026-10-15-support-feedback-redesign-design.md` 与 `.notes/support-center/rfcs/support-feedback-redesign-rfc.md`；v3 扩展保留原记录，不重复执行早期退役表清理。表单可选 `contentFormat: markdown` 表示原样保存经过安全检查的 GFM，缺省继续按原纯文本转义。项目未上线，本次两种格式均保持 content rule 1，只通过冻结表单中的格式标识选择处理语义，不修改数据库约束或增加迁移。form version 仍按 development/community 保持 2/3，旧快照不补写格式标识或重新解释正文。
+
+| 表 | 职责与关系 | 必须保持的数据规则 |
+| --- | --- | --- |
+| `support_feedback_submissions` | 属于正式账号，保存不可变表单、昵称快照、正文、清单摘要及外部写入进度。账号外键限制删除。 | 用户＋客户端 UUID 唯一；同键同载荷重放，同键不同载荷冲突。每次状态改变递增安全整数 revision，父行锁裁决认领；外部调用不在事务内。任务 ID 唯一，未知创建不得盲重试。当前 attempt 保存步骤、附件、期限和进程 boot ID；迟到结果不能覆盖维护裁决。 |
+| `support_feedback_attachments` | 属于一份反馈，独立私有 bytea 暂存，保留元数据和 ClickUp 附件 ID。父外键限制删除。 | 提交＋附件 UUID 主键，ordinal 0–4 在提交内唯一；最多五个、单个 1–20 MiB、总计 100 MiB。received 等状态保留与声明长度和摘要一致的字节；uploaded 必须保存远端 ID 并释放字节。同一远端 ID 在同一提交内唯一。 |
+
+表单、附件清单和 ClickUp 创建载荷（List、TaskType、状态、自定义字段、Tag）在 prepare 时冻结并校验摘要；后续配置更新不能重解释旧载荷。development 六类为 bug、feature、asset、request、content、campaign；仅 feature 有 Domain，Bug 无 Domain，asset/content 的操作映射 Space Tag；community 为 suggestion、complaint，使用独立列表和分类 Tag；均不使用 Category。幂等摘要不包含昵称或服务端生成时间。新记录额度在用户锁内核对，重放不计新提交；每用户十分钟最多十份新记录、最多两份未过期 receiving。receiving 有效 24 小时，已开始外部同步的记录继续保留。读取不认领、不清理、不写远端；任务和全部附件已确认成功才能 completed。
+
+维护回填要求精确 attempt 与远端对象归属，附件须以下载文件摘要证明内容一致；明确未写入需有限的提供方证据。过期 receiving 仅经显式维护清理。普通启动、读取与停止不删除反馈记录；开发 reset 仍遵循显式目标与确认流程。备份包含正文和失败附件，不能纳入版本控制。
+
 ## 注册与投递边界
 
 完整申请、邮箱登记、表单和全部附件在一次短写事务中保存，任一步失败全部回滚，不留下半份资料或无效邮箱占用；邮箱竞争必须由数据库唯一约束裁决。已存在任意申请历史优先于正式账号冲突；申请提交不发邮件、不清理邀请、不创建账号。资料与承诺提交后不能由申请人修改。

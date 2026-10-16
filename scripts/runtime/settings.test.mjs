@@ -104,6 +104,23 @@ function fixture(t, profile = 'local') {
   return { workspace, values, save, read: inherited => readRuntimeConfiguration({ workspace, inherited: inherited ?? {} }) }
 }
 
+test('ClickUp token overrides root config only in server and is redacted in retained logs', t => {
+  const f = fixture(t)
+  f.values.CLICKUP_TOKEN = 'root-private'
+  f.save()
+  const state = f.read({ CLICKUP_TOKEN: 'p@%' })
+  assert.equal(state.environments.server.CLICKUP_TOKEN, 'p@%')
+  for (const [name, environment] of Object.entries(state.environments)) if (name !== 'server') assert.equal(environment.CLICKUP_TOKEN, undefined)
+  const file = join(f.workspace, 'logs/clickup.jsonl')
+  const log = logWriter(file, { maxBytes: 1024, retain: 2, environment: state.environments.server })
+  for (let i=0; i<30; i++) log('server', `p@% ${encodeURIComponent('p@%')} ${'x'.repeat(150)}`)
+  for (const name of readdirSync(join(f.workspace, 'logs'))) {
+    const retained = readFileSync(join(f.workspace, 'logs', name), 'utf8')
+    assert.equal(retained.includes('p@%'), false)
+    assert.equal(retained.includes(encodeURIComponent('p@%')), false)
+  }
+})
+
 test('Docker status failures explain engine availability without exposing command output', t => {
   const state = fixture(t).read(); state.workspace = root
   const cases = [

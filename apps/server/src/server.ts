@@ -1,4 +1,7 @@
 import { createApp, type CreateAppOptions } from "@server/src/app.js";
+import { createSupportServices } from './domains/support/service.js';
+import { createClickUpServices } from './modules/clickup/factory.js';
+import { readClickUpConfig } from './modules/clickup/config.js';
 import { startApplication, APPLICATION_CLEANUP_FAILED } from "@server/src/start-application.js";
 import { BusinessPluginLoadError, formatBusinessPluginError } from "@server/src/business-plugin-errors.js";
 import { parseAuthCodeHmacKey } from "@server/src/modules/auth/crypto.js";
@@ -103,6 +106,8 @@ try {
       ),
     });
     await notifications.assertReady();
+    const clickupServices = createClickUpServices(readClickUpConfig(process.env));
+    const supportServices = createSupportServices({ db, clickup: clickupServices, profile: profileServices });
     const appOptions: CreateAppOptions = {
       authServices,
       profileServices,
@@ -110,6 +115,8 @@ try {
       invitationServices,
       storageServices,
       notifications,
+      clickupServices,
+      supportServices,
       identityKeys: identity.enabled
         ? {
             clients: { ...identity.integrationClients },
@@ -135,6 +142,8 @@ try {
     database: db,
     listen: { port: PORT, host: HOST },
     startProjection: () => prepared.notifications.startWorker(),
+    recoverSupport: () => prepared.appOptions.supportServices.recover(),
+    drainSupport: () => prepared.appOptions.supportServices.close(),
     startOutbox: prepared.outbox ? () => startIdentityOutboxWorker(prepared.outbox!) : undefined,
     reportCleanupFailure: message => console.error(message),
   });

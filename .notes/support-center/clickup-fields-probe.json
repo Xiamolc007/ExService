@@ -1,0 +1,332 @@
+{
+  "fetchedAt": "2026-10-15T03:50:25.120Z",
+  "list": {
+    "id": "901810170816",
+    "name": "需求桶",
+    "taskCount": 4,
+    "statuses": [
+      {
+        "id": "sc901810170816_J6uAYXyE",
+        "status": "新增",
+        "orderindex": 0,
+        "color": "#646464",
+        "type": "open",
+        "status_group": "subcat_901810170816"
+      },
+      {
+        "id": "sc901810170816_iNyodTid",
+        "status": "待定",
+        "orderindex": 1,
+        "color": "#ffc53d",
+        "type": "unstarted",
+        "status_group": "subcat_901810170816"
+      },
+      {
+        "id": "sc901810170816_utLcyBWK",
+        "status": "分配中",
+        "orderindex": 2,
+        "color": "#0091ff",
+        "type": "custom",
+        "status_group": "subcat_901810170816"
+      },
+      {
+        "id": "sc901810170816_XrgY0AGM",
+        "status": "驳回",
+        "orderindex": 3,
+        "color": "#e5484d",
+        "type": "done",
+        "status_group": "subcat_901810170816"
+      },
+      {
+        "id": "sc901810170816_1CTrvU0n",
+        "status": "接受",
+        "orderindex": 4,
+        "color": "#008844",
+        "type": "closed",
+        "status_group": "subcat_901810170816"
+      }
+    ]
+  },
+  "customFieldCount": 7,
+  "customFields": [
+    {
+      "id": "05b11cac-6d83-4943-918a-f7e6f366ef56",
+      "name": "Summary",
+      "type": "text",
+      "type_config": {
+        "ai": {
+          "format": "short",
+          "prompt": "{{task.fields.7c786425-4f71-464f-9694-057492895566}}{{task.fields.a96ad51a-675f-4a1d-a329-741cf8108a47}}{{task.fields.9b3d2027-2162-42e2-81b9-d907592cdb5b}}{{task.fields.2ce7134c-fefb-47fb-876c-1b29d58513f7}}总结这个需求的大概信息，不需要任务进度和分配信息，用中文输出",
+          "source": "summary"
+        }
+      },
+      "date_created": "1753933916850",
+      "hide_from_guests": false,
+      "required": false
+    },
+    {
+      "id": "346759da-1bc8-4ae7-aa0c-020102bc287b",
+      "name": "用户",
+      "type": "short_text",
+      "type_config": {},
+      "date_created": "1791907955182",
+      "hide_from_guests": false,
+      "required": false
+    },
+    {
+      "id": "4c3befc0-5146-43a2-8610-86efe4e8124a",
+      "name": "Type",
+      "type": "drop_down",
+      "type_config": {
+        "sorting": "manual",
+        "new_drop_down": true,
+        "options": [
+          {
+            "id": "8ed0b993-3b6d-4d2a-b6e1-676df0541b4b",
+            "name": "功能",
+            "color": "#0091ff",
+            "orderindex": 0
+          },
+          {
+            "id": "b800da63-6f45-4988-b9cd-cb7559451ed6",
+            "name": "界面",
+            "color": "#30a46c",
+            "orderindex": 1
+          },
+          {
+            "id": "bf6d946f-4408-4496-8df7-b10bcd667485",
+            "name": "车辆",
+            "color": "#6647f0",
+            "orderindex": 2
+          },
+          {
+            "id": "c9d23f2f-a294-48e0-a8b6-4cbe2ad03acb",
+            "name": "角色",
+            "color": "#e5484d",
+            "orderindex": 3
+          },
+          {
+            "id": "08151e74-052d-4b0f-91a5-70c793c09aae",
+            "name": "衣服",
+            "color": "#e5484d",
+            "orderindex": 4
+          },
+          {
+            "id": "6e630a6c-4645-4633-8497-41c890a48b85",
+            "name": "武器",
+            "color": "#f76808",
+            "orderindex": 5
+          },
+          {
+            "id": "a4d0e97b-fea0-4517-9d2f-496e0842e141",
+            "name": "性能",
+            "color": "#ffc53d",
+            "orderindex": 6
+          },
+          {
+            "id": "1b6597bb-cdbf-48fc-a4c9-f8847d117fad",
+            "name": "动画",
+            "color": "#a18072",
+            "orderindex": 7
+          },
+          {
+            "id": "51916402-9a5b-4cab-b159-772296935716",
+            "name": "用户体验",
+            "color": "#e93d82",
+            "orderindex": 8
+          },
+          {
+            "id": "4f86c837-0e1f-43bd-88a0-51c52d2c74b5",
+            "name": "文档",
+            "color": "#d1b9b0",
+            "orderindex": 9
+          },
+          {
+            "id": "0c5e67d2-67d7-4c90-bb5a-3b2b6bf90cb0",
+            "name": "支持",
+            "color": "#92ceac",
+            "orderindex": 10
+          },
+          {
+            "id": "0d35613f-a12c-479e-9f76-20fa79507b41",
+            "name": "其他",
+            "color": "#8d8d8d",
+            "orderindex": 11
+          }
+        ]
+      },
+      "date_created": "1791391612991",
+      "hide_from_guests": false,
+      "required": false,
+      "applied_objects": [
+        {
+          "object_type": 19,
+          "object_id": 0
+        },
+        {
+          "object_type": 19,
+          "object_id": 1001
+        },
+        {
+          "object_type": 19,
+          "object_id": 1005
+        },
+        {
+          "object_type": 19,
+          "object_id": 1006
+        },
+        {
+          "object_type": 19,
+          "object_id": 1007
+        },
+        {
+          "object_type": 19,
+          "object_id": 1009
+        }
+      ]
+    },
+    {
+      "id": "4f7eb8a3-5de7-4f3b-87bb-8be5dc2d573f",
+      "name": "额外文件链接",
+      "type": "text",
+      "type_config": {},
+      "date_created": "1753421588214",
+      "hide_from_guests": false,
+      "required": false
+    },
+    {
+      "id": "88992b29-b802-4acb-b58b-c93dab29e35f",
+      "name": "创建到社区",
+      "type": "button",
+      "type_config": {
+        "button_icon": null,
+        "button_text": "创建到社区",
+        "button_color": "#30a46c",
+        "button_automation": {
+          "id": "52ffcc93-36be-4888-ad7a-3fbde2c2b5da"
+        }
+      },
+      "date_created": "1753423574098",
+      "hide_from_guests": false,
+      "required": false
+    },
+    {
+      "id": "9b3d2027-2162-42e2-81b9-d907592cdb5b",
+      "name": "Domain",
+      "type": "drop_down",
+      "type_config": {
+        "sorting": "manual",
+        "new_drop_down": true,
+        "options": [
+          {
+            "id": "20680086-0c92-4c7c-b6c1-7cd58434420c",
+            "name": "全部",
+            "color": "#646464",
+            "orderindex": 0
+          },
+          {
+            "id": "995da9ca-412e-4e3f-b4b1-238b038c699a",
+            "name": "社区",
+            "color": "#e5484d",
+            "orderindex": 1
+          },
+          {
+            "id": "68c1eef5-b538-447e-ba43-617120526a09",
+            "name": "个人",
+            "color": "#30a46c",
+            "orderindex": 2
+          },
+          {
+            "id": "30ea0d37-68a4-4f78-b7d6-2c59a71c7b76",
+            "name": "LEO",
+            "color": "#3397dd",
+            "orderindex": 3
+          },
+          {
+            "id": "e4a00223-c73d-4989-9d46-efc1a964cf7e",
+            "name": "EMS",
+            "color": "#ffc53d",
+            "orderindex": 4
+          },
+          {
+            "id": "d61e1df6-6202-4e75-8fae-e6fecbd0dc3a",
+            "name": "CIV",
+            "color": "#6647f0",
+            "orderindex": 5
+          },
+          {
+            "id": "61c9b6ec-7a50-4945-a893-f2e18c05d104",
+            "name": "其他",
+            "color": "#b5bcc2",
+            "orderindex": 6
+          }
+        ]
+      },
+      "date_created": "1753933558581",
+      "hide_from_guests": false,
+      "required": false
+    },
+    {
+      "id": "c065f885-7b19-4df7-900d-74f218f6d6e4",
+      "name": "创建到游戏",
+      "type": "button",
+      "type_config": {
+        "button_icon": null,
+        "button_text": "创建到游戏",
+        "button_color": "#0091ff",
+        "button_automation": {
+          "id": "b59d89d6-481f-4438-bb42-2597839910fb"
+        }
+      },
+      "date_created": "1791907800549",
+      "hide_from_guests": false,
+      "required": false
+    }
+  ],
+  "taskFieldSample": {
+    "page": 0,
+    "sampledTaskCount": 4,
+    "keys": [
+      "archived",
+      "assignees",
+      "checklists",
+      "creator",
+      "custom_fields",
+      "custom_id",
+      "custom_item_id",
+      "date_closed",
+      "date_created",
+      "date_done",
+      "date_updated",
+      "dependencies",
+      "description",
+      "due_date",
+      "folder",
+      "group_assignees",
+      "id",
+      "linked_tasks",
+      "list",
+      "locations",
+      "name",
+      "orderindex",
+      "parent",
+      "permission_level",
+      "points",
+      "priority",
+      "project",
+      "sharing",
+      "space",
+      "start_date",
+      "status",
+      "tags",
+      "team_id",
+      "text_content",
+      "time_estimate",
+      "top_level_parent",
+      "url",
+      "watchers"
+    ],
+    "note": "Observed top-level keys only; at most 100 tasks, not an exhaustive task schema. No task values included."
+  },
+  "warnings": []
+}

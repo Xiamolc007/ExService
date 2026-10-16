@@ -43,7 +43,7 @@ export function useEditorSession(options: SessionOptions) {
     : new TiptapLifecycle(() => ({ ...current.current, policy }), setIssues, initial))
   const extensions = useMemo(() => {
     const base = runtime instanceof ContentSession
-      ? createMarkdownExtensions({ purpose: 'editing', onError: runtime.report, onNotice: runtime.notice })
+      ? createMarkdownExtensions({ purpose: 'editing', pasteMarkdown: preset.kind === 'markdown' && preset.options.pasteMarkdown, onError: runtime.report, onNotice: runtime.notice })
       : createTiptapExtensions({ purpose: 'editing', policy, placeholder: false,
         tableNodeView: createTableNodeView(runtime),
         mentionSuggestion: {

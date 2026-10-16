@@ -22,7 +22,41 @@ function renderHeader(state: AuthAreaProps['state'], glassAtTop = false) {
   return { onLogin, onProfile, onSettings }
 }
 
-afterEach(cleanup)
+const originalSupportScroll = Element.prototype.scrollIntoView
+afterEach(() => {
+  cleanup()
+  if (originalSupportScroll) Element.prototype.scrollIntoView = originalSupportScroll
+  else Reflect.deleteProperty(Element.prototype, 'scrollIntoView')
+})
+
+const supportIdentity: AuthAreaProps['state'] = { status: 'authenticated', nickname: 'Tester', initial: 'T', avatarUrl: null }
+function supportHeader(state: AuthAreaProps['state']) {
+  return <MemoryRouter initialEntries={['/support/errors/example']}><SiteHeader auth={{ state, onLogin: vi.fn(), onRegister: vi.fn(), onRetry: vi.fn(), onLogout: vi.fn(), onProfile: vi.fn(), onSettings: vi.fn() }} /><LocationPath /></MemoryRouter>
+}
+it.each([{ status: 'anonymous' }, { status: 'loading' }, { status: 'unavailable', message: 'Unavailable' }] as AuthAreaProps['state'][])('hides Support until the session is confirmed: $status', async state => {
+  render(supportHeader(state))
+  expect(screen.queryByRole('link', { name: 'Support' })).toBeNull()
+  Element.prototype.scrollIntoView = vi.fn()
+  screen.getByRole('combobox', { name: '打开导航菜单' }).focus()
+  await userEvent.keyboard('[Space]')
+  expect(screen.queryByRole('option', { name: 'Support' })).toBeNull()
+})
+it('uses Support for desktop and mobile descendant routes and removes it after logout', async () => {
+  const view = render(supportHeader(supportIdentity))
+  expect(screen.getByRole('link', { name: 'Support' }).getAttribute('aria-current')).toBe('page')
+  expect(screen.getByRole('combobox', { name: '打开导航菜单' }).textContent).toContain('Support')
+  Element.prototype.scrollIntoView = vi.fn()
+  screen.getByRole('combobox', { name: '打开导航菜单' }).focus()
+  await userEvent.keyboard('[Space]')
+  expect(screen.getByRole('option', { name: 'Support' })).toBeTruthy()
+  view.rerender(supportHeader({ status: 'anonymous' }))
+  expect(screen.queryByRole('option', { name: 'Support' })).toBeNull()
+  expect(screen.queryByRole('link', { name: 'Support' })).toBeNull()
+})
+it('does not classify similarly prefixed paths as Support descendants', () => {
+  render(<MemoryRouter initialEntries={['/support-other']}><SiteHeader auth={{ state: supportIdentity, onLogin: vi.fn(), onRegister: vi.fn(), onRetry: vi.fn(), onLogout: vi.fn(), onProfile: vi.fn(), onSettings: vi.fn() }} /></MemoryRouter>)
+  expect(screen.getByRole('link', { name: 'Support' }).getAttribute('aria-current')).toBeNull()
+})
 
 it('keeps About active on a detail page and uses the canonical mobile target', () => {
   render(<MemoryRouter initialEntries={['/aboutus/communities/example-community']}><SiteHeader auth={{ state: { status: 'anonymous' }, onLogin: vi.fn(), onRegister: vi.fn(), onRetry: vi.fn(), onLogout: vi.fn(), onProfile: vi.fn(), onSettings: vi.fn() }} /></MemoryRouter>)

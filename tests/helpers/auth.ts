@@ -11,6 +11,7 @@ import { createStorageModule } from '@server/src/modules/storage/factory'
 import { parseStorageConfig } from '@server/src/modules/storage/config'
 import { createNotificationModule } from '@server/src/modules/notifications/factory'
 import { isolatedPostgres } from './postgres'
+import { unavailableSupport } from './support'
 
 export const testPasswordHasher: PasswordHasher = {
   async hash(password) { return `test-password:${password}` },
@@ -63,7 +64,7 @@ export async function createTestAuth(overrides: Partial<AuthServiceDependencies 
   // 测试需要投影时显式调用一次 runRound。
   const notifications = createNotificationModule({ db, tokenKey: Buffer.alloc(32, 3), now })
   return { db, connectionString: isolated.connectionString, schema: isolated.schema,
-    authServices, invitationServices, joinServices, profileServices, storageServices, notifications,
+    authServices, invitationServices, joinServices, profileServices, storageServices, notifications, ...unavailableSupport(db,profileServices),
     avatarDirectory, deliveries, now,
     async seedUser(input: { email: string; nickname: string; password: string }) {
       const id = createUserId(), hash = await passwordHasher.hash(input.password)

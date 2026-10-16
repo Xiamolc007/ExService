@@ -37,7 +37,7 @@ describe('glue route querystring schema', () => {
     fixtures.push(fixture)
     const app = createApp({ joinServices: fixture.joinServices, invitationServices: fixture.invitationServices,
       authServices: fixture.authServices, profileServices: fixture.profileServices,
-      storageServices: fixture.storageServices, notifications: fixture.notifications })
+      storageServices: fixture.storageServices, notifications: fixture.notifications, clickupServices: fixture.clickupServices, supportServices: fixture.supportServices })
     apps.push(app)
 
     const captured: Array<{ url: string; querystring: unknown }> = []

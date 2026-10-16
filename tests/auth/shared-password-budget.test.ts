@@ -1,4 +1,4 @@
-﻿import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import type { ScryptOptions } from 'node:crypto'
 import { createApp } from '@workspace/server'
 import { ScryptPasswordHasher } from '@server/src/modules/auth/crypto'
@@ -45,7 +45,7 @@ it('shares the production two-active/sixteen-waiting budget between login and in
   const verify = vi.spyOn(ScryptPasswordHasher.prototype, 'verify')
   // This is the same pure assembly function used by server.ts, not a test-only hasher assembly.
   const services = createAuthServices({ db: fixture.db, codeHmacKey: Buffer.alloc(32, 7) })
-  const app = createApp({ ...services, profileServices: fixture.profileServices, storageServices: fixture.storageServices, notifications: fixture.notifications })
+  const app = createApp({ ...services, profileServices: fixture.profileServices, storageServices: fixture.storageServices, notifications: fixture.notifications, clickupServices: fixture.clickupServices, supportServices: fixture.supportServices })
   apps.push(app)
   const login = () => app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'existing@example.com', password: 'valid password' } })
   const complete = () => app.inject({ method: 'POST', url: '/api/auth/invitations/complete', payload: { completionToken: grant.completionToken, nickname: 'Final', password: 'valid password' } })

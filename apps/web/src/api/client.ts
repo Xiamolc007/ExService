@@ -19,6 +19,7 @@ export const http = createExAxios({
   websiteBaseUrl: baseUrl,
   onSessionExpired: () => {
     if (syncSessionToken() !== null) return
+    if (window.location.pathname === '/support' || window.location.pathname.startsWith('/support/')) return
     if (window.location.pathname.startsWith('/identity/')) return
     if (window.location.pathname === '/login' && new URLSearchParams(window.location.search).has('ssoRequestId')) return
     if (window.location.pathname !== '/login') window.location.replace('/login')

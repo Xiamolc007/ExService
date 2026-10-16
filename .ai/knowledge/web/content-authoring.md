@@ -102,6 +102,18 @@ Timeline 可填写 `headline`、`eyebrow`、`note`，标题支持 `\n` 换行。
 
 JSON 修改使用 Vite 原生 HMR，当前成员 id 仍存在时保持选择；非法配置显示开发错误。`content:check` 检查 MDX 文案与作者链接，公开 JSON 和照片另由 Vite 启动／构建校验。发布前还需执行 Web 类型检查、对应测试和 Web 构建；Shader 与实际锚点几何须用真实浏览器验证。
 
+## 编辑 Support
+
+内容源位于 `apps/web/content/support/`；`settings.yaml` 与 `contacts.yaml` 必须存在。没有已确认资料时保留 `categories: []`、`clickup: null` 与 `items: []`，不发布设计预览中的案例或人物。字段以 `apps/web/build/support/schema.ts` 为准，完整内容投影以 `apps/web/build/support/definition.ts` 为准。
+
+错误正文放在 `errors/<slug>.mdx`，basename 与原始 kebab-case slug 一致。title、description、category 和 quickAnswer 必填；category 引用设置中的分类。quickAnswer 是独立纯文本，不从正文截取。order 为非负安全整数；featuredOrder 仅允许 1、2、3，草稿也参与精选位置唯一性检查。draft 条目仍校验字段、分类、资源与引用，但不进入公开元数据、正文 loader 或独占资源映射。
+
+正文支持标准 Markdown、Callout 与 ContentImage，不支持 About 专属组件。内部目标仅允许支持首页、列表、实际错误详情与有效正文锚点；公开错误不能链接草稿。联系人可有本集合头像、数字文本 QQ 与单一邮箱，缺失联系方式时不生成按钮。图片作者规范沿用上文。
+
+开发面板使用 `settings.yaml` 中的 `clickup.game`、`clickup.community` 与 `clickup.requestBucket`；三项都必须提供非空 `title`、HTTPS `embedUrl`，可选 `publicUrl` 用于面板下方外链。当前配置使用用户提供的三个 ClickUp 官方分享视图；尚未配置时，整个 `clickup` 保持 null。不能在 YAML 中粘贴 iframe HTML、脚本或扩展来源清单。来源策略、切换与会话边界见 `.ai/architectures/web/content-rendering.md`。
+
+需求桶拥有独立的 `embedUrl` 与可选 `publicUrl`，不再在游戏、社区视图中维护 `requestBucketUrl`。缺少需求桶视图时内容校验失败；缺少 `publicUrl` 时仍展示嵌入面板与重试提示，不生成外链或以其他视图的网址替代。
+
 ## 增加其他内容栏目
 
 1. 为新业务创建内容目录与 schema/定义，复用 `ContentDefinition`，给出独立 namespace、文件分类、组件属性检查和公开投影。业务引用规则留在该适配器中。

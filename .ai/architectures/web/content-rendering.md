@@ -1,6 +1,6 @@
 # Website 通用内容渲染
 
-Website 的仓库内容通过通用 Fumadocs 编译链路接入 SPA。每个业务集合独立定义字段、公开投影和引用语义，编译、资源处理及正文加载不依赖 About。当前使用者是 About；后续 Website 栏目可以注册新的 namespace。
+Website 的仓库内容通过通用 Fumadocs 编译链路接入 SPA。每个业务集合独立定义字段、公开投影和引用语义，编译、资源处理及正文加载不依赖 About。当前使用者是 About 和 Support；其他 Website 栏目可以注册新的 namespace。
 
 _最后更新：2026-10-15_
 
@@ -25,6 +25,8 @@ flowchart LR
 ```
 
 资源只从内容根 assets 目录导出；检查 realpath、存在性与路径边界。草稿独占资源不公开，公开内容共享使用的资源可以公开。内容目录不作为整个 public 目录复制。
+
+读取内容时先将 Windows CRLF 归一化为 LF，再交给 frontmatter 与正文解析器。否则 gray-matter 可能将最后一项字段的末尾 CR 留在 YAML 标量中，使数字或 boolean 变成字符串。schema 仍严格校验类型，不通过字段强制转换绕过错误。
 
 开发期文件变化经同一校验后更新注册表并刷新页面。错误通过 Vite overlay 呈现，修复后恢复。构建配置变化遵循 Vite 自身的重启流程；生成目录不参与根测试 watcher。
 
@@ -99,5 +101,19 @@ Hero 在正常文档流中占满顶栏下方的首屏，圆角图片背景与页
 成员主题与资料切换由同一选择状态控制，快速切换取消旧动画；DotGrid 保持实例，仅更新主题颜色。招募区复用同一份过渡中的成员主题，MeshGradient 在白色与成员背景色之间渐变，静态回退也跟随该主题。招募 MeshGradient 使用 240×264 的小源和 64,000 像素预算，CSS 放大到容器，resize 不增加 Canvas 预算。背景加载先保留静态回退，需观察 Shader 的就绪标记与公开 mount；仅有 canvas 不代表初始化成功。三秒未就绪或 context lost 时卸载失败背景。库的异步初始化错误仍可能出现在控制台，局部回退不吞掉全局 rejection。编辑字段和资源边界见 `.ai/knowledge/web/content-authoring.md`。
 
 静态内容不调用 Website Server、不新增 HTTP Contract 或数据库。Docs 入口边界见 `.ai/architectures/overview.md`；文档搜索、侧栏和版本切换没有附带在这套基础渲染中。
+
+## Support 适配
+
+`apps/web/build/support/` 持有错误、分类、联系人与面板配置 schema，以及 Support 路由引用校验和发布投影。`supportErrors` 是唯一 Fumadocs doc 集合；设置与联系人 YAML 由通用引擎读取，不生成浏览器 meta import。字段与编辑入口见 `.ai/knowledge/web/content-authoring.md`，已接受的产品边界见 `.ai/decisions/support-center/01-authenticated-support-and-clickup-view.md`。
+
+`apps/web/src/content/support/` 适配虚拟注册表、资源及正文 store。`apps/web/src/pages/Support/` 消费同一投影生成首页精选、列表与详情，正文目录只从实际渲染的 h2/h3 派生。路由导航聚焦并滚动至标题；有 hash 时优先定位当前页面的目标，正文迟到加载不会在无 hash 时再次抢焦点。
+
+`apps/web/src/routes/SupportAccess.tsx` 位于页面 lazy/Suspense 与内容错误边界之外，读取既有 AuthProvider 的会话结果。只有 authenticated 才挂载 Support 子树；其他状态不启动页面 lazy loader。App、RootLayout 与 SiteHeader 不静态导入 Support 注册表。登录按钮经 RootLayout Outlet context 打开既有弹窗，关闭时优先归还页面触发器焦点，失效后回退顶栏。
+
+共享 Web Client 收到当前会话的 SESSION_INVALID 时仍清理 token 并通知认证订阅者；在 `/support` 及其后代停留原地址，交给上述边界显示登录提示并保留 query/hash。仅名称前缀相似的其他路由不使用此例外。
+
+ClickUp 配置包含 `game`、`community` 与 `requestBucket` 三个视图，每个视图的 title、embedUrl 与可选 publicUrl 都经过构建校验。固定 host 策略在 `apps/web/build/support/clickup-policy.ts` 中维护，当前只允许用户提供的官方 iframe 来源 `sharing.clickup.com`，YAML 不能扩展来源。Support 首页通过 ExUI Glass「游戏｜社区｜需求桶」Tabs 切换，默认游戏；方向键只移动焦点，Enter/Space 激活视图。仅挂载当前视图的 iframe，切换后重新加载该视图，外链与当前视图对应。需求桶 iframe 宽度为容器的 100%、高度为 700px，其余视图沿用 80vh。跨域内容仍归 ClickUp，组件测试或内容编译通过不证明外部任务实际显示。
+
+需求桶直接作为第三个 Tab 展示，Tab 栏不再提供独立需求桶菜单。面板下方保留需求桶用途说明与当前视图的外部打开回退；作者字段见 `.ai/knowledge/web/content-authoring.md`。
 
 编辑约定见 `.ai/knowledge/web/content-authoring.md`。实现证据来自 `tests/content/`、`apps/web/src/content/` 中的加载、真实 Fumadocs 编译和 Vite 更新测试；这些检查不替代认证、外部应用或部署验收。

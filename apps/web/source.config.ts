@@ -1,5 +1,6 @@
 import { defineCollections } from 'fumadocs-mdx/config'
 import { aboutCollections } from './build/about/definition'
+import { supportCollections } from './build/support/definition'
 import { contentConfig } from './build/content/preset'
 
 const dir = 'content/about'
@@ -11,4 +12,5 @@ export const aboutSections = defineCollections({ type: 'doc', dir, ...aboutColle
 export const aboutCommunities = defineCollections({ type: 'doc', dir, ...aboutCollections.aboutCommunities })
 export const aboutMembers = defineCollections({ type: 'doc', dir, ...aboutCollections.aboutMembers })
 export const aboutMedia = defineCollections({ type: 'meta', dir, ...aboutCollections.aboutMedia })
+export const supportErrors = defineCollections({ type: 'doc', dir: 'content/support', ...supportCollections.supportErrors })
 export default contentConfig

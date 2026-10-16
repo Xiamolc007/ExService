@@ -12,6 +12,7 @@ const SAFE_IDENTIFIER = /^[a-z_][a-z0-9_]*$/
 const COMPLETE_TABLE_SETS = [
   BASELINE_APPLICATION_TABLES, // 0000
   [...BASELINE_APPLICATION_TABLES, 'auth_oidc_flows', 'auth_oidc_bindings', 'auth_identity_outbox'], // 0001
+  APPLICATION_TABLES.filter(table => !table.startsWith('support_feedback_')), // 0002
   APPLICATION_TABLES,
 ]
 

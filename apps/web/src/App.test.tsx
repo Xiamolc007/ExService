@@ -40,6 +40,13 @@ describe('App', () => {
     expect(markup).toContain('身份入口无效')
     expect(markup).not.toContain('Page not found')
   })
+  it.each(['/support', '/support/errors', '/support/errors/example', '/support/unknown'])('checks authentication before mounting any Support route: %s', path => {
+    const markup = renderToStaticMarkup(<MemoryRouter initialEntries={[path]}><App /></MemoryRouter>)
+    expect(markup).toContain('正在确认登录状态')
+    expect(markup).toContain('Site header')
+    expect(markup).not.toContain('Page not found')
+    expect(markup).not.toContain('<iframe')
+  })
   it('serves both community routes inside the site layout', () => {
     const rifling = renderToStaticMarkup(<MemoryRouter initialEntries={['/communities/rifling-911']}><App /></MemoryRouter>)
     const caep = renderToStaticMarkup(<MemoryRouter initialEntries={['/communities/caep']}><App /></MemoryRouter>)

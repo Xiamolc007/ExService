@@ -1,0 +1,54 @@
+{
+  "id": "9b3d2027-2162-42e2-81b9-d907592cdb5b",
+  "name": "Domain",
+  "type": "drop_down",
+  "type_config": {
+    "sorting": "manual",
+    "new_drop_down": true,
+    "options": [
+      {
+        "id": "20680086-0c92-4c7c-b6c1-7cd58434420c",
+        "name": "全部",
+        "color": "#646464",
+        "orderindex": 0
+      },
+      {
+        "id": "995da9ca-412e-4e3f-b4b1-238b038c699a",
+        "name": "社区",
+        "color": "#e5484d",
+        "orderindex": 1
+      },
+      {
+        "id": "68c1eef5-b538-447e-ba43-617120526a09",
+        "name": "个人",
+        "color": "#30a46c",
+        "orderindex": 2
+      },
+      {
+        "id": "30ea0d37-68a4-4f78-b7d6-2c59a71c7b76",
+        "name": "LEO",
+        "color": "#3397dd",
+        "orderindex": 3
+      },
+      {
+        "id": "e4a00223-c73d-4989-9d46-efc1a964cf7e",
+        "name": "EMS",
+        "color": "#ffc53d",
+        "orderindex": 4
+      },
+      {
+        "id": "d61e1df6-6202-4e75-8fae-e6fecbd0dc3a",
+        "name": "CIV",
+        "color": "#6647f0",
+        "orderindex": 5
+      },
+      {
+        "id": "61c9b6ec-7a50-4945-a893-f2e18c05d104",
+        "name": "其他",
+        "color": "#b5bcc2",
+        "orderindex": 6
+      }
+    ]
+  },
+  "required": false
+}

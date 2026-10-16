@@ -142,7 +142,7 @@ async function storageSetup(options: {
     ? createAppWithStorage(f, storage.storage)
     : createApp({
       authServices: f.authServices, profileServices: f.profileServices, joinServices: f.joinServices,
-      invitationServices: f.invitationServices, storageServices: storage.storage, notifications: f.notifications,
+      invitationServices: f.invitationServices, storageServices: storage.storage, notifications: f.notifications, clickupServices: f.clickupServices, supportServices: f.supportServices,
       corsAllowedOrigins: options.origins, logger: options.logger,
     })
   apps.push(app)

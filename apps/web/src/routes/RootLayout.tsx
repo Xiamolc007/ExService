@@ -10,6 +10,8 @@ import {
 import { SettingsModal } from '@web/src/settings/SettingsExperience'
 import { InvitationRegistrationFlow } from '@web/src/invitations/InvitationRegistrationFlow'
 
+export interface SiteOutletContext { requestLogin(trigger: HTMLElement): void }
+
 /**
  * 站点布局层：提供站点顶栏与嵌套路由的挂载点。
  *
@@ -25,6 +27,13 @@ export function RootLayout({ glassAtTop = false }: { glassAtTop?: boolean }) {
   const registerButton = useRef<HTMLButtonElement>(null)
   const loginButton = useRef<HTMLButtonElement>(null)
   const authTrigger = useRef<'login' | 'register'>('login')
+  const pageAuthTrigger = useRef<HTMLElement | null>(null)
+  const requestLogin: SiteOutletContext['requestLogin'] = trigger => {
+    pageAuthTrigger.current = trigger
+    authTrigger.current = 'login'
+    setLoginEmail('')
+    auth.openModal('login')
+  }
   const join = () => { auth.closeModal(); navigate('/join/rifling-911') }
   useEffect(() => {
     if (auth.state.status === 'anonymous') setSettingsCategory(null)
@@ -44,8 +53,8 @@ export function RootLayout({ glassAtTop = false }: { glassAtTop?: boolean }) {
       <SiteHeader glassAtTop={glassAtTop} mobileMenuButtonRef={mobileMenuButton}
         notifications={<NotificationBellSlot />} auth={{
           state: auth.state,
-          onLogin: () => { authTrigger.current = 'login'; setLoginEmail(''); auth.openModal('login') },
-          onRegister: () => { authTrigger.current = 'register'; setLoginEmail(''); auth.openModal('register') },
+          onLogin: () => { pageAuthTrigger.current = null; authTrigger.current = 'login'; setLoginEmail(''); auth.openModal('login') },
+          onRegister: () => { pageAuthTrigger.current = null; authTrigger.current = 'register'; setLoginEmail(''); auth.openModal('register') },
           onRetry: auth.retrySession,
           onLogout: auth.logout,
           onProfile: () => setSettingsCategory('profile'),
@@ -54,7 +63,7 @@ export function RootLayout({ glassAtTop = false }: { glassAtTop?: boolean }) {
           registerButtonRef: registerButton,
           loginButtonRef: loginButton,
         }} />
-      <Outlet />
+      <Outlet context={{ requestLogin } satisfies SiteOutletContext} />
       {settingsCategory !== null && auth.state.status !== 'anonymous' &&
         <SettingsModal key={settingsCategory} initialCategory={settingsCategory}
           onClose={closeSettings} />}
@@ -64,6 +73,12 @@ export function RootLayout({ glassAtTop = false }: { glassAtTop?: boolean }) {
           mode={auth.modalMode}
           onCloseAutoFocus={event => {
             event.preventDefault()
+            const pageTrigger = pageAuthTrigger.current
+            pageAuthTrigger.current = null
+            if (pageTrigger?.isConnected && !pageTrigger.matches(':disabled, [hidden], [inert], [inert] *')) {
+              pageTrigger.focus()
+              if (document.activeElement === pageTrigger) return
+            }
             if (window.matchMedia('(max-width: 52rem)').matches) mobileMenuButton.current?.querySelector('button')?.focus()
             else (authTrigger.current === 'register' ? registerButton.current : loginButton.current)?.focus()
           }}

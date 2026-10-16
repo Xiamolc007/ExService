@@ -160,10 +160,12 @@ test('unexpected root child exit closes its private Windows Job and cleans alrea
   try {
     for (let count = 0; count < 100 && !messages.some(line => line.startsWith('DESCENDANT:')); count++) await delay(50)
     const pid = Number(messages.find(line => line.startsWith('DESCENDANT:'))?.split(':')[1])
-    const descendant = processIdentity(pid)
+    assert.ok(Number.isSafeInteger(pid) && pid > 0)
     const result = await owned.exited
     assert.equal(result.code, 7)
-    assert.equal(identityAlive(descendant), false)
+    // The Job may drain before the first CIM observation; after helper exit,
+    // the reported descendant PID must be absent in either timing.
+    assert.equal(processIdentity(pid), null)
   } finally { await stopOwned([owned]) }
 })
 test('two real independently spawned contenders cannot acquire the same cross-mode mutex', async () => {

@@ -39,6 +39,7 @@ export default defineConfig({
       'packages/api-client/src/**/*.test.{ts,tsx}',
       'packages/components/src/**/*.test.{ts,tsx}',
       'packages/sdk/src/**/*.test.{ts,tsx}',
+      'packages/common/src/**/*.test.{ts,tsx}',
     ],
     exclude: [...configDefaults.exclude, '**/dist/**', 'vendor/**', 'output/**'],
   },

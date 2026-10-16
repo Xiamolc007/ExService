@@ -30,6 +30,7 @@ const NAV_ITEMS = [
   { to: '/docs/', label: 'Document' },
   { to: '/gallery', label: 'Gallery' },
   { to: '/aboutus', label: 'About Us' },
+  { to: '/support', label: 'Support' },
   { to: '/join/rifling-911', label: 'Join' },
 ] as const
 const COMMUNITY_ITEMS = [
@@ -72,7 +73,9 @@ export function SiteHeader({ auth, mobileMenuButtonRef, glassAtTop = false, noti
   const location = useLocation()
   const navigate = useNavigate()
   const aboutActive = location.pathname === '/about' || location.pathname === '/aboutus' || location.pathname.startsWith('/aboutus/')
-  const selectedNavigation = aboutActive ? '/aboutus' : [...NAV_ITEMS, ...COMMUNITY_ITEMS].some(({ to }) => to === location.pathname)
+  const visibleItems = NAV_ITEMS.filter(({ to }) => to !== '/support' || auth.state.status === 'authenticated')
+  const supportActive = auth.state.status === 'authenticated' && (location.pathname === '/support' || location.pathname.startsWith('/support/'))
+  const selectedNavigation = supportActive ? '/support' : aboutActive ? '/aboutus' : [...visibleItems, ...COMMUNITY_ITEMS].some(({ to }) => to === location.pathname)
     ? location.pathname : ''
 
   return (
@@ -94,10 +97,10 @@ export function SiteHeader({ auth, mobileMenuButtonRef, glassAtTop = false, noti
                     <NavigationMenuLink asChild key={to}><Link to={to}>{label}</Link></NavigationMenuLink>)}
                 </NavigationMenuContent>
               </NavigationMenuItem>
-              {NAV_ITEMS.filter(({ to }) => to !== '/join/rifling-911').map(({ to, label }) => (
+              {visibleItems.filter(({ to }) => to !== '/join/rifling-911').map(({ to, label }) => (
                 <NavigationMenuItem key={to}>
                   <NavigationMenuLink asChild className={navigationMenuTriggerStyle()}>
-                    <Link to={to} aria-current={to === '/aboutus' && aboutActive ? 'page' : undefined}>{label}</Link>
+                    <Link to={to} aria-current={(to === '/aboutus' && aboutActive) || (to === '/support' && supportActive) ? 'page' : undefined}>{label}</Link>
                   </NavigationMenuLink>
                 </NavigationMenuItem>
               ))}
@@ -121,7 +124,7 @@ export function SiteHeader({ auth, mobileMenuButtonRef, glassAtTop = false, noti
 
         <div className={styles.mobileNav}>
           <SelectField value={selectedNavigation} onValueChange={(value) => {
-            if ([...NAV_ITEMS, ...COMMUNITY_ITEMS].some(({ to }) => to === value)) navigate(value)
+            if ([...visibleItems, ...COMMUNITY_ITEMS].some(({ to }) => to === value)) navigate(value)
           }}>
             <SelectTrigger className={styles.mobileNavTrigger} aria-label="打开导航菜单">
               <Menu aria-hidden="true" />
@@ -135,7 +138,7 @@ export function SiteHeader({ auth, mobileMenuButtonRef, glassAtTop = false, noti
               </SelectGroup>
               <SelectGroup>
                 <SelectLabel>导航</SelectLabel>
-                {NAV_ITEMS.map(({ to, label }) =>
+                {visibleItems.map(({ to, label }) =>
                   <SelectItem key={to} value={to}>{label}</SelectItem>)}
               </SelectGroup>
             </SelectContent>

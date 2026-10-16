@@ -2,7 +2,7 @@
 
 **结论：`@exre/exui` 的几条契约违反了不会报错，只会静默失效；其中三条与 CSS 特异性有关，读我们自己的代码看不出来。**
 
-_最后更新：2026-09-18_
+_最后更新：2026-10-15_
 
 ## 已知陷阱
 
@@ -99,6 +99,16 @@ ExUI 的 `Button` 渲染 `<button>` 但**不写** `role="button"`（依赖隐式
 ExUI 弹窗的滚动锁定会给 `body[data-scroll-locked]` 添加滚动条宽度的右外边距。根节点已固定占位时，这会重复补偿，因此在支持 `scrollbar-gutter` 的浏览器中将该右外边距覆盖为零。必须同时验证短页、长页以及弹窗打开和关闭，不能只检查页面切换。
 
 `tests/browser/navbar-geometry.mjs` 提供真实浏览器的坐标断言，接受 Browser Use 的 tab；这不是 Vitest/jsdom 测试，也不由 `pnpm test` 自动执行。使用桌面视口与传统滚动条运行 `assertNavbarGeometry(tab, baseUrl)` 和 `assertNavbarModalGeometry(tab, baseUrl)`；jsdom 没有布局计算，无法覆盖该问题。
+
+### 13. `NativeSelect` 的弹层仍由系统绘制
+
+ExUI `NativeSelect` 只包装原生 `<select>`；触发器有库样式，展开后的菜单仍随浏览器和操作系统。需要与网站主题一致的菜单时，使用公开的 `SelectField`、`SelectTrigger`、`SelectContent` 和 `SelectItem`，将标签、RHF ref、onBlur 和错误描述关联放在触发器上。
+
+Radix 的 `SelectItem` 不接受空字符串值；可选字段通过独立的「不选择」菜单项把值还原成表单的空字符串，不能把清空项标识提交为 ClickUp option ID。支持反馈的绑定见 `packages/components/src/forms/ClickUpFieldInput.tsx` 和 `apps/web/src/pages/Support/feedback/FeedbackModal.tsx`。
+
+### 14. `Textarea` 的 `rows` 不能单独保证初始高度
+
+ExUI `Textarea` 启用 `field-sizing: content`，空值时按内容和最小高度计算尺寸，仅传 `rows` 可能仍得到较矮的输入框。需要明确主次层级时，在消费方 CSS Module 设置 `min-height`；支持反馈使用 `lh` 单位分别保留约八行和三行的空间，继续允许内容增长。实现见 `apps/web/src/pages/Support/feedback/FeedbackModal.module.scss`。
 
 ## 证据
 

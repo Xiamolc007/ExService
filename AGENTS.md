@@ -39,9 +39,9 @@
 | `api/` | HTTP 路径、operation、请求/响应/错误 schema；不放实现。 |
 | `packages/api-client/` | 生成类型与 `createApiClient({ baseUrl })`；不引入 React、业务状态或第二份 endpoint 定义。 |
 | `packages/components/` | 基于 ExUI 的共享 UI；不访问 API、不定义路由表、不导入 ExUI 全局样式。 |
+| `packages/common/` | 按模块子入口公开跨应用共享的纯逻辑；消费规则见 `.agents/rules/package-common.md`。 |
 | `apps/web/` | 前端路由、主题、构建配置与 Client 适配；API 请求只经 `@workspace/api-client`，不直接使用 `fetch` 或复制 DTO。 |
 | `apps/server/` | 加载 Contract、映射 handler、执行受控数据库访问；不绕过 Contract 注册 HTTP 路由或静态 JSON mock，不反向生成 OpenAPI，不连接 `hydra` 等其他数据库。 |
-| `packages/common/` | Server 与 runtime 共享的纯身份配置解析和绑定投影；当前只开放 Node 子入口。 |
 | `tests/contract/` | 从 Contract 读取 schema，验证真实 Fastify 路由、原始 handler 输出和双向 operation 覆盖。 |
 
 ## Contract-first 工作流

@@ -12,6 +12,8 @@ const { createStorageModule } = await load('modules/storage/factory')
 const { parseStorageConfig } = await load('modules/storage/config')
 const { createNotificationModule } = await load('modules/notifications/factory')
 const { startApplication } = await load('start-application')
+const { createClickUpServices } = await load('modules/clickup/factory')
+const { createSupportServices } = await load('domains/support/service')
 const { BusinessPluginLoadError, formatBusinessPluginError } = await load('business-plugin-errors')
 const owned = mkdtempSync(join(tmpdir(), 'exwebsite-env-'))
 let closes = 0, starts = 0
@@ -26,6 +28,8 @@ const services = {
   storageServices: createStorageModule({ config: parseStorageConfig({}, { dataRoot: owned }) }),
   notifications: createNotificationModule({ db: database, tokenKey: Buffer.alloc(32, 3) }),
 }
+services.clickupServices = createClickUpServices({ kind: 'disabled' })
+services.supportServices = createSupportServices({ db: database, clickup: services.clickupServices, profile: services.profileServices })
 try {
   const app = await startApplication({
     createApp: () => createApp(services), database,

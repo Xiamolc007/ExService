@@ -1,5 +1,6 @@
 import { createApiClient } from '../../packages/api-client/src/client.js'
 import { createExAxios } from '../../packages/sdk/src/http/node.js'
+import type { components } from '../../packages/api-client/src/generated/schema.js'
 
 const client = createApiClient({ baseUrl: 'http://127.0.0.1/api', transport: async () => ({}) })
 const http = createExAxios({ baseUrl: 'http://127.0.0.1/api' })
@@ -35,4 +36,9 @@ const downloaded: Promise<Blob> = client.GET('/admin/join/applications/{applicat
 const wrongDownload: Promise<{ status: string }> = client.GET('/admin/join/applications/{applicationId}/attachments/{attachmentId}', {
   params: { path: { applicationId: 'a', attachmentId: 'b' } }, responseType: 'blob',
 })
-void [known, explicit, unknownResult, invented, downloaded, wrongDownload]
+type BugIntake = Extract<components['schemas']['FeedbackPrepare']['form'], { kind: 'bug' }>
+const selectedBugCategory: BugIntake['typeOptionId'] = '00000000-0000-4000-8000-000000000001'
+// @ts-expect-error New Bug submissions require a classification.
+const missingBugCategory: BugIntake['typeOptionId'] = null
+const previousBugCategory: components['schemas']['FeedbackBugForm']['typeOptionId'] = null
+void [known, explicit, unknownResult, invented, downloaded, wrongDownload, selectedBugCategory, missingBugCategory, previousBugCategory]
