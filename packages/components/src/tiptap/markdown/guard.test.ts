@@ -9,10 +9,10 @@ import { parseMarkdownHTML } from './paste'
 
 const editors: Editor[] = []
 afterEach(() => { editors.splice(0).forEach(editor => editor.destroy()); vi.unstubAllGlobals() })
-function editor(source = 'before', onError = vi.fn(), onNotice = vi.fn()) {
+function editor(source = 'before', onError = vi.fn(), onNotice = vi.fn(), pasteMarkdown = false) {
   const result = parseMarkdownContent({ format: 'markdown', content: source })
   if (!result.ok) throw new Error('fixture')
-  const value = new Editor({ extensions: createMarkdownExtensions({ purpose: 'editing', onError, onNotice }), content: result.value })
+  const value = new Editor({ extensions: createMarkdownExtensions({ purpose: 'editing', onError, onNotice, pasteMarkdown }), content: result.value })
   editors.push(value)
   return value
 }
@@ -65,6 +65,41 @@ describe('Markdown transaction and paste gate', () => {
     expect(paste(value, '', '**literal**\n# plain')).toBe(true)
     expect(value.state.doc.textContent).toBe('**literal**# plain')
     expect(value.getJSON().content![0]!.content![0]!.marks).toBeUndefined()
+  })
+  it('parses opted-in Markdown paste atomically and restores the original document on undo', () => {
+    const value = editor('', vi.fn(), vi.fn(), true)
+    expect(paste(value, '', '# 标题\n\n**加粗**\n\n- [x] 完成')).toBe(true)
+    expect(value.getJSON().content?.[0]).toMatchObject({ type: 'heading', attrs: { level: 1 } })
+    expect(value.getJSON().content?.[1]?.content?.[0]?.marks).toContainEqual({ type: 'bold' })
+    expect(value.getJSON().content?.[2]).toMatchObject({ type: 'taskList' })
+    expect(undoDepth(value.state)).toBe(1)
+    value.commands.undo()
+    expect(value.state.doc.textContent).toBe('')
+  })
+  it('keeps plain clipboard text literal inside code even when Markdown paste is enabled', () => {
+    const value = editor('```txt\nbefore\n```', vi.fn(), vi.fn(), true)
+    value.commands.setTextSelection(7)
+    paste(value, '', '\n**literal**\n# plain')
+    expect(value.getJSON().content?.[0]).toMatchObject({ type: 'codeBlock', content: [{ type: 'text', text: 'before\n**literal**\n# plain' }] })
+  })
+  it('rejects unsafe opted-in Markdown paste without changing selection or undo history', () => {
+    const errors = vi.fn(), value = editor('before', errors, vi.fn(), true)
+    value.commands.selectAll()
+    const before = value.getJSON(), selection = value.state.selection
+    paste(value, '', '![bad](javascript:evil)')
+    expect(value.getJSON()).toEqual(before)
+    expect(value.state.selection).toEqual(selection)
+    expect(undoDepth(value.state)).toBe(0)
+    expect(errors).toHaveBeenCalled()
+  })
+  it('never deletes the selected document when an opted-in clipboard is empty', () => {
+    const value = editor('before', vi.fn(), vi.fn(), true)
+    value.commands.selectAll()
+    const before = value.getJSON(), selection = value.state.selection
+    paste(value, '')
+    expect(value.getJSON()).toEqual(before)
+    expect(value.state.selection).toEqual(selection)
+    expect(undoDepth(value.state)).toBe(0)
   })
   it('sanitizes HTML before DOM, keeps supported marks and visible wrapper order', () => {
     const result = parseMarkdownHTML('<details><summary>Title</summary><p><span style="color:red;font-weight:bold">Body</span><u> plain</u></p></details><script>secret()</script><a href="javascript:bad">link</a><img src="data:bad" alt="alt">', editor().schema)

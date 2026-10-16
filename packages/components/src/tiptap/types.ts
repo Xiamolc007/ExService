@@ -16,8 +16,8 @@ export interface TiptapEditorHandle {
   focus(): void
 }
 export type TiptapPlaceholder = string | false | ((context: { editor: Editor; node: Node; pos: number; hasAnchor: boolean }) => string)
-export interface MarkdownPresetOptions { placeholder?: TiptapPlaceholder; slash?: boolean; emoji?: boolean }
-export interface TiptapPresetOptions extends MarkdownPresetOptions { policy?: TiptapContentPolicy }
+export interface MarkdownPresetOptions { placeholder?: TiptapPlaceholder; slash?: boolean; emoji?: boolean; pasteMarkdown?: boolean }
+export interface TiptapPresetOptions extends Omit<MarkdownPresetOptions, 'pasteMarkdown'> { policy?: TiptapContentPolicy }
 export interface MarkdownPreset { readonly kind: 'markdown'; readonly options: Readonly<MarkdownPresetOptions> }
 export interface FullTiptapPreset { readonly kind: 'tiptap'; readonly options: Readonly<TiptapPresetOptions> }
 export type TiptapPreset = MarkdownPreset | FullTiptapPreset

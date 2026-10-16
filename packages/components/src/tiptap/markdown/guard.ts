@@ -1,5 +1,5 @@
 import { Extension } from '@tiptap/core'
-import { Plugin } from '@tiptap/pm/state'
+import { Plugin, type Transaction } from '@tiptap/pm/state'
 import { Slice } from '@tiptap/pm/model'
 import { closeHistory } from '@tiptap/pm/history'
 import type { EditorView } from '@tiptap/pm/view'
@@ -8,6 +8,7 @@ import type { TiptapIssue } from '../types'
 import type { MarkdownExtensionOptions } from './types'
 import { validateMarkdownJSON } from './validate'
 import { parseMarkdownHTML, plainTextDocument } from './paste'
+import { parseMarkdownContent } from './conversion'
 import { contentAccepted, contentFailure, contentOperationMeta, createContentGatePlugin, reportContentIssues, type ContentOperation } from '../content-gate'
 import { invokeContentObserver } from '../content-events'
 
@@ -18,8 +19,29 @@ export function createMarkdownGuard(options: MarkdownExtensionOptions) {
     addProseMirrorPlugins() {
       const editor = this.editor
       const report = (issues: readonly TiptapIssue[]) => reportContentIssues(editor, issues)
+      const commit = (view: EditorView, tr: Transaction, notices: readonly TiptapIssue[] = []) => {
+        const operation: ContentOperation = {}
+        closeHistory(tr).setMeta(contentOperationMeta, operation)
+        validateMarkdownJSON(tr.doc.toJSON(), view.state.schema, false)
+        view.dispatch(tr.scrollIntoView())
+        if (contentAccepted(editor, operation)) { if (notices.length) invokeContentObserver(() => options.onNotice?.(notices)) }
+        else report(operation.issues ?? [new ContentFailure('invalid-content').issue])
+      }
       const insert = (view: EditorView, html: string, text: string, pos?: number) => {
         try {
+          if (!html && !text) { report([new ContentFailure('unsupported-content').issue]); return }
+          const { $from, $to } = view.state.selection
+          if (pos === undefined && text && $from.parent.type.spec.code && $from.sameParent($to)) {
+            commit(view, view.state.tr.insertText(text))
+            return
+          }
+          if (!html && options.pasteMarkdown) {
+            const parsed = parseMarkdownContent({ format: 'markdown', content: text })
+            if (!parsed.ok) { report(parsed.issues); return }
+            const slice = Slice.maxOpen(view.state.schema.nodeFromJSON(parsed.value).content, false)
+            commit(view, pos === undefined ? view.state.tr.replaceSelection(slice) : view.state.tr.replaceRange(pos, pos, slice))
+            return
+          }
           const parsed = html ? parseMarkdownHTML(html, view.state.schema) : null
           if (parsed && !parsed.ok && parsed.issues.some(issue => issue.code === 'limit-exceeded')) { report(parsed.issues); return }
           const meaningful = parsed?.ok && (parsed.value.textContent.length || parsed.value.content.content.some(node => node.type.name !== 'paragraph' || node.childCount))
@@ -30,13 +52,7 @@ export function createMarkdownGuard(options: MarkdownExtensionOptions) {
           // Table is isolating. Opening through it can fit a 1×1 table as plain
           // paragraph text; keep isolating boundaries while ordinary p can merge.
           const slice = Slice.maxOpen(doc.content, false)
-          const operation: ContentOperation = {}
-          const tr = closeHistory(pos === undefined ? view.state.tr.replaceSelection(slice) : view.state.tr.replaceRange(pos, pos, slice))
-          tr.setMeta(contentOperationMeta, operation)
-          validateMarkdownJSON(tr.doc.toJSON(), view.state.schema, false)
-          view.dispatch(tr.scrollIntoView())
-          if (contentAccepted(editor, operation)) { if (notices.length) invokeContentObserver(() => options.onNotice?.(notices)) }
-          else report(operation.issues ?? [new ContentFailure('invalid-content').issue])
+          commit(view, pos === undefined ? view.state.tr.replaceSelection(slice) : view.state.tr.replaceRange(pos, pos, slice), notices)
         } catch (error) { report(contentFailure(error)) }
       }
       const filesError = () => report([{ code: 'unsupported-content', message: '此编辑器不支持文件上传，请使用图片地址。' }])

@@ -10,7 +10,7 @@ _最后更新：2026-10-15_
 
 `useMarkdownPreset` 选择纯 GFM，`useTiptapPreset` 选择完整富文本；两者只生成配置描述，不创建 Editor。`useTiptapEditor` 内部只调用一次官方 `useEditor`，按初始化预设选择既有 runtime，返回原生 `editor`、同级挂载一次的 `interactions`、`issues` 和稳定的 `readJSON` / `exportMarkdown` / `replaceContent` / `focus`。共享 `TiptapEditor` 复用相同接线，`TiptapViewer` 采用所属 viewing 工厂；Editor 与 Viewer 可复用同一描述，但扩展、存储、历史和交互状态各自独立。
 
-Preset options 与完整预设的嵌套 policy 均在初始化复制；更改 options 或传入另一 preset 不更新 schema、策略和交互配置。`placeholder` 支持 string、callback、false，`slash` 与 `emoji` 默认 true；配置变化需要显式卸载重建，先通过所属预设导出并验证正文。`initialContent` 仅初始化读取，Viewer 的 `content` 持续响应更新；editable、ariaLabel、事件和完整预设服务回调继续读取最新值。
+Preset options 与完整预设的嵌套 policy 均在初始化复制；更改 options 或传入另一 preset 不更新 schema、策略和交互配置。`placeholder` 支持 string、callback、false，`slash` 与 `emoji` 默认 true；GFM 独有的 `pasteMarkdown` 默认 false，启用后把没有 HTML 的 clipboard 文本作为 Markdown 原子插入，代码块内仍保留字面文本，空 clipboard 不删除原选区。配置变化需要显式卸载重建，先通过所属预设导出并验证正文。`initialContent` 仅初始化读取，Viewer 的 `content` 持续响应更新；editable、ariaLabel、事件和完整预设服务回调继续读取最新值。
 
 共享 Editor 不挂载顶部工具栏，公开组件移除 toolbar/renderToolbar 与直接 policy；完整 policy 放入 `useTiptapPreset({ policy })`。调用方使用原生 Editor 显式组合格式按钮与布局；既有内部官方工具栏不公开 runtime。独立 Viewer 不安装历史、placeholder、Slash 或 Emoji。
 
@@ -32,7 +32,7 @@ Preset options 与完整预设的嵌套 policy 均在初始化复制；更改 op
 
 HTML paste 与外部 HTML drop 在创建 DOM 前经过 parse5 原始 token/AST 预算与白名单构造。parse5 会解码属性中的实体，所有再次输出的属性仍需有限枚举与转义；例如 align 只能为 left/center/right，不能把含引号/标签的属性文字升级为节点。显式 hidden/display:none/visibility:hidden 按整棵祖先剪枝，包含表格行组、行和单元格。剪枝前保留各可见原始行的列掩码；不同列隐藏后即使剩余列数相同，也必须文本降级，不能把 Amount 表头重新配到原 Name 列的 Alice。相同隐藏列可在保留原列关系后缩减表格；整行/行组隐藏可以独立移除，清理后不再矩形的表格走文本降级。危险嵌入整棵移除，未知样式/包装降级；未知块包装需保留支持的段落边界，不能简单拼接裸文字。复杂表格与 caption 按原始 DOM 顺序转为可见文本，嵌套表格也保留行和单元格的换行/Tab，不展开跨度或臆造表头。任务身份由 li 的直接所属列表决定，进入子 ul/ol 时重新判定，不能向所有后代传播任务标志。
 
-浏览器 clipboard 的 fragment 与结构容器格式换行不作为正文；paragraph、inline 与 code 内的实际空白仍保留。text/plain 保持字面文本；文件与 HTML 混合输入整体拒绝。无安全 HTML 且没有纯文本 fallback 时也须拒绝，不能用空 Slice 删除原选区。构造 Slice 时保留 isolating 边界：`Slice.maxOpen(content, false)` 保留单格/仅表头 table，同时允许普通 paragraph 在光标处合并。插入后的完整候选通过门禁才一次性提交为 Undo 事件，超预算不能通过纯文本 fallback 绕过。
+浏览器 clipboard 的 fragment 与结构容器格式换行不作为正文；paragraph、inline 与 code 内的实际空白仍保留。text/plain 默认保持字面文本，显式启用 `pasteMarkdown` 时按前述规则解析；文件与 HTML 混合输入整体拒绝。无安全 HTML 且没有纯文本 fallback 时也须拒绝，不能用空 Slice 删除原选区。构造 Slice 时保留 isolating 边界：`Slice.maxOpen(content, false)` 保留单格/仅表头 table，同时允许普通 paragraph 在光标处合并。插入后的完整候选通过门禁才一次性提交为 Undo 事件，超预算不能通过纯文本 fallback 绕过。
 
 emoji 属于初始化配置，后续开关变化不生效；editable 和最新 callbacks 继续更新。StrictMode 按 Editor 身份解绑，初始化错误只通知一次。Emoji session 是本地不透明对象，选择和取消均核对当前 session，迟到面板不能写入或关闭新触发。
 
