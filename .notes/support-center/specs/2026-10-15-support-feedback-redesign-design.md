@@ -1,5 +1,7 @@
 # 支持中心六类反馈重构设计
 
+> 2026-10-16：正文输入与内容规则由 `.notes/support-center/specs/2026-10-16-feedback-markdown-design.md` 增量更新。Tiptap GFM 已接入；本设计中暂用纯文本的选择仅描述当时范围。此次保留已有 v2/v3 记录，不重新执行早期清理迁移。
+
 - 状态：已确认；用户授权默认同意后续细化，完成 Spec / RFC 后直接开发。
 - 日期：2026-10-15。
 - 模块根目录：`.notes/support-center/`。

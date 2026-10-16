@@ -1,5 +1,7 @@
 # RFC：支持中心六类反馈与配置字段
 
+> 2026-10-16：Markdown 接入依据 `.notes/support-center/specs/2026-10-16-feedback-markdown-design.md`，实施计划见 `.notes/support-center/plans/2026-10-16-feedback-markdown.md`。新正文带显式格式，旧纯文本记录保留原规则；下文“不接入 Tiptap”和早期破坏性清理仅属于原重构阶段，不适用于此次增量更新。
+
 - 状态：Accepted for implementation；用户已授权按默认同意完成设计并直接开发。
 - 日期：2026-10-15。
 - 模块根目录：`.notes/support-center/`。

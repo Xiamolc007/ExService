@@ -1,5 +1,7 @@
 # 投诉和建议设计
 
+> 2026-10-16：正文输入更新为 Tiptap GFM，范围见 `.notes/support-center/specs/2026-10-16-feedback-markdown-design.md`；投诉匿名规则保持本设计约定，旧纯文本快照继续保留。
+
 - 状态：用户已确认整体设计，实现与独立复核完成；验收证据见 `.notes/support-center/acceptance/2026-10-15-complaints-and-suggestions.md`。
 - 日期：2026-10-15。
 - 模块根目录：`.notes/support-center/`。

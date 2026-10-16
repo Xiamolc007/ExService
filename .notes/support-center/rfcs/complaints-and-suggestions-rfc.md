@@ -1,5 +1,7 @@
 # 投诉和建议实现 RFC
 
+> 2026-10-16：所有反馈表单增加可选 `contentFormat: markdown`；Markdown 与纯文本均保持内容规则 1，只按冻结表单中的格式标识选择正文语义，不新增数据库迁移。表单版本与匿名行为保持原约定。接入依据见 `.notes/support-center/specs/2026-10-16-feedback-markdown-design.md`。
+
 - 状态：用户已确认产品设计；实现方案按本 RFC 执行并独立复核。
 - 日期：2026-10-15。
 - Spec：`.notes/support-center/specs/2026-10-15-complaints-and-suggestions-design.md`。

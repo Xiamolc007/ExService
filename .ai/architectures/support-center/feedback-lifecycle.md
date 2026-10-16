@@ -1,6 +1,14 @@
 # 支持反馈提交与核对边界
 
-支持首页有「功能和需求」「投诉和建议」两个正式入口，复用一个按 area 配置的 Modal。development 提供 `bug`、`feature`、`asset`、`request`、`content`、`campaign`；community 提供 `suggestion`、`complaint`。正文和大文件补充信息使用普通多行文本，前后端通过 `@workspace/common/feedback-content` 共用纯文本转义、Bug 正文组合、大小限制与 MIME 规范化。提交编号追加和 ClickUp 正文回读结构核对位于 `apps/server/src/domains/support/markdown.ts`，不进入浏览器共享入口；Tiptap 接入属于后续阶段。字段矩阵与交互规则见 `.notes/support-center/specs/2026-10-15-support-feedback-redesign-design.md` 与 `.notes/support-center/specs/2026-10-15-complaints-and-suggestions-design.md`。
+支持首页有「功能和需求」「投诉和建议」两个正式入口，复用一个按 area 配置的 Modal。development 提供 `bug`、`feature`、`asset`、`request`、`content`、`campaign`；community 提供 `suggestion`、`complaint`。正文使用 Tiptap 的纯 GFM 预设，大文件补充信息仍为普通多行文本。前后端通过 `@workspace/common/feedback-content` 共用按格式选择的正文校验、Bug 组合、大小限制与 MIME 规范化。提交编号追加和 ClickUp 正文回读结构核对位于 `apps/server/src/domains/support/markdown.ts`，不进入浏览器共享入口。字段矩阵与交互规则见 `.notes/support-center/specs/2026-10-15-support-feedback-redesign-design.md`、`.notes/support-center/specs/2026-10-15-complaints-and-suggestions-design.md`；Markdown 体验依据为 `.notes/support-center/specs/2026-10-16-feedback-markdown-design.md`。
+
+## Markdown 与历史正文
+
+新表单显式发送 `contentFormat: markdown`；缺省标识继续使用原纯文本规则。内容规则版本与表单版本的关系集中在 `.ai/databases/data-model.md`。`normalizeStoredPrepare` 保留旧字段形状和字节，读取时按冻结格式重新计算正文；不能给旧记录补标识或重新解释 Markdown 标记。历史纯文本恢复使用保留空白的只读文本显示，不经过编辑器节点预算，避免合法旧记录因行数较多而显示为空。
+
+`FeedbackMarkdownField` 位于已有 lazy FeedbackModal 内，组合共享 GFM preset、原生 EditorContent 和 interactions。RHF 保存导出的 Markdown 和转换错误，Zod 阻止实时文档导出失败后提交上一次值；外部 reset 使用显式替换，类型切换按字段重新挂载。页面不添加顶部工具栏、源码模式或图片上传；文件仍经 FileUploader。Markdown 纯文本粘贴通过初始化选项启用，网页/Word 粘贴沿用安全降级；页面不展示降级与规范化通知。
+
+共享 GFM 分析使用无 DOM 的 unified/remark parser，正文按 64 KiB、Bug 单项按 16 KiB 控制，并限制 AST 节点与深度。拒绝代码以外的原始 HTML、脚注和非法链接；代码中的 HTML 保持字面内容。通过追加探测段核对固定提交编号能成为独立块，防止未闭合代码围栏吞掉后缀；Bug 组合另核对每个固定节标题的 AST 位置。Markdown 记录的远端正文使用 GFM AST 核对表格、任务状态和删除线等语义；旧纯文本继续使用原 parser 和原自动链接兼容规则。
 
 ## 单元与依赖
 

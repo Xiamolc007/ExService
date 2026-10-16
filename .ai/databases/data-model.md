@@ -67,7 +67,7 @@ binding 创建使用同一会话锁并复核有效性。会话到期清理先为
 
 新 Bug 提交必须选择有效的问题分类（Type）；功能分类、资源类型、需求分类和部门仍可选。此前已固化的 v2 Bug 可保留 null 分类，读取与继续推进使用原表单及任务载荷快照，不因新必填规则补写或改写记录。
 
-纯文本反馈采用独立的 `support_feedback_submissions` 和 `support_feedback_attachments`，不复用申请表或公开存储。六类 v2 的依据为 `.notes/support-center/specs/2026-10-15-support-feedback-redesign-design.md` 与 `.notes/support-center/rfcs/support-feedback-redesign-rfc.md`；v3 扩展保留原记录，不重复执行早期退役表清理。
+反馈采用独立的 `support_feedback_submissions` 和 `support_feedback_attachments`，不复用申请表或公开存储。六类 v2 的依据为 `.notes/support-center/specs/2026-10-15-support-feedback-redesign-design.md` 与 `.notes/support-center/rfcs/support-feedback-redesign-rfc.md`；v3 扩展保留原记录，不重复执行早期退役表清理。表单可选 `contentFormat: markdown` 表示原样保存经过安全检查的 GFM，缺省继续按原纯文本转义。项目未上线，本次两种格式均保持 content rule 1，只通过冻结表单中的格式标识选择处理语义，不修改数据库约束或增加迁移。form version 仍按 development/community 保持 2/3，旧快照不补写格式标识或重新解释正文。
 
 | 表 | 职责与关系 | 必须保持的数据规则 |
 | --- | --- | --- |
