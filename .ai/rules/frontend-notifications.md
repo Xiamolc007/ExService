@@ -53,4 +53,4 @@ async function runWithFeedback(task: () => Promise<void>): Promise<boolean> {
 
 ## 修改时检查
 
-确认新增通知使用上述入口、应用仍只有一个根宿主、loading 的成功/失败/取消路径有对应的完成或关闭处理；涉及显示时检查当前主题下的文案和位置。本站的接线回归由 `apps/web/src/pages/JoinReviewPage/JoinReviewPage.test.tsx` 覆盖；ExUI 宿主及控制器行为由 ExUI 自身测试覆盖。
+确认新增通知使用上述入口、应用仍只有一个根宿主、loading 的成功/失败/取消路径有对应的完成或关闭处理；涉及显示时检查当前主题下的文案和位置。本站的接线回归由 `apps/web/src/invitations/InvitationRegistrationFlow.test.tsx` 覆盖；ExUI 宿主及控制器行为由 ExUI 自身测试覆盖。

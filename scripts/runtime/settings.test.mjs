@@ -735,11 +735,11 @@ test('Nginx template preserves HTTPS, Website API forwarding, Hydra whitelist an
   state.values.NGINX_SITE_KEY = '/bad;injected'; assert.throws(() => nginxConfiguration(state), /NGINX_VALUE_INVALID/)
 })
 
-test('Nginx API upload ceiling covers the complete join and configured storage wire budgets', t => {
+test('Nginx API upload ceiling covers the support and configured storage wire budgets', t => {
   const state = fixture(t, 'deployment').read(); state.workspace = root
   Object.assign(state.values, { NGINX_SITE_CERT: '/certs/site.crt', NGINX_SITE_KEY: '/certs/site.key',
     NGINX_ISSUER_CERT: '/certs/issuer.crt', NGINX_ISSUER_KEY: '/certs/issuer.key', HYDRA_INTERNAL_PUBLIC_URL: 'http://127.0.0.1:4444' })
-  assert.match(nginxConfiguration(state), /location \/api\/ \{\s*client_max_body_size 67108864;/)
+  assert.match(nginxConfiguration(state), /location \/api\/ \{\s*client_max_body_size 21037056;/)
   state.values.STORAGE_MAX_BYTES = String(80 * 1024 * 1024)
   assert.match(nginxConfiguration(state), /client_max_body_size 83951616;/)
   for (const value of ['0', '-1', 'NaN', '1.5', '1e3', ' 20 ', String(Number.MAX_SAFE_INTEGER)]) {

@@ -115,16 +115,16 @@ describe('SiteHeader Communities menu', () => {
   })
 })
 
-describe('SiteHeader Join menu', () => {
-  it('only offers Rifling 911 and keeps the Join page reachable', async () => {
+describe('SiteHeader primary navigation', () => {
+  it('opens Products and omits the retired Join menu', async () => {
     renderHeader({ status: 'anonymous' })
 
-    await userEvent.hover(screen.getByRole('button', { name: 'Join' }))
-    expect((await screen.findByRole('link', { name: 'Rifling 911' })).getAttribute('href')).toBe('/join/rifling-911')
-    expect(screen.queryByRole('link', { name: 'CAEP' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Join' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Gallery' })).toBeNull()
+    expect(screen.getByRole('link', { name: 'Products' }).getAttribute('href')).toBe('/products')
 
-    await userEvent.click(screen.getByRole('link', { name: 'Rifling 911' }))
-    expect(screen.getByTestId('path').textContent).toBe('/join/rifling-911')
+    await userEvent.click(screen.getByRole('link', { name: 'Products' }))
+    expect(screen.getByTestId('path').textContent).toBe('/products')
   })
 })
 
@@ -148,9 +148,9 @@ describe('SiteHeader mobile navigation', () => {
       await userEvent.keyboard('[Space]')
       expect(screen.getByRole('option', { name: 'Rifling 911' })).toBeTruthy()
       expect(screen.getByRole('option', { name: 'CAEP' })).toBeTruthy()
-      expect(screen.getByRole('option', { name: 'Gallery' })).toBeTruthy()
+      expect(screen.getByRole('option', { name: 'Products' })).toBeTruthy()
       expect(screen.getByRole('option', { name: 'Document' })).toBeTruthy()
-      expect(screen.getByRole('option', { name: 'Join' })).toBeTruthy()
+      expect(screen.queryByRole('option', { name: 'Join' })).toBeNull()
       expect(screen.queryByRole('option', { name: '登录' })).toBeNull()
       await userEvent.click(screen.getByRole('option', { name: 'CAEP' }))
       expect(screen.getByTestId('path').textContent).toBe('/communities/caep')
@@ -184,7 +184,7 @@ describe('SiteHeader mobile navigation', () => {
       const trigger = screen.getByRole('combobox', { name: '用户菜单' })
       trigger.focus()
       await userEvent.keyboard('[Space]')
-      expect(screen.queryByRole('option', { name: 'Gallery' })).toBeNull()
+      expect(screen.queryByRole('option', { name: 'Products' })).toBeNull()
       await userEvent.click(screen.getByRole('option', { name: '登录' }))
       expect(onLogin).toHaveBeenCalledOnce()
     } finally {

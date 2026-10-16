@@ -2,7 +2,7 @@
 
 Contract Test 对真实 Fastify app 的 HTTP 行为、Glue 映射和原始 handler 输出分别断言；数据库行为测试使用独立 PostgreSQL 容器。单条断言的失败模式见 `.ai/knowledge/server/serialization-masks-handler-regressions.md` 与 `.ai/knowledge/contract-tests/contract-parsing-constraints.md`。
 
-_最后更新：2026-10-15_
+_最后更新：2026-10-16_
 
 ## 隔离夹具
 
@@ -20,7 +20,7 @@ _最后更新：2026-10-15_
 | schema 反例 | 证明缺字段、额外字段、错误类型和 `const` 冲突受到校验。 |
 | 日志与传输 | 真实日志流不泄密；multipart 字节、摘要、容量与断开连接回收。 |
 
-schema 经 `tests/helpers/contract.ts` 从 `api/generated/openapi.json` 读取，测试不复制 DTO。读器的引用、路径和 operation 约束见 `.ai/knowledge/contract-tests/contract-parsing-constraints.md`。跨多步业务测试覆盖申请、审核、验证码、完善、登录、资料与头像；PostgreSQL 专项测试覆盖空库迁移、重复迁移、错误目标拒绝、半迁移、未知对象重置拒绝、约束、事务回滚及双连接竞争。自动测试证明隔离容器中的行为；本机迁移与真实服务冒烟另行验证。
+schema 经 `tests/helpers/contract.ts` 从 `api/generated/openapi.json` 读取，统一转换引用并编译结构校验器，不在各套件复制解析器或 DTO。校验器不检查 `format`，相应语义由业务行为测试验证；缺字段、额外字段、类型和常量等结构反例仍保留。同一层已做封闭 schema 或精确对象断言时，不另建夹具重复检查字段名。读器的引用、路径和 operation 约束见 `.ai/knowledge/contract-tests/contract-parsing-constraints.md`。跨多步业务测试覆盖保留的内部申请、审核、验证码、完善、登录、资料与头像；申请 HTTP 退役不代表删除邀请注册和历史资料兼容覆盖。PostgreSQL 专项测试覆盖空库迁移、重复迁移、错误目标拒绝、半迁移、未知对象重置拒绝、约束、事务回滚及双连接竞争。自动测试证明隔离容器中的行为；本机迁移与真实服务冒烟另行验证。
 
 ## Website 与身份运行测试
 
@@ -29,6 +29,8 @@ schema 经 `tests/helpers/contract.ts` 从 `api/generated/openapi.json` 读取�
 `tests/auth/` 和 `tests/contract/identity.test.ts` 保留独立 OIDC、内部身份接口和会话撤销覆盖；默认空客户端与显式普通客户端分别测试。runtime 测试验证配置投影、client 核验、资源归属、receipt 和退役维护；`tests/runtime/native-health.test.ts` 核对 Website/Hydra readiness、显式 client 校验及 Website 检查 CLI，不调用开发服务。维护数据库测试使用临时 PostgreSQL，资源删除使用受控适配器或临时目录。真实生命周期、浏览器和外部应用验收分别报告。
 
 `tests/browser/error-panel.mjs` 和 `tests/browser/notification-experience.mjs` 使用根锁定的 Playwright 和隔离 UI 夹具，`tests/browser/navbar-geometry.mjs` 接收真实浏览器 tab；这些工具不由 `pnpm test` 自动执行，DOM 测试不能替代真实布局或焦点验收。
+
+`tests/server-plugins/build.test.ts` 在一次构建生命周期中验证源文件启动、删除与重命名后的纯 JavaScript 启动及失败回收；安全清理用例可独立运行，不依赖另一用例留下的产物。正向 Server 类型夹具由根 `pnpm typecheck` 执行，Vitest 仅保留声明冲突的反例。附件校验的恶意前缀探针共用一个有操作系统期限的子进程，函数耗时与 Node/tsx 启动预算分开，避免把启动速度当成算法性能。
 
 ## GitHub CI
 

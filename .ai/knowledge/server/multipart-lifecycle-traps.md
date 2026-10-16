@@ -2,15 +2,15 @@
 
 仅提高路由 bodyLimit 或让 preParsing 返回计数流，不能证明 multipart 的实际字节、并发和内存预算受到约束。资源值以 `api/openapi.yaml` 为准。
 
-_最后更新：2026-10-12_
+_最后更新：2026-10-16_
 
 ## 共同生命周期 module 拥有时序，业务 module 拥有规则
 
-加入申请与存储两条上传路径的连接时序由 `apps/server/src/http/shared/multipart-upload-lifecycle.ts` 统一拥有：wire 计数流的接入、`request.raw` 的临时替换与幂等还原、deadline、`aborted`/`close` 处理、buffer 引用解除与单次槽位释放。
+存储上传的连接时序由 `apps/server/src/http/shared/multipart-upload-lifecycle.ts` 拥有：wire 计数流的接入、`request.raw` 的临时替换与幂等还原、deadline、`aborted`/`close` 处理、buffer 引用解除与单次槽位释放。加入申请的 HTTP 上传与下载已退役。
 
-两个 transport 只保留自己该有的知识：配置核验与一致性检查、前置认证/限流、payload 解析规则、可信 getter 与错误分类。新增或调整上传行为时先判断归属 —— 时序改动进共同 module，业务规则留在各 transport。
+transport 只保留自己该有的知识：配置核验与一致性检查、前置认证、payload 解析规则、可信 getter 与错误分类。新增或调整上传行为时先判断归属：时序改动进共同 module，业务规则留在 transport。
 
-这不是可插拔上传框架：module 内部只有两类既有 payload 的参数化结果，没有扩展点；它不 import 任何业务服务、错误类或 DTO。
+module 内部持有参数化的解析结果，不 import 任何业务服务、错误类或 DTO。
 
 ## parts 必须经过实际计数流
 
@@ -22,17 +22,15 @@ Busboy 的头部限制可能截断而非拒绝输入，实际 header 字节/对�
 
 ## 容量按注册实例私有，会话按请求键控
 
-上传从 body 解析前占位，保留到响应/失败清理；两条上传路径各有独立容量，不与对方共享总池。Content-Length 预检不能替代 chunked wire 计数。
+上传从 body 解析前占位，保留到响应/失败清理。Content-Length 预检不能替代 chunked wire 计数。
 
 容量由 `createMultipartUploadRegistry()` 在每次 transport 注册时创建的 controller 持有（`create(app)`），因此同一进程内的多个 `createApp()` 实例互不干扰。**不能用 `request.server` 反查 controller**：Glue 在自己的封装作用域里注册路由，那里的 `request.server` 与 transport 拿到的实例不是同一个对象；请求会话因此存在注册表共享的 `WeakMap` 里，按请求对象键控。
 
-有效证明包括容量满后的拒绝、主动断开、截断、期限到期、事务写失败及随后有效重试。Fastify inject 和普通成功请求不能证明真实连接上的释放；`tests/contract/join-upload-sockets.test.ts` 与 `tests/contract/upload-lifecycle-sockets.test.ts` 使用真实本机 HTTP socket。测试缩短期限以覆盖回收，不能据此改短 Contract 默认期限。
+Fastify inject 和普通成功请求不能证明真实连接上的释放；`tests/contract/upload-lifecycle-sockets.test.ts` 使用真实本机 HTTP socket 核对存储上传的接管响应、CORS 与 chunked wire 预算。测试缩短期限以覆盖回收，不能据此改短 Contract 默认期限。
 
 ## 下载与上传的容量彼此独立
 
-下载在读取 BLOB 前占用**独立**响应容量，慢下载不占上传槽：join 下载有自己的 `activeDownloads` 与 `joinDownload.slots`，与上传容量互不影响（两者共同 module 只覆盖上传）。
-
-下载开始后到期只能终止连接，不能追加 JSON 错误：join 下载到期直接 `reply.raw.destroy()`；storage 下载在响应头尚未发出时才改写成 408 envelope，头已发出后同样只销毁连接。
+存储下载不占上传槽。下载在响应头尚未发出时可以改写成 408 envelope，头已发出后只能销毁连接，不能追加 JSON 错误。
 
 ## 提前终结的响应归属
 
@@ -50,14 +48,14 @@ Busboy 的头部限制可能截断而非拒绝输入，实际 header 字节/对�
 
 ## schema 标记不代表附件字节
 
-附件 Buffer 位于请求私有上下文；进入 Contract validator 的 body 只有与数量匹配的 binary 字符串标记。handler 必须拒绝没有私有上下文的伪造标记。生成类型的字符串占位也不能被 serializer 发上线，或被误当成已持久化文件。资料与附件的保存责任及历史版本规则见 `.ai/databases/data-model.md`。
+文件字节位于请求私有上下文；进入 Contract validator 的 body 只保留 binary 字符串标记。handler 必须拒绝没有私有上下文的伪造标记。生成类型的字符串占位不能被 serializer 发上线，或被误当成已持久化文件。
 
 ## 证据
 
 - `apps/server/src/http/shared/multipart-upload-lifecycle.ts`（共同生命周期、响应归属、注册表）、`apps/server/src/http/shared/multipart-counter.ts`（wire/header 预算与扫描 buffer 清理）、`apps/server/src/errors.ts`（`resolveErrorResponse` 共用安全映射）。
-- `apps/server/src/domains/join/api/transport.ts`、`apps/server/src/modules/storage/api/transport.ts`（配置核验、前置认证/限流、payload parser、可信 getter、错误分类，以及两条下载路径的独立容量与到期处理）。
-- `apps/server/src/domains/join/api/handlers.ts`、`apps/server/src/modules/storage/api/handlers.ts`（handler 侧核对可信解析上下文、拒绝伪造标记）。
-- `tests/contract/join-upload.test.ts`、`tests/contract/storage.test.ts`：生成 Client 互通、原始 handler 输出、字节/头部及存储失败。
+- `apps/server/src/modules/storage/api/transport.ts`（配置核验、前置认证、payload parser、可信 getter、错误分类与下载到期处理）。
+- `apps/server/src/modules/storage/api/handlers.ts`（handler 侧核对可信解析上下文、拒绝伪造标记）。
+- `tests/contract/storage.test.ts`：生成 Client 互通、原始 handler 输出、字节/头部及存储失败。
 - `tests/contract/upload-lifecycle.test.ts`：接管状态码边界、Contract envelope 与 handler 原始返回值。
-- `tests/contract/upload-lifecycle-sockets.test.ts`：接管 envelope 与 content-type、CORS 保留、raw 还原、槽位回收、按实例与按 operation 的容量独立、chunked wire 预算、admission 先于读体。
+- `tests/contract/upload-lifecycle-sockets.test.ts`：存储上传的接管 envelope 与 content-type、CORS 保留、chunked wire 预算。
 - `tests/contract/error-mapping.test.ts`：非上传 operation 错误输出在共用映射提取前后的逐字节一致性。

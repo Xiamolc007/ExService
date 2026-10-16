@@ -19,5 +19,6 @@ export function toDraft07Definitions(schemas: Record<string, unknown>): Record<s
 export function compileComponentSchema(name: string): ValidateFunction {
   const definitions = toDraft07Definitions(readContract().schemas)
   if (!Object.hasOwn(definitions, name)) throw new Error(`Contract component schema is missing: ${name}`)
-  return new Ajv({ allErrors: true, strict: false }).compile({ $ref: `#/definitions/${name.replaceAll('~', '~0').replaceAll('/', '~1')}`, definitions })
+  // This helper checks schema structure; format semantics stay in their behavior tests.
+  return new Ajv({ allErrors: true, strict: false, validateFormats: false }).compile({ $ref: `#/definitions/${name.replaceAll('~', '~0').replaceAll('/', '~1')}`, definitions })
 }

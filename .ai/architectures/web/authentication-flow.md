@@ -1,14 +1,14 @@
-# `web` 模块：申请、邀请注册与认证 UI
+# `web` 模块：社区入口、邀请注册与认证 UI
 
 本文件说明共享认证 UI、应用流程和浏览器存储之间的边界。HTTP operation 与字段形状以 `api/openapi.yaml` 和生成 Client 类型为准。
 
-_最后更新：2026-10-15_
+_最后更新：2026-10-16_
 
 ## 责任分层
 
 ```text
 packages/components
-  登录与邀请表单 / AuthModal / CompleteJoinApplicationModal / JoinReviewDialog
+  登录与邀请表单 / AuthModal
           ↑ props 与回调
 apps/web
   AuthFlow / InvitationRegistrationFlow / AuthProvider / 路由页面
@@ -18,7 +18,7 @@ apps/web
 
 共享组件只管理字段、校验、焦点和可访问状态。它不读取浏览器存储、不调用 API、不决定导航。`apps/web` 负责请求分支、token 生命周期、SSO 上下文和整页跳转。设置 Modal 与 `/account/profile` 通过同一个设置控制层读取、更新及上传本人资料，界面由共享组件接收值和回调。
 
-登录、邀请注册与申请表单使用 React Hook Form 与 Zod；服务端字段错误通过 `setError` 展示。`AuthForm` 只分派登录与图片验证码步骤；邀请的邮箱、数字码和完善资料各有独立表单。登录中的 Google、QQ 入口仅为禁用占位，不发请求，也不代表已经接入第三方认证。
+登录与邀请注册表单使用 React Hook Form 与 Zod；服务端字段错误通过 `setError` 展示。`AuthForm` 只分派登录与图片验证码步骤；邀请的邮箱、数字码和完善资料各有独立表单。登录中的 Google、QQ 入口仅为禁用占位，不发请求，也不代表已经接入第三方认证。
 
 普通登录与 SSO 密码登录先在凭据表单点击“继续”，再于同一认证容器切换到图片验证码步骤。该步骤目前只显示矩形图片占位与可留空的输入框，明确提示尚未启用校验；点击“登录”时才由 `AuthFlow` 调用对应 operation，不附加伪造的验证码凭证。邀请注册不经过这个占位步骤。
 
@@ -27,24 +27,20 @@ apps/web
 - 顶栏登录与注册使用受控 Modal；关闭会卸载当前流程。
 - `/login` 使用 `AuthFlow`，`/register` 使用 `InvitationRegistrationPage`；两者位于 `RootLayout` 之外，不渲染站点顶栏或认证 Modal，复用认证背景与外围容器。
 - 顶栏桌面与移动注册入口挂载同一个 `InvitationRegistrationFlow`；完成后在原 Dialog 切到普通登录。关闭按当前桌面或移动触发器恢复焦点。
-- `/join/rifling-911`、`/join/result` 与临时审核页 `/admin/join-applications` 位于 `RootLayout` 内。登录的加入回调先关闭 Dialog，再前往 `/join/rifling-911`。
+- `/communities` 默认跳转至 `/communities/rifling-911`；社区页面 `/communities/rifling-911`、`/communities/caep` 位于 `RootLayout` 内。登录的加入回调先关闭 Dialog，再前往 `/communities/rifling-911`。顶栏不再提供 Join；Products 使用 `/products`，该内容页尚未实现。
 - `/sso/success` 与 `/sso/*` 的兜底页面也位于 `RootLayout` 之外，不渲染站点顶栏；认证页面代码集中在 `apps/web/src/pages/AuthPage/`。
 - 普通独立认证页通过左上角 Home 返回首页；带 `ssoRequestId` 的登录页面隐藏该入口。独立认证页与 SSO 成功页复用 `MeshGradient` 背景，共享组件不依赖着色器。
 - 登录入口只要 URL 中出现 `ssoRequestId`，就必须通过格式与单值检查；空值、重复值或非法值显示无效入口，不能回退成普通登录。
 
 图片验证码的取图与提交字段已在 Contract 中预留，真实校验启用前须单独决定有效期、重试规则以及要求凭证的版本策略。
 
-## 申请与邀请注册
+## 社区展示与邀请注册
 
-`/join/rifling-911` 是说明与申请入口展示页，两类入口各挂载独立 `CompleteJoinApplicationModal`。共享组件从 Zod 推导含 File 的 UI 草稿，以 RHF 管理完整字段、当前步骤校验、确认摘要及文件选择；前进只校验当前步，最终校验全部，后退保留值和文件。关闭弹窗时，页面按申请类别在内存中分别保存草稿和步骤，重新打开时恢复；附件保留原 File 对象，不写浏览器存储。提交成功清除对应类别的草稿，刷新或页面卸载释放全部草稿；提交在途保护关闭和重复提交，失败保留草稿。
+社区页面保留介绍、既有图片和配置中的外部社区入口，不挂载在线申请表单。旧 `/join/rifling-911`、`/join/result` 和 `/admin/join-applications` 返回现有 404；通知正文也不再允许链接到旧 Join 页面。
 
-报名表单的字段与提交状态由 ExUI `ExForm` 内部的 React Hook Form 实例持有，接入约束见 `.ai/rules/frontend-forms.md`。分步校验使用原字段路径的独立 Zod schema，复用完整提交 schema 的规则；未填写的后续字段不能阻止当前步骤继续，最终提交仍校验完整申请。可选预设字段的“其它”仅控制输入区域展开，提交值始终是实际答案字符串，不向 HTTP Contract 增加界面状态字段。证明附件的文件名在选择时由共享 Zod schema 校验；非法名称先在表单中提示，Server 仍独立校验上传文件，不以客户端校验作为信任边界。
+申请提交、结果查询、审核、邀请重发及申请附件下载的八个 HTTP operation 已退役。既有邀请注册仍通过 `/auth/invitations/*` 工作；历史申请与邀请数据、内部服务和读取历史资料所需的 schema 保留，数据职责见 `.ai/databases/data-model.md`。
 
-Hero 图片来自 `apps/web/public/images/heros/join/rifling-911/`。构建时按文件名排序收集支持的图片格式；多张图片时点击背景循环切换，也支持聚焦背景后按 Enter 或空格，不显示独立切换按钮。画面上的申请按钮与结果查询链接独立响应，不触发切图；单张图片作为静态背景。图片切换尊重减少动态效果偏好。
-
-`apps/web/src/join/client.ts` 将草稿映射为生成 DTO，通过生成 Client 的 bodySerializer 一次组装 JSON Blob 与 proofs File 的 FormData。共享组件不复制 HTTP DTO、不调用 API；应用侧不持久化申请草稿。成功显示来自事务完成的确认，不建立账号。成功态提醒申请人留意申请邮箱，并提供固定的 `/join/result` 查询入口；“面试预约”仍为禁用占位。提交成功不表示审核通过，也不表示通知邮件已投递。审核和账号创建的职责及字段归属见 `.ai/databases/data-model.md`。
-
-`/join/result` 只在用户提交邮箱时请求，不自动查询或轮询，不把邮箱/结果写入 URL 或浏览器持久存储。编辑邮箱立即清空显示并增加请求代次；新请求及卸载也使旧代次失效，迟到结果不能覆盖新邮箱。状态与下一步必须匹配 Contract；导航使用固定站内路由，不夹带验证码或凭证。
+Hero 图片继续来自 `apps/web/public/images/heros/join/rifling-911/`。构建时按文件名排序收集支持的图片格式；多张图片时点击背景循环切换，也支持聚焦背景后按 Enter 或空格，不显示独立切换按钮；单张图片作为静态背景。
 
 `InvitationRegistrationFlow` 在应用层控制 email、code、profile、registered 四个状态。邮箱通过只读资格检查后才挂载空验证码表单；检查不请求发码。验证成功取得完善凭证才挂载用户名与密码表单，邮箱只读，QQ 来自申请。主动重发使用服务器时间差计算冷却，采用条件式发送反馈；验证的失败重试由用户输入或显式重试按钮触发，不由渲染循环驱动。
 
@@ -55,12 +51,6 @@ Hero 图片来自 `apps/web/public/images/heros/join/rifling-911/`。构建时�
 入口 `apps/web/index.html` 在所有脚本和资源声明之前设置 `no-referrer`，避免邀请 URL 的邮箱和数字码进入资源请求的 Referer。Vite 会在该 meta 前注入开发脚本，因此 `apps/web/vite.config.ts` 还为本地开发服务设置 `Referrer-Policy: no-referrer` 响应头。URL 清理发生在 React 挂载后，不能替代加载前的入口策略；这些策略不会隐藏原始入口请求 URL。
 
 邀请注册的持续错误由所属 RHF 表单持有，根错误展示与跨步骤挂载交接见 `.ai/knowledge/web/invitation-error-handoff.md`。
-
-## 本地申请审核
-
-`JoinReviewPage` 使用生成 Client 的列表与详情类型，不读取 `/auth/me` 作为本期临时页面的访问前提。过滤变化重置分页偏移；列表与详情各用请求代次拒绝迟到结果，每次打开重新读取详情。
-
-共享 `JoinReviewDialog` 接收展示内容和回调，不复制 DTO 或调用 API。申请与审核两个 Tab、标题和底部动作固定，内容区滚动。关闭保留过滤与分页；原列表行仍存在时恢复查看按钮焦点，行已被审批移除时回到可聚焦的列表操作。已经提交的审批不会因关闭 Dialog 撤销，完成后刷新列表；只有仍对应当前选择的结果才更新详情和通知。审核人未记录时不伪造身份。
 
 ## 本站会话
 

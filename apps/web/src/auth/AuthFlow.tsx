@@ -177,7 +177,7 @@ export function AuthFlow({
     generation.current += 1
     pendingDraft.current = null
     if (onJoin) onJoin()
-    else navigate('/join/rifling-911')
+    else navigate('/communities/rifling-911')
   }
 
   function finishSso(requestId: string) {

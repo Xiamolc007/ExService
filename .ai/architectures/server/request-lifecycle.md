@@ -12,7 +12,7 @@ Glue 的 Bearer handler 等待异步会话验证后才把身份交给受保护 o
 
 `apps/server/src/http/foundation.ts` 归集应用级错误处理、CORS 与 multipart，在 `app.ts` 中先于 API 插件注册。`http/` 目录同时容纳基础能力与 API 接入，注册作用域由插件配置及装配位置决定：基础插件通过 `fastify-plugin` 在应用作用域生效，`apps/server/src/http/plugin.ts` 使用 `encapsulate: true` 隔离 API 专属 hook 与请求字段。
 
-两条上传 operation（加入申请、存储）的连接时序由 `apps/server/src/http/shared/multipart-upload-lifecycle.ts` 共同拥有：wire 计数流接入、`request.raw` 临时替换与还原、deadline、abort/close、buffer 引用解除与容量释放。各业务 transport 只保留配置核验、前置认证/限流、payload 规则、可信 getter 与错误分类。因为 Glue 在自己的封装作用域注册路由，会话按请求对象键控，不能用 `request.server` 反查 controller。陷阱、响应归属与容量证据见 `.ai/knowledge/server/multipart-lifecycle-traps.md`。
+存储 multipart 上传的连接时序由 `apps/server/src/http/shared/multipart-upload-lifecycle.ts` 拥有：wire 计数流接入、`request.raw` 临时替换与还原、deadline、abort/close、buffer 引用解除与容量释放。业务 transport 只保留配置核验、前置认证、payload 规则、可信 getter 与错误分类；加入申请的上传 transport 已随申请 HTTP 接口退役。因为 Glue 在自己的封装作用域注册路由，会话按请求对象键控，不能用 `request.server` 反查 controller。陷阱、响应归属与容量证据见 `.ai/knowledge/server/multipart-lifecycle-traps.md`。
 
 ## 业务发现与注入
 

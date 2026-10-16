@@ -23,11 +23,11 @@ describe('typed API transport', () => {
   it('builds a complete URL and encodes a path parameter', async () => {
     const transport = vi.fn(async () => ({ status: 'ok' }))
     const client = createApiClient({ baseUrl: 'https://example.test/api', transport })
-    await client.GET('/admin/join/applications/{applicationId}', {
-      params: { path: { applicationId: 'part one' } },
+    await client.GET('/notifications/{notificationId}', {
+      params: { path: { notificationId: 'part one' } },
     })
     expect(transport).toHaveBeenCalledWith(expect.objectContaining({
-      url: 'https://example.test/api/admin/join/applications/part%20one',
+      url: 'https://example.test/api/notifications/part%20one',
       method: 'GET',
     }))
   })
@@ -35,16 +35,16 @@ describe('typed API transport', () => {
   it('serializes declared form query fields and omits undefined fields', async () => {
     const transport = vi.fn(async () => ({ items: [] }))
     const client = createApiClient({ baseUrl: 'https://example.test/api', transport })
-    await client.GET('/admin/join/applications', { params: { query: { view: 'pending', limit: '20', offset: undefined } } })
-    expect(transport).toHaveBeenCalledWith(expect.objectContaining({ url: 'https://example.test/api/admin/join/applications?view=pending&limit=20' }))
+    await client.GET('/notifications', { params: { query: { view: 'unread', limit: 20, cursor: undefined } } })
+    expect(transport).toHaveBeenCalledWith(expect.objectContaining({ url: 'https://example.test/api/notifications?view=unread&limit=20' }))
   })
 
   it('passes multipart FormData unchanged without supplying a content type', async () => {
-    const transport = vi.fn(async () => ({ status: 'received' }))
+    const transport = vi.fn(async () => ({ status: 'stored' }))
     const client = createApiClient({ baseUrl: 'https://example.test/api', transport })
     const body = new FormData()
-    body.append('application', new Blob(['{}'], { type: 'application/json' }), 'application.json')
-    await client.POST('/join/applications', { body })
+    body.append('file', new Blob(['file bytes'], { type: 'text/plain' }), 'file.txt')
+    await client.POST('/storage/uploads', { body })
     expect(transport).toHaveBeenCalledWith(expect.objectContaining({ data: body, headers: {} }))
   })
 })

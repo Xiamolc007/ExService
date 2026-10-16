@@ -10,4 +10,4 @@ ExUI 的 `visibleToasts` 只控制可见数量；`ExMessage` 自己管理按创�
 
 业务接入的强制规则与用法示例见 `.ai/rules/frontend-notifications.md`。
 
-证据：`apps/web/src/main.tsx`、`apps/web/src/pages/JoinReviewPage/JoinReviewPage.test.tsx`；当前链接的 `@exre/exui` 公开 `ExMessage`、`ExMessageContext` 及其宿主实现。
+证据：`apps/web/src/main.tsx`、`apps/web/src/invitations/InvitationRegistrationFlow.test.tsx`；当前依赖的 `@exre/exui` 公开 `ExMessage`、`ExMessageContext` 及其宿主实现。

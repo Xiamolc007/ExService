@@ -34,7 +34,7 @@ export function RootLayout({ glassAtTop = false }: { glassAtTop?: boolean }) {
     setLoginEmail('')
     auth.openModal('login')
   }
-  const join = () => { auth.closeModal(); navigate('/join/rifling-911') }
+  const join = () => { auth.closeModal(); navigate('/communities/rifling-911') }
   useEffect(() => {
     if (auth.state.status === 'anonymous') setSettingsCategory(null)
   }, [auth.state.status])

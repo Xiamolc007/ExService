@@ -40,7 +40,7 @@ export const donationCatalogSchema = z.strictObject({
   donors: z.array(donorSchema).refine(items => new Set(items.map(item => item.id)).size === items.length, 'Duplicate donor id').default([]),
 })
 export const communitySchema = z.strictObject({ ...entity, status: z.enum(['active', 'archived', 'planned', 'unknown']), theme: shaderThemeSchema.optional(), joinUrl: text.optional() }).superRefine((value, context) => {
-  if (value.joinUrl && (value.status !== 'active' || (value.joinUrl !== '/join/rifling-911' && !httpsUrl.safeParse(value.joinUrl).success))) context.addIssue({ code: 'custom', path: ['joinUrl'], message: 'Join URL requires active status and an existing/HTTPS target' })
+  if (value.joinUrl && (value.status !== 'active' || (value.joinUrl !== '/communities/rifling-911' && !httpsUrl.safeParse(value.joinUrl).success))) context.addIssue({ code: 'custom', path: ['joinUrl'], message: 'Join URL requires active status and an existing/HTTPS target' })
 })
 export const memberSchema = z.strictObject({ title: text, slug, role: text, summary: text, kind: z.enum(['member', 'contributor']), order: entity.order, draft: base.draft, avatar: imageSchema.optional(), related: relatedSchema.optional(), links: z.array(z.strictObject({ label: text, url: httpsUrl })).default([]) })
 export const mediaItemSchema = z.strictObject({ id: slug, type: z.literal('video'), title: text, creator: text, usage: text, order: entity.order, draft: base.draft, sourceUrl: httpsUrl.optional(), cover: imageSchema.optional(), related: relatedSchema.optional() })

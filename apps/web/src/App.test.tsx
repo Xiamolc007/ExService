@@ -16,7 +16,6 @@ vi.mock('@web/src/pages/NotFound', () => ({
   NotFound: () => <main>Page not found</main>,
 }))
 
-vi.mock('@web/src/pages/JoinResultPage', () => ({ JoinResultPage: () => <main>Application result query</main> }))
 vi.mock('@web/src/pages/JoinPage/Rifling-911', () => ({ JoinPage: () => <main>Rifling 911 join</main> }))
 vi.mock('@web/src/pages/JoinPage/CAEP', () => ({ CAEPJoinPage: () => <main>CAEP join placeholder</main> }))
 
@@ -55,10 +54,10 @@ describe('App', () => {
     expect(caep).toContain('Site header')
     expect(caep).toContain('CAEP join placeholder')
   })
-  it('serves the join page at the Rifling 911 route', () => {
+  it('keeps the retired Join route on the existing 404', () => {
     const markup = renderToStaticMarkup(<MemoryRouter initialEntries={['/join/rifling-911']}><App /></MemoryRouter>)
-    expect(markup).toContain('Rifling 911 join')
-    expect(markup).not.toContain('Page not found')
+    expect(markup).toContain('Page not found')
+    expect(markup).not.toContain('Rifling 911 join')
   })
   it('does not serve CAEP at the Join route', () => {
     const markup = renderToStaticMarkup(<MemoryRouter initialEntries={['/join/caep']}><App /></MemoryRouter>)
@@ -69,11 +68,10 @@ describe('App', () => {
     const markup = renderToStaticMarkup(<MemoryRouter initialEntries={['/join']}><App /></MemoryRouter>)
     expect(markup).toContain('Page not found')
   })
-  it('renders application result queries inside the site layout', () => {
-    const markup = renderToStaticMarkup(<MemoryRouter initialEntries={['/join/result']}><App /></MemoryRouter>)
+  it.each(['/join/result', '/admin/join-applications'])('keeps the retired application page %s on the existing 404', path => {
+    const markup = renderToStaticMarkup(<MemoryRouter initialEntries={[path]}><App /></MemoryRouter>)
     expect(markup).toContain('Site header')
-    expect(markup).toContain('Application result query')
-    expect(markup).not.toContain('Page not found')
+    expect(markup).toContain('Page not found')
   })
   it('keeps the site header around an unmatched route', () => {
     const markup = renderToStaticMarkup(
