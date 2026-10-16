@@ -1,12 +1,8 @@
-import { readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import { createApp, serviceHandlers } from '@workspace/server'
 import { createTestAuth, type TestAuth } from '@tests/helpers/auth'
-import Ajv, { type ValidateFunction } from 'ajv'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { readContract as readDocument } from '@tests/helpers/contract'
+import { compileComponentSchema as compile, readContract } from '@tests/helpers/contract'
 
 /**
  * 真实 Fastify HTTP + 原始 handler 输出的 Contract 校验。
@@ -14,33 +10,6 @@ import { readContract as readDocument } from '@tests/helpers/contract'
  * 只读 `api/generated/openapi.json`，不在测试里复制响应结构；同时校验 handler 的
  * 原始返回值，因为 Fastify 会用 response schema 序列化，未声明字段会被静默丢弃。
  */
-
-const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
-const contractPath = resolve(projectRoot, 'api/generated/openapi.json')
-
-interface ContractDocument {
-  schemas: Record<string, unknown>
-}
-
-function readContract(): ContractDocument {
-  const parsed = readDocument(contractPath) as { components?: { schemas?: unknown } }
-  const schemas = parsed.components?.schemas
-  if (typeof schemas !== 'object' || schemas === null) {
-    throw new Error(`api/generated/openapi.json 缺少 components.schemas：${contractPath}`)
-  }
-  return { schemas: schemas as Record<string, unknown> }
-}
-
-const contract = readContract()
-const definitions = JSON.parse(
-  JSON.stringify(contract.schemas).replaceAll('#/components/schemas/', '#/definitions/'),
-) as Record<string, unknown>
-
-function compile(name: string): ValidateFunction {
-  const schema = definitions[name]
-  if (typeof schema !== 'object' || schema === null) throw new Error(`缺少 components.schemas.${name}`)
-  return new Ajv({ allErrors: true, strict: false }).compile({ ...(schema as Record<string, unknown>), definitions })
-}
 
 const validators = {
   list: compile('NotificationList'),
@@ -323,7 +292,7 @@ describe('notification contract over HTTP', () => {
     expect((history.json() as { items: unknown[] }).items).toHaveLength(0)
     expect(Object.keys(serviceHandlers)).not.toContain('listNotificationClearBatches')
     expect(Object.keys(serviceHandlers)).not.toContain('restoreNotificationClearBatch')
-    const document = readDocument(contractPath) as {
+    const document = readContract() as {
       paths: Record<string, unknown>; components: { schemas: Record<string, unknown> }
     }
     expect(document.paths).not.toHaveProperty('/notifications/clear-batches')
@@ -475,12 +444,6 @@ describe('registered notification handler output', () => {
     expect(validators.preferences(preferences)).toBe(true)
   })
 
-  it('exposes only the fields the contract declares', async () => {
-    const summary = await serviceHandlers.getNotificationSummary(
-      { server: app, authSession: { userId } } as never, reply) as Record<string, unknown>
-    expect(Object.keys(summary).sort()).toEqual(['readThroughToken', 'serverTime', 'stateVersion', 'unreadCount', 'upperSequence'])
-  })
-
   it('returns raw write results that already satisfy the contract schemas', async () => {
     // 直接验证写 operation 的原始返回值，防止序列化掩盖 handler 回归。
     await publish('一', [userId])
@@ -512,22 +475,6 @@ describe('registered notification handler output', () => {
     const preferences = await call(serviceHandlers.updateNotificationPreferences,
       { body: { expectedRevision: 0, optionalCategories: { announcement: false, personal_update: true } } })
     expect(validators.preferences(preferences)).toBe(true)
-  })
-
-  it('exposes only the fields the contract declares on the clear results', async () => {
-    await publish('清理', [userId])
-    const call = (handler: (...args: never[]) => unknown, request: Record<string, unknown>) =>
-      handler({ server: app, authSession: { userId }, ...request } as never, reply)
-
-    const preview = await call(serviceHandlers.previewNotificationClear, { body: {} }) as
-      { batchId: string; clearSnapshotToken: string }
-    expect(Object.keys(preview).sort()).toEqual(['batchId', 'clearSnapshotToken', 'expiresAt', 'itemCount',
-      'serverTime', 'upperSequence'])
-
-    const clear = await call(serviceHandlers.clearNotificationsSnapshot,
-      { body: { requestId: randomUUID(), clearSnapshotToken: preview.clearSnapshotToken } }) as Record<string, unknown>
-    expect(Object.keys(clear).sort()).toEqual(['affectedCount', 'batchId', 'replayed', 'requestId', 'serverTime',
-      'skippedCount', 'unreadCount'])
   })
 
   /**

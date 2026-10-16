@@ -1,13 +1,10 @@
-﻿import { readFileSync } from 'node:fs'
-import Ajv from 'ajv'
-import { readContract } from '@tests/helpers/contract'
+﻿import { compileComponentSchema } from '@tests/helpers/contract'
 import { afterEach, expect, it } from 'vitest'
 import type { FastifyReply } from 'fastify'
 import { createApp, serviceHandlers } from '@workspace/server'
 import { approvedInvitation, createTestAuth, joinSnapshot, newJoinApplication, type TestAuth } from '@tests/helpers/auth'
-const contract=readContract(new URL('../../api/generated/openapi.json', import.meta.url))
-const definitions=JSON.parse(JSON.stringify(contract.components.schemas).replaceAll('#/components/schemas/','#/definitions/'))
-function validate(name:string,value:unknown) { const check=new Ajv({strict:false,allErrors:true}).compile({...definitions[name],definitions});expect(check(value),JSON.stringify(check.errors)).toBe(true) }
+const schemas = Object.fromEntries(['InvitationEligibility', 'InvitationCodeAccepted', 'InvitationVerified', 'InvitationRegistrationCompleted', 'ErrorEnvelope'].map(name => [name, compileComponentSchema(name)]))
+function validate(name:string,value:unknown) { const check=schemas[name]!;expect(check(value),JSON.stringify(check.errors)).toBe(true) }
 const fixtures:TestAuth[]=[],apps:Array<ReturnType<typeof createApp>>=[]
 afterEach(async()=>{await Promise.all(apps.splice(0).map(app=>app.close()));await Promise.all(fixtures.splice(0).map(f=>f.close()))})
 async function setup(){const f=await createTestAuth();fixtures.push(f);const app=createApp({...f});apps.push(app);return{f,app}}

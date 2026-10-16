@@ -4,6 +4,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symli
 import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterAll, expect, it } from 'vitest'
+import { buildSpecifications } from '../../scripts/runtime/build.mjs'
 
 const root = fileURLToPath(new URL('../../', import.meta.url))
 const owned = join(root, 'apps/server/.local')
@@ -49,19 +50,29 @@ afterAll(() => {
   rmSync(workspace, { recursive: true, force: true })
 })
 
-it('boots with tsx from arbitrary cwd, then cleanly rebuilds deletion and rename for plain JS boot', () => {
+it('keeps cleanup before compilation in the Server build and invokes it from the root build', () => {
+  const steps = JSON.parse(readFileSync(join(root, 'apps/server/package.json'), 'utf8')).scripts.build.split('&&') as string[]
+  const cleanup = steps.findIndex(step => /\bclean-server-build\.mjs\b/.test(step))
+  expect(cleanup).toBeGreaterThanOrEqual(0)
+  expect(steps.findIndex(step => /\btsc\b/.test(step))).toBeGreaterThan(cleanup)
+  const specs = buildSpecifications({ workspace, inherited: { INTEGRATION_COREPACK_JS: compiler } })
+  expect(specs.some(spec => spec.args.slice(1).join(' ') === 'pnpm --filter @workspace/server build')).toBe(true)
+})
+
+it('boots source and rebuilt JavaScript from arbitrary cwd, then safely closes failed boots', () => {
   probe('removed')
+  probe('old-probe')
   // Initial build proves the plugin was emitted; subsequent boots reject any stale decorator.
   build(); expect(existsSync(join(dist, 'modules/removed/plugin.js'))).toBe(true)
+  expect(existsSync(join(dist, 'modules/old-probe/plugin.js'))).toBe(true)
   rmSync(join(source, 'modules/removed'), { recursive: true })
-  probe('old-probe'); build()
-  expect(existsSync(join(dist, 'modules/removed/plugin.js'))).toBe(false)
   renameSync(join(source, 'modules/old-probe'), join(source, 'modules/new-probe'))
   const renamed = join(source, 'modules/new-probe/plugin.ts')
   writeFileSync(renamed, readFileSync(renamed, 'utf8').replaceAll('old-probe', 'new-probe'))
   // --import tsx uses the production source path resolution and @server aliases.
   pass(run(['--import', tsx, runner, source, 'ts', 'new-probe'], workspace))
   build()
+  expect(existsSync(join(dist, 'modules/removed/plugin.js'))).toBe(false)
   expect(existsSync(join(dist, 'modules/old-probe/plugin.js'))).toBe(false)
   writeFileSync(join(dist, 'ignored.ts'), "throw new Error('EXCLUDED_TYPESCRIPT_SENTINEL')")
   writeFileSync(join(dist, 'modules/new-probe/ignored.ts'), "throw new Error('EXCLUDED_CANDIDATE_TYPESCRIPT_SENTINEL')")
@@ -69,9 +80,8 @@ it('boots with tsx from arbitrary cwd, then cleanly rebuilds deletion and rename
   pass(compiled); expect(compiled.stdout).toContain('"closes":1,"starts":1,"status":"ok"')
   expect(readFileSync(join(server, 'data/sentinel'), 'utf8')).toBe('PERSISTENT_DATA')
   expect(readFileSync(join(workspace, '.env.local'), 'utf8')).toBe('ENVIRONMENT_SENTINEL')
-}, 120_000)
 
-it('fails in a real child process with safe plugin diagnostics, no running worker and one close', () => {
+  // These failure probes use this scenario's build, not another test's output.
   const folder = join(dist, 'modules/new-probe')
   const entry = join(folder, 'plugin.js'), original = readFileSync(entry, 'utf8')
   for (const [body, code] of [
@@ -88,10 +98,10 @@ it('fails in a real child process with safe plugin diagnostics, no running worke
     expect(result.stdout).toContain('"closes":1,"starts":0')
   }
   writeFileSync(entry, original)
-})
+}, 120_000)
 
 it('rejects a linked dist, extra CLI targets and a non-directory dist without deleting sentinels', () => {
-  rmSync(dist, { recursive: true })
+  rmSync(dist, { recursive: true, force: true })
   symlinkSync(join(server, 'data'), dist, 'junction')
   const clean = join(workspace, 'scripts/clean-server-build.mjs')
   expect(run([clean]).status).toBe(1)
@@ -100,12 +110,4 @@ it('rejects a linked dist, extra CLI targets and a non-directory dist without de
   expect(run([clean]).status).toBe(1); expect(readFileSync(dist, 'utf8')).toBe('NOT_A_DIRECTORY')
   expect(run([clean, join(server, 'data')]).status).toBe(1)
   rmSync(dist); pass(run([clean]))
-})
-
-it('wires cleanup before compilation in direct Server build and root build uses that command', () => {
-  const command = JSON.parse(readFileSync(join(root, 'apps/server/package.json'), 'utf8')).scripts.build
-  expect(command).toContain('generate && node ../../scripts/clean-server-build.mjs && tsc -p tsconfig.json && node ../../scripts/rewrite-server-imports.mjs')
-  const runtime = readFileSync(join(root, 'scripts/runtime/build.mjs'), 'utf8')
-  expect(runtime).toContain("'@workspace/server'")
-  expect(runtime).toContain("args: [corepack, 'pnpm', '--filter', name, 'build']")
 })

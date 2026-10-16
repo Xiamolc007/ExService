@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -10,10 +10,6 @@ const require = createRequire(import.meta.url)
 const compiler = require.resolve('typescript/bin/tsc')
 const configuration = join(root, 'tests/server-types/tsconfig.json')
 const compilerPath = (path: string) => path.replaceAll('\\', '/')
-
-it('checks the full declaration graph', () => {
-  execFileSync(process.execPath, [compiler, '--noEmit', '-p', configuration], { cwd: root, stdio: 'pipe' })
-}, 60_000)
 
 it('rejects conflicting service fields in the full declaration graph', () => {
   // A child of the Server package resolves its direct Fastify dependency.

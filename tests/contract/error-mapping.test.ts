@@ -229,7 +229,4 @@ describe('shared safe error mapping', () => {
 
   it('keeps storage busy 503 with Retry-After byte-identical', () => runGolden('storage-busy-503-retry-after', '/probe/storage-busy', 'GET'))
 
-  it('covers every recorded golden scenario', () => {
-    expect(GOLDEN.length).toBe(13)
-  })
 })

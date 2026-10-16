@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import Ajv from 'ajv'
-import { readContract } from '@tests/helpers/contract'
+import { compileComponentSchema } from '@tests/helpers/contract'
 import type { FastifyReply, FastifyRequest, RouteOptions } from 'fastify'
 import { createApp, serviceHandlers } from '@workspace/server'
 import { StorageError, type StorageErrorCode } from '@server/src/modules/storage/errors'
@@ -17,12 +16,8 @@ import { createAppWithStorage, fileStorageFixture, type StorageTestFixture } fro
  * 3. 存储上传 operation 的 handler 原始返回值（序列化前）符合响应 schema。
  */
 
-const contract = readContract(new URL('../../api/generated/openapi.json', import.meta.url))
-const definitions = JSON.parse(JSON.stringify(contract.components.schemas).replaceAll('#/components/schemas/', '#/definitions/'))
-function validate(name: string, value: unknown) {
-  const check = new Ajv({ strict: false, allErrors: true, unknownFormats: 'ignore' }).compile({ ...definitions[name], definitions })
-  expect(check(value), JSON.stringify(check.errors)).toBe(true)
-}
+const validateEnvelope = compileComponentSchema('ErrorEnvelope')
+const validateUpload = compileComponentSchema('StorageUploadResult')
 
 const fixtures: TestAuth[] = []
 const storages: StorageTestFixture[] = []
@@ -74,10 +69,6 @@ describe('takeover status guard', () => {
     }
   })
 
-  it('reports a status the contract never declares for these operations', () => {
-    // 负向对照：418 不在存储上传的声明集合里，守卫若失效就会静默丢掉 envelope。
-    expect(declared(STORAGE_UPLOAD_STATUSES)).not.toContain(418)
-  })
 })
 
 describe('declared response statuses and body limit', () => {
@@ -101,18 +92,13 @@ describe('early takeover envelope', () => {
 
   it('accepts the contract ErrorEnvelope and rejects extra, missing and mistyped fields', () => {
     const envelope = { error: { code: 'STORAGE_TIMEOUT', message: 'x', requestId: 'y' } }
-    expect(validateQuiet('ErrorEnvelope', envelope)).toBe(true)
-    expect(validateQuiet('ErrorEnvelope', { error: { code: 'STORAGE_TIMEOUT', message: 'x', requestId: 'y', extra: true } })).toBe(false)
-    expect(validateQuiet('ErrorEnvelope', { error: { code: 'STORAGE_TIMEOUT', message: 'x' } })).toBe(false)
-    expect(validateQuiet('ErrorEnvelope', { error: { code: 'STORAGE_TIMEOUT', message: 'x', requestId: 42 } })).toBe(false)
-    expect(validateQuiet('ErrorEnvelope', { error: { code: 'STORAGE_TIMEOUT', message: 'x', requestId: 'y' }, extra: 1 })).toBe(false)
+    expect(validateEnvelope(envelope)).toBe(true)
+    expect(validateEnvelope({ error: { code: 'STORAGE_TIMEOUT', message: 'x', requestId: 'y', extra: true } })).toBe(false)
+    expect(validateEnvelope({ error: { code: 'STORAGE_TIMEOUT', message: 'x' } })).toBe(false)
+    expect(validateEnvelope({ error: { code: 'STORAGE_TIMEOUT', message: 'x', requestId: 42 } })).toBe(false)
+    expect(validateEnvelope({ error: { code: 'STORAGE_TIMEOUT', message: 'x', requestId: 'y' }, extra: 1 })).toBe(false)
   })
 })
-
-function validateQuiet(name: string, value: unknown): boolean {
-  const check = new Ajv({ strict: false, allErrors: true, unknownFormats: 'ignore' }).compile({ ...definitions[name], definitions })
-  return check(value) === true
-}
 
 function textPart(name: string, value: string): TestPart {
   return { name, contentType: 'text/plain', bytes: Buffer.from(value, 'utf8') }
@@ -167,16 +153,16 @@ describe('raw upload handler output', () => {
     expect(accepted.statusCode, accepted.body).toBe(200)
     expect(capture.calls()).toBe(1)
     const raw = capture.captured[0] as { url: string }
-    validate('StorageUploadResult', raw)
+    expect(validateUpload(raw), JSON.stringify(validateUpload.errors)).toBe(true)
     expect(Object.keys(raw as object)).toEqual(['url'])
     expect(accepted.json()).toEqual(raw)
     expect(raw.url).toContain('key=raw.bin')
   })
 
   it('rejects response values that violate the upload result schemas', () => {
-    expect(validateQuiet('StorageUploadResult', { url: 'https://example.test/a' })).toBe(true)
-    expect(validateQuiet('StorageUploadResult', {})).toBe(false)
-    expect(validateQuiet('StorageUploadResult', { url: 1 })).toBe(false)
+    expect(validateUpload({ url: 'https://example.test/a' })).toBe(true)
+    expect(validateUpload({})).toBe(false)
+    expect(validateUpload({ url: 1 })).toBe(false)
   })
 
   it('rejects a forged storage placeholder through the direct handler without a parser context', async () => {

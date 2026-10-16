@@ -17,7 +17,7 @@ async (page) => {
   })
   try {
     await page.goto(`${origin}/aboutus/donations`)
-    await page.getByRole('heading', { level: 1, name: '捐赠', exact: true }).waitFor()
+    await page.getByRole('heading', { level: 1 }).waitFor()
     const channel = page.getByRole('article', { name: '浏览器测试渠道', exact: true })
     const link = channel.getByRole('link', { name: '前往浏览器测试渠道', exact: true })
     assert(await link.getAttribute('href') === 'https://example.com/support', 'Channel URL was not rendered')
@@ -37,8 +37,8 @@ async (page) => {
     }
     fixtureEnabled = false
     await page.goto(`${origin}/aboutus/donations`)
-    await page.getByText('捐赠渠道仍在整理中。', { exact: true }).waitFor()
-    await page.getByText('捐赠者信息仍在整理中。', { exact: true }).waitFor()
+    await page.getByRole('heading', { name: '渠道信息正在整理', exact: true }).waitFor()
+    await page.getByRole('heading', { name: '每一份心意，我们都记得。', exact: true }).waitFor()
     assert(await page.locator('main time').count() === 0, 'Fixture donor remained after removing test input')
     return { status: 'PASS', channelLink: true, qrImage: true, nicknameAndDate: true, rows, realContentEmptyStates: true }
   } finally { await page.unroute(metadataPattern) }

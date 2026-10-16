@@ -1,9 +1,8 @@
 import { request as httpRequest, type ClientRequest } from 'node:http'
 import { Writable } from 'node:stream'
 import { afterEach, expect, it } from 'vitest'
-import Ajv from 'ajv'
 import type { FastifyInstance } from 'fastify'
-import { readContract } from '@tests/helpers/contract'
+import { compileComponentSchema } from '@tests/helpers/contract'
 import { createApp } from '@workspace/server'
 import { createTestAuth, type TestAuth } from '@tests/helpers/auth'
 import { multipartBody, type TestPart } from '@tests/helpers/multipart'
@@ -19,12 +18,7 @@ import type { StorageServices } from '@server/src/modules/storage/factory'
  * 不靠内存数字或 GC 时间判定。
  */
 
-const contract = readContract(new URL('../../api/generated/openapi.json', import.meta.url))
-const definitions = JSON.parse(JSON.stringify(contract.components.schemas).replaceAll('#/components/schemas/', '#/definitions/'))
-function validate(name: string, value: unknown) {
-  const check = new Ajv({ strict: false, allErrors: true, unknownFormats: 'ignore' }).compile({ ...definitions[name], definitions })
-  expect(check(value), JSON.stringify(check.errors)).toBe(true)
-}
+const validateEnvelope = compileComponentSchema('ErrorEnvelope')
 
 const fixtures: TestAuth[] = []
 const apps: FastifyInstance[] = []
@@ -155,7 +149,7 @@ it('takeover keeps the exact contract envelope, content type and safe headers on
   // 序列化前的 envelope 与序列化后的真实响应都精确符合 Contract。
   expect(Object.keys(body)).toEqual(['error'])
   expect(Object.keys(body.error).sort()).toEqual(['code', 'message', 'requestId'])
-  validate('ErrorEnvelope', body)
+  expect(validateEnvelope(body), JSON.stringify(validateEnvelope.errors)).toBe(true)
   // content-type 是「显式状态码 + application/json 选中正确 serializer」唯一的线上可观测证据。
   expect(response.headers['content-type']).toBe('application/json; charset=utf-8')
   expect(response.headers['cache-control']).toBe('no-store')

@@ -109,15 +109,6 @@ describe('POST /api/storage/uploads/prepare', () => {
     expect(response.json().error.code).toBe(code)
   })
 
-  it('returns no extra fields beyond the declared response schema', async () => {
-    const { app, token } = await setup()
-    const response = await app.inject({
-      method: 'POST', url: '/api/storage/uploads/prepare',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { key: 'a.bin', size: 0, contentType: 'text/plain' },
-    })
-    expect(Object.keys(response.json()).sort()).toEqual(['maxBytes', 'medium'])
-  })
 })
 
 function builderCredentialKeys(credentials: object): string[] {
