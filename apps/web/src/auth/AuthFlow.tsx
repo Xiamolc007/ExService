@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import { Alert, AlertDescription, Button } from '@exre/exui'
 import {
@@ -7,7 +7,7 @@ import {
   type AuthFormErrors,
   type LoginDraft,
 } from '@workspace/components'
-import { api } from '@web/src/api/client'
+import { api, unwrapEnvelope } from '@web/src/api/client'
 import { ExAxiosError } from '@workspace/sdk/http/browser'
 import { readToken, writeSsoSuccess, writeToken } from '@web/src/auth/storage'
 
@@ -38,6 +38,9 @@ export function AuthFlow({
   const [flowBusy, setFlowBusy] = useState(ssoRequestId !== undefined)
   const [email, setEmail] = useState(initialEmail)
   const [ssoRetryError, setSsoRetryError] = useState<string | null>(null)
+  const [captchaImage, setCaptchaImage] = useState<string | null>(null)
+  const [captchaLoading, setCaptchaLoading] = useState(false)
+  const challenge = useRef<{ challengeId: string } | null>(null)
   const generation = useRef(0)
   const authForm = useRef<AuthFormHandle>(null)
   const pendingDraft = useRef<LoginDraft | null>(null)
@@ -47,16 +50,35 @@ export function AuthFlow({
     pendingDraft.current = null
   }, [])
 
+  /** 拉取图片验证码挑战（进入 captcha 步 / 校验失败后换一张共用） */
+  const refreshCaptcha = useCallback(async () => {
+    setCaptchaLoading(true)
+    try {
+      const data = unwrapEnvelope<{ challengeId: string, imageBase64: string }>(
+        await api.POST('/auth/captcha/challenges', { alert: false }))
+      challenge.current = { challengeId: data.challengeId }
+      setCaptchaImage(data.imageBase64)
+      authForm.current?.clearServerErrors()
+    } catch {
+      challenge.current = null
+      setCaptchaImage(null)
+      authForm.current?.setServerErrors({ form: '验证码加载失败，请点击图片重试' })
+    } finally {
+      setCaptchaLoading(false)
+    }
+  }, [])
+
   function continueLogin(draft: LoginDraft) {
     pendingDraft.current = draft
     setEmail(draft.email)
+    void refreshCaptcha()
     setStep('captcha')
   }
 
-  async function submitCaptcha(_answer: string) {
+  async function submitCaptcha(answer: string) {
     const draft = pendingDraft.current
     if (draft === null) return
-    await submitLogin(draft)
+    await submitLogin(draft, answer)
   }
 
   useEffect(() => {
@@ -101,13 +123,15 @@ export function AuthFlow({
     }
   }
 
-  async function submitLogin(draft: LoginDraft) {
+  async function submitLogin(draft: LoginDraft, captchaAnswer?: string) {
     const current = ++generation.current
     authForm.current?.clearServerErrors()
+    const captcha = challenge.current !== null && captchaAnswer !== undefined
+      ? { challengeId: challenge.current.challengeId, answer: captchaAnswer } : undefined
     try {
       if (ssoRequestId !== undefined) {
         await api.POST('/auth/sso/login', {
-          body: { ssoRequestId, email: draft.email, password: draft.password }, alert: false,
+          body: { ssoRequestId, email: draft.email, password: draft.password, ...(captcha ? { captcha } : {}) }, alert: false,
         })
         if (current !== generation.current) return
         finishSso(ssoRequestId)
@@ -115,7 +139,7 @@ export function AuthFlow({
       }
 
       const result = await api.POST('/auth/login', {
-        body: { email: draft.email, password: draft.password }, alert: false,
+        body: { email: draft.email, password: draft.password, ...(captcha ? { captcha } : {}) }, alert: false,
       })
       if (current !== generation.current) return
       // 后端统一响应 {msg, data}（与管理端方言一致），data.token 才是会话令牌
@@ -167,6 +191,8 @@ export function AuthFlow({
     } catch (error) {
       if (current !== generation.current) return
       if (error instanceof ExAxiosError) {
+        // 验证码错误(422): 挑战已一次性焚毁, 自动换新图让用户重输
+        if (error.status === 422) void refreshCaptcha()
         authForm.current?.setServerErrors(mapError(error.status))
       } else authForm.current?.setServerErrors({ form: '暂时无法连接认证服务，请重试' })
     }
@@ -215,6 +241,9 @@ export function AuthFlow({
       busy={flowBusy}
       initialEmail={email}
       description={description}
+      captchaImage={captchaImage ?? undefined}
+      captchaLoading={captchaLoading}
+      onRefreshCaptcha={() => void refreshCaptcha()}
       onContinueLogin={continueLogin}
       onCaptchaSubmit={submitCaptcha}
       onJoin={join}
@@ -232,5 +261,6 @@ function mapError(status: number | undefined): AuthFormErrors {
   if (status === 400) return { form: '邮箱或密码错误' }
   if (status === 401) return { form: '登录状态已失效，请重新登录' }
   if (status === 403) return { form: '当前账户已经被禁用' }
+  if (status === 422) return { captcha: '验证码不正确或已过期，已换新图请重输' }
   return { form: '请求失败，请稍后重试' }
 }

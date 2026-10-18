@@ -15,6 +15,12 @@ export interface AuthFormProps {
   onContinueLogin: (draft: LoginDraft) => void
   onCaptchaSubmit: (answer: string) => void | Promise<void>
   onJoin: () => void
+  /** 图片验证码（base64 PNG, 无 data: 前缀）; 提供时 captcha 步骤展示真实图片 */
+  captchaImage?: string
+  /** 挑战加载中（刷新状态） */
+  captchaLoading?: boolean
+  /** 点击图片换一张 */
+  onRefreshCaptcha?: () => void
 }
 
 export const AuthForm = forwardRef<AuthFormHandle, AuthFormProps>(function AuthForm(props, ref) {

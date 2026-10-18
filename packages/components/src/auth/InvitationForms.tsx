@@ -1,4 +1,4 @@
-import { forwardRef, useId, useImperativeHandle, useRef } from "react";
+import { forwardRef, useEffect, useId, useImperativeHandle, useRef } from "react";
 import { Controller, useForm, type GlobalError } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -148,9 +148,13 @@ interface CodeProps {
   retry: boolean;
   resendSeconds: number;
   lockedSeconds: number;
-  onVerify: (code: string) => Promise<void>;
+  onVerify: (code: string, captchaAnswer?: string) => Promise<void>;
   onResend: () => Promise<boolean>;
   onBack: () => void;
+  /** 图片验证码（base64 PNG, 无 data: 前缀）; 提供时验证码步骤附加图片校验 */
+  captchaImage?: string;
+  captchaLoading?: boolean;
+  onRefreshCaptcha?: () => void;
 }
 export const InvitationCodeForm = forwardRef<InvitationFormHandle, CodeProps>(
   function InvitationCodeForm(
@@ -163,6 +167,9 @@ export const InvitationCodeForm = forwardRef<InvitationFormHandle, CodeProps>(
       onVerify,
       onResend,
       onBack,
+      captchaImage,
+      captchaLoading,
+      onRefreshCaptcha,
     },
     ref,
   ) {
@@ -173,9 +180,13 @@ export const InvitationCodeForm = forwardRef<InvitationFormHandle, CodeProps>(
     });
     const lastAttempt = useRef<string | null>(null);
     const submitting = useRef(false);
+    const captchaInput = useRef<HTMLInputElement | null>(null);
+    // 换图后旧答案对新挑战无效, 清空输入
+    useEffect(() => { if (captchaInput.current) captchaInput.current.value = "" }, [captchaImage]);
     useImperativeHandle(ref, () => ({
       setServerErrors: (e) => {
         if (e.code) form.setError("code", { message: e.code });
+        if (e.captcha) form.setError("root.server", { type: "captcha", message: e.captcha });
         if (e.form) form.setError("root.server", { type: e.formKind ?? "server", message: e.form });
       },
       clearServerErrors: () => form.clearErrors(),
@@ -187,7 +198,7 @@ export const InvitationCodeForm = forwardRef<InvitationFormHandle, CodeProps>(
       lastAttempt.current = code;
       form.clearErrors();
       try {
-        await onVerify(code);
+        await onVerify(code, captchaInput.current ? captchaInput.current.value.trim() : undefined);
       } finally {
         submitting.current = false;
       }
@@ -231,7 +242,8 @@ export const InvitationCodeForm = forwardRef<InvitationFormHandle, CodeProps>(
                       digits.length === 6 &&
                       lastAttempt.current !== digits &&
                       !disabled &&
-                      !submitting.current
+                      !submitting.current &&
+                      captchaInput.current === null
                     ) {
                       lastAttempt.current = digits;
                       void submit();
@@ -253,6 +265,24 @@ export const InvitationCodeForm = forwardRef<InvitationFormHandle, CodeProps>(
             )}
           </FieldContent>
         </Field>
+        {captchaImage && (
+          <Field>
+            <FieldContent>
+              <FieldLabel htmlFor={`${id}-captcha`}>图片验证码</FieldLabel>
+              <div className={styles.captchaRow}>
+                <Input id={`${id}-captcha`} ref={captchaInput} autoComplete="off" maxLength={16}
+                  disabled={disabled} aria-describedby={`${id}-captcha-notice`} />
+                <button type="button" className={styles.captchaImage} onClick={onRefreshCaptcha}
+                  disabled={disabled || captchaLoading} title="看不清？点击换一张" aria-label="验证码图片，点击刷新">
+                  <img src={`data:image/png;base64,${captchaImage}`} alt="" aria-hidden="true" />
+                </button>
+              </div>
+              <p className={styles.captchaNotice} id={`${id}-captcha-notice`}>
+                输入图片中的字符（不区分大小写），点击图片可换一张。
+              </p>
+            </FieldContent>
+          </Field>
+        )}
         <InvitationRootError error={form.formState.errors.root?.server} id={`${id}-panel`} />
         {lockedSeconds > 0 && (
           <p role="status">验证暂时锁定，{lockedSeconds} 秒后重试</p>

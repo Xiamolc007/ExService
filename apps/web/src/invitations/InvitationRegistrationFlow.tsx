@@ -5,7 +5,6 @@ import { InvitationEmailForm, InvitationCodeForm, InvitationProfileForm, invitat
 import type { components } from '@workspace/api-client'
 import { api, unwrapEnvelope } from '@web/src/api/client'
 import { ExAxiosError } from '@workspace/sdk/http/browser'
-
 interface Props { presentation: 'page' | 'modal'; initialEmail?: string; onLogin?: (email: string) => void; onJoin?: () => void }
 type Verified = components['schemas']['InvitationVerified']
 type Eligibility = components['schemas']['InvitationEligibility']
@@ -37,8 +36,11 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
   const [resendUntil, setResendUntil] = useState(0)
   const [lockedUntil, setLockedUntil] = useState(0)
   const [clock, setClock] = useState(Date.now())
+  const [captchaImage, setCaptchaImage] = useState<string | null>(null)
+  const [captchaLoading, setCaptchaLoading] = useState(false)
   const generation = useRef(0), mounted = useRef(false), pending = useRef(false)
   const grant = useRef<Verified | null>(null)
+  const challenge = useRef<{ challengeId: string } | null>(null)
   const emailForm = useRef<InvitationFormHandle>(null)
   const codeForm = useRef<InvitationFormHandle>(null)
   const profileForm = useRef<InvitationFormHandle>(null)
@@ -79,11 +81,32 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
   }
   function verifyFailure(current: number, error: unknown) {
     // 后端无错误信封, 按 HTTP 状态判定: 429=连续失败锁定（Retry-After 已由 core 解析）
+    if (error instanceof ExAxiosError && error.status === 422) {
+      // 图片验证码错误: 挑战一次性焚毁, 换新图并提示
+      void refreshCaptcha()
+      deliverError('code', current, { captcha: '图片验证码不正确，已换新图请重输' })
+      return
+    }
     const message = error instanceof ExAxiosError && error.status === 429 ? '验证暂时锁定，请稍后重试' : '验证码无效或已过期，请重新获取'
     const retryAfter = retrySeconds(error)
     setRetry(true)
     if (retryAfter > 0) { const now = Date.now(); setClock(now); setLockedUntil(now + retryAfter * 1000) }
     deliverError('code', current, { code: message })
+  }
+  /** 拉取图片验证码挑战（进入验证码步 / 校验失败换图共用） */
+  async function refreshCaptcha() {
+    setCaptchaLoading(true)
+    try {
+      const data = unwrapEnvelope<{ challengeId: string, imageBase64: string }>(
+        await api.POST('/auth/captcha/challenges', { alert: false }))
+      challenge.current = { challengeId: data.challengeId }
+      setCaptchaImage(data.imageBase64)
+    } catch {
+      challenge.current = null
+      setCaptchaImage(null)
+    } finally {
+      setCaptchaLoading(false)
+    }
   }
   function accepted(data: Verified) { clearFeedback(); grant.current = data; setEmail(data.email); setNickname(data.nickname); setRetry(false); setStep('profile') }
   async function runAutomatic(current: number, targetEmail: string, code: string) {
@@ -150,16 +173,19 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
     try {
       const result = unwrapEnvelope<Eligibility>(await api.POST('/auth/invitations/check', { body: { email: targetEmail }, alert: false }))
       if (!valid(current)) return
-      cooldown(result); setEmail(result.email); setStep('code')
+      cooldown(result); setEmail(result.email); void refreshCaptcha(); setStep('code')
     } catch (error) { if (valid(current)) checkFailure(current, error) }
     finally { if (valid(current)) { pending.current = false; setBusy(false) } }
   }
-  async function verify(code: string) {
+  async function verify(code: string, captchaAnswer?: string) {
     if (pending.current || Date.now() < lockedUntil) return
     const current = generation.current
     pending.current = true; setBusy(true); setRetry(false); clearFeedback()
+    const captcha = challenge.current !== null && captchaAnswer !== undefined
+      ? { challengeId: challenge.current.challengeId, answer: captchaAnswer } : undefined
     try {
-      const result = unwrapEnvelope<Verified>(await api.POST('/auth/invitations/verify', { body: { email, code }, alert: false }))
+      const result = unwrapEnvelope<Verified>(await api.POST('/auth/invitations/verify', {
+        body: { email, code, ...(captcha ? { captcha } : {}) }, alert: false }))
       if (!valid(current)) return
       accepted(result)
     } catch (error) { if (valid(current)) verifyFailure(current, error) }
@@ -172,7 +198,7 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
     try {
       const result = unwrapEnvelope<CodeAccepted>(await api.POST('/auth/invitations/code', { body: { email }, alert: false }))
       if (!valid(current)) return false
-      cooldown(result); setRetry(false); ExMessage.info('如邮箱符合邀请条件，将发送验证码'); return true
+      cooldown(result); setRetry(false); void refreshCaptcha(); ExMessage.info('如邮箱符合邀请条件，将发送验证码'); return true
     } catch { if (valid(current)) deliverError('code', current, { form: '发送失败，请重试', formKind: 'send-failed' }); return false }
     finally { if (valid(current)) { pending.current = false; setBusy(false) } }
   }
@@ -214,7 +240,7 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
   const join = () => { invalidate(); if (onJoin) onJoin(); else navigate('/communities/rifling-911') }
   return <>
     {step === 'email' && <InvitationEmailForm ref={emailForm} initialEmail={email} busy={busy} onSubmit={check} onEmailChange={invalidate} onLogin={login} onJoin={join} />}
-    {step === 'code' && <InvitationCodeForm ref={codeForm} email={email} busy={busy} retry={retry} resendSeconds={Math.max(0, Math.ceil((resendUntil - clock) / 1000))} lockedSeconds={Math.max(0, Math.ceil((lockedUntil - clock) / 1000))} onVerify={verify} onResend={resend} onBack={back} />}
+    {step === 'code' && <InvitationCodeForm ref={codeForm} email={email} busy={busy} retry={retry} resendSeconds={Math.max(0, Math.ceil((resendUntil - clock) / 1000))} lockedSeconds={Math.max(0, Math.ceil((lockedUntil - clock) / 1000))} onVerify={verify} onResend={resend} onBack={back} captchaImage={captchaImage ?? undefined} captchaLoading={captchaLoading} onRefreshCaptcha={() => void refreshCaptcha()} />}
     {step === 'profile' && <InvitationProfileForm ref={profileForm} email={email} nickname={nickname} busy={busy} onSubmit={complete} onBack={back} />}
     {step === 'registered' && <section aria-live="polite"><h2>注册成功</h2><p>账号已创建，即将前往登录。</p><Button onClick={login}>前往登录</Button></section>}
   </>

@@ -1,4 +1,4 @@
-import { forwardRef, useId, useImperativeHandle } from 'react'
+import { forwardRef, useEffect, useId, useImperativeHandle } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -17,15 +17,17 @@ const captchaSchema = z.object({
 type CaptchaFields = z.infer<typeof captchaSchema>
 
 export const CaptchaForm = forwardRef<AuthFormHandle, AuthFormProps>(function CaptchaForm({
-  busy, onCaptchaSubmit, description,
+  busy, onCaptchaSubmit, description, captchaImage, captchaLoading, onRefreshCaptcha,
 }, ref) {
   const id = useId()
-  const { register, handleSubmit, setError, clearErrors, getFieldState,
+  const { register, handleSubmit, setError, clearErrors, getFieldState, reset,
     formState: { errors, isSubmitting } } = useForm<CaptchaFields>({
     resolver: zodResolver(captchaSchema),
     defaultValues: { answer: '' },
   })
   const disabled = busy || isSubmitting
+  // 换图后旧答案对新挑战无效, 清空输入
+  useEffect(() => { reset({ answer: '' }) }, [captchaImage, reset])
 
   useImperativeHandle(ref, () => ({
     setServerErrors(nextErrors) {
@@ -55,12 +57,22 @@ export const CaptchaForm = forwardRef<AuthFormHandle, AuthFormProps>(function Ca
             <Input {...register('answer')} id={`${id}-answer`} autoComplete="off" autoFocus
               disabled={disabled} maxLength={64} aria-invalid={errors.answer ? true : undefined}
               aria-describedby={errors.answer ? `${id}-answer-error` : `${id}-notice`} />
-            <div className={styles.captchaImage} role="img" aria-label="验证码图片占位区域">验证码图片预留区域</div>
+            {captchaImage ? (
+              <button type="button" className={styles.captchaImage} onClick={onRefreshCaptcha}
+                disabled={disabled || captchaLoading} title="看不清？点击换一张"
+                aria-label="验证码图片，点击刷新">
+                <img src={`data:image/png;base64,${captchaImage}`} alt="" aria-hidden="true" />
+              </button>
+            ) : (
+              <div className={styles.captchaImage} role="img" aria-label="验证码图片占位区域">验证码图片预留区域</div>
+            )}
           </div>
           {errors.answer && <FieldError id={`${id}-answer-error`}>{errors.answer.message}</FieldError>}
         </FieldContent>
       </Field>
-      <p className={styles.captchaNotice} id={`${id}-notice`}>验证码功能开发中，当前输入不校验；留空也可继续。</p>
+      <p className={styles.captchaNotice} id={`${id}-notice`}>
+        {captchaImage ? '输入图片中的字符，不区分大小写；点击图片可换一张。' : '验证码功能开发中，当前输入不校验；留空也可继续。'}
+      </p>
       <Button type="submit" disabled={disabled} className={styles.submit}>
         {disabled ? <><Spinner aria-hidden="true" />处理中</> : '登录'}
       </Button>
