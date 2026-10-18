@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router'
 import { Button, ExMessage } from '@exre/exui'
 import { InvitationEmailForm, InvitationCodeForm, InvitationProfileForm, invitationEmailSchema, type InvitationFormHandle, type InvitationFormErrors, type InvitationProfileValues } from '@workspace/components'
 import type { components } from '@workspace/api-client'
-import { api } from '@web/src/api/client'
+import { api, unwrapEnvelope } from '@web/src/api/client'
 import { ExAxiosError } from '@workspace/sdk/http/browser'
 
 interface Props { presentation: 'page' | 'modal'; initialEmail?: string; onLogin?: (email: string) => void; onJoin?: () => void }
 type Verified = components['schemas']['InvitationVerified']
+type Eligibility = components['schemas']['InvitationEligibility']
+type CodeAccepted = components['schemas']['InvitationCodeAccepted']
 type FormStep = 'email' | 'code' | 'profile'
 type Step = FormStep | 'registered'
 interface PendingFeedback { targetStep: FormStep; generation: number; errors: InvitationFormErrors }
@@ -76,7 +78,8 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
     deliverError('email', current, { form, formKind })
   }
   function verifyFailure(current: number, error: unknown) {
-    const message = error instanceof ExAxiosError && error.code === 'INVITATION_CODE_LOCKED' ? '验证暂时锁定，请稍后重试' : '验证码无效或已过期，请重新获取'
+    // 后端无错误信封, 按 HTTP 状态判定: 429=连续失败锁定（Retry-After 已由 core 解析）
+    const message = error instanceof ExAxiosError && error.status === 429 ? '验证暂时锁定，请稍后重试' : '验证码无效或已过期，请重新获取'
     const retryAfter = retrySeconds(error)
     setRetry(true)
     if (retryAfter > 0) { const now = Date.now(); setClock(now); setLockedUntil(now + retryAfter * 1000) }
@@ -85,11 +88,11 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
   function accepted(data: Verified) { clearFeedback(); grant.current = data; setEmail(data.email); setNickname(data.nickname); setRetry(false); setStep('profile') }
   async function runAutomatic(current: number, targetEmail: string, code: string) {
     let inspected
-    try { inspected = await api.POST('/auth/invitations/check', { body: { email: targetEmail }, alert: false }) }
+    try { inspected = unwrapEnvelope<Eligibility>(await api.POST('/auth/invitations/check', { body: { email: targetEmail }, alert: false })) }
     catch (error) { return { stage: 'checkFailure' as const, error } }
     if (!valid(current)) return null
     try {
-      const result = await api.POST('/auth/invitations/verify', { body: { email: inspected.email, code }, alert: false })
+      const result = unwrapEnvelope<Verified>(await api.POST('/auth/invitations/verify', { body: { email: inspected.email, code }, alert: false }))
       return { stage: 'verify' as const, result, eligibility: inspected }
     } catch (error) { return { stage: 'verifyFailure' as const, error, eligibility: inspected } }
   }
@@ -145,7 +148,7 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
     const current = ++generation.current
     pending.current = true; setBusy(true); setEmail(targetEmail); clearFeedback()
     try {
-      const result = await api.POST('/auth/invitations/check', { body: { email: targetEmail }, alert: false })
+      const result = unwrapEnvelope<Eligibility>(await api.POST('/auth/invitations/check', { body: { email: targetEmail }, alert: false }))
       if (!valid(current)) return
       cooldown(result); setEmail(result.email); setStep('code')
     } catch (error) { if (valid(current)) checkFailure(current, error) }
@@ -156,7 +159,7 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
     const current = generation.current
     pending.current = true; setBusy(true); setRetry(false); clearFeedback()
     try {
-      const result = await api.POST('/auth/invitations/verify', { body: { email, code }, alert: false })
+      const result = unwrapEnvelope<Verified>(await api.POST('/auth/invitations/verify', { body: { email, code }, alert: false }))
       if (!valid(current)) return
       accepted(result)
     } catch (error) { if (valid(current)) verifyFailure(current, error) }
@@ -167,7 +170,7 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
     const current = generation.current
     pending.current = true; setBusy(true); clearFeedback()
     try {
-      const result = await api.POST('/auth/invitations/code', { body: { email }, alert: false })
+      const result = unwrapEnvelope<CodeAccepted>(await api.POST('/auth/invitations/code', { body: { email }, alert: false }))
       if (!valid(current)) return false
       cooldown(result); setRetry(false); ExMessage.info('如邮箱符合邀请条件，将发送验证码'); return true
     } catch { if (valid(current)) deliverError('code', current, { form: '发送失败，请重试', formKind: 'send-failed' }); return false }
@@ -188,7 +191,7 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
       if (!valid(current)) return
       clearFeedback(); grant.current = null; setNickname(''); setStep('registered'); ExMessage.info('注册成功，请前往登录')
     } catch (error) { if (valid(current)) {
-      const expired = error instanceof ExAxiosError && error.code === 'COMPLETION_GRANT_INVALID'
+      const expired = error instanceof ExAxiosError && error.status === 401
       deliverError('profile', current, { form: expired ? '验证已过期，请返回邮箱重新验证' : '注册失败，请重试', formKind: expired ? 'completion-expired' : 'complete-failed' })
     } }
     finally { if (valid(current)) { pending.current = false; setBusy(false) } }

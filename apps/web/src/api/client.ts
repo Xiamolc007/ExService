@@ -27,3 +27,14 @@ export const http = createExAxios({
 })
 bindSessionHttp(token => http.setToken(token))
 export const api = createApiClient({ baseUrl, transport: request => http(request) })
+
+/**
+ * 解开 webman 后端统一响应信封 {msg, data}。
+ * 后端端点输出已采用契约字段名（通知为 camelCase、账号侧另有 adaptUser 映射），
+ * 剥掉信封后即为页面消费的形状；响应无 data 字段时原样返回。
+ */
+export function unwrapEnvelope<T>(raw: unknown): T {
+  const envelope = raw as { data?: unknown }
+  return (envelope !== null && typeof envelope === 'object' && 'data' in envelope
+    ? envelope.data : raw) as T
+}

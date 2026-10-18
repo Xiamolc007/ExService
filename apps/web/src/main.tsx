@@ -60,7 +60,7 @@ async function checkServer(): Promise<void> {
     console.info('[dev] GET /api/health reached the Server.')
   } catch (cause) {
     console.error(
-      '[dev] GET /api/health could not reach the Server on 127.0.0.1:8080. Start it with `pnpm dev`.',
+      '[dev] GET /api/health could not reach the Server on 127.0.0.1:8787. Start webman with `php windows.php`.',
       cause,
     )
   }
