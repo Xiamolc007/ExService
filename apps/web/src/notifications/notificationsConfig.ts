@@ -5,6 +5,20 @@ export type NotificationItem = components['schemas']['NotificationItem']
 export type NotificationDetail = components['schemas']['NotificationDetail']
 export type NotificationSummary = components['schemas']['NotificationSummary']
 export type NotificationPreferences = components['schemas']['NotificationPreferences']
+export type NotificationList = components['schemas']['NotificationList']
+export type NotificationState = components['schemas']['NotificationState']
+export type NotificationClearPreview = components['schemas']['NotificationClearPreview']
+export type NotificationClearResult = components['schemas']['NotificationClearResult']
+
+/**
+ * 解开 webman 后端统一响应信封 {msg, data}。
+ * 后端通知端点输出已采用契约 camelCase 字段，剥掉信封后即为契约形状。
+ */
+export function unwrapEnvelope<T>(raw: unknown): T {
+  const envelope = raw as { data?: unknown }
+  return (envelope !== null && typeof envelope === 'object' && 'data' in envelope
+    ? envelope.data : raw) as T
+}
 
 export type NotificationPageStatus = 'idle' | 'loading' | 'ready' | 'error'
 export type NotificationNextPageStatus = 'idle' | 'loading' | 'error'

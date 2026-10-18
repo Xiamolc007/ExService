@@ -4,7 +4,7 @@ import { api } from '@web/src/api/client'
 import { useAuth } from '@web/src/auth/AuthContext'
 import { readToken, subscribeSessionChanges } from '@web/src/auth/storage'
 import { ExAxiosError } from '@workspace/sdk/http/browser'
-import { bindNotificationsToken, notificationsConfig } from '@web/src/notifications/notificationsConfig'
+import { bindNotificationsToken, notificationsConfig, unwrapEnvelope, type NotificationPreferences } from '@web/src/notifications/notificationsConfig'
 import type {
   NotificationPreferencesDraft, PreferenceCanonicalValues, PreferenceField, SettingsNotificationsSlice,
 } from '@workspace/components'
@@ -151,7 +151,7 @@ export function useNotificationPreferencesController({ active }: { active: boole
     const handle: { current: Promise<void> | null } = { current: null }
     const task = (async () => {
       try {
-        const result = await api.GET('/notification-preferences', { alert: false })
+        const result = unwrapEnvelope<NotificationPreferences>(await api.GET('/notification-preferences', { alert: false }))
         if (!accepted()) return
         runtime.needsCanonicalRead = false
         notificationsConfig.preferences.snapshot = result
@@ -179,7 +179,7 @@ export function useNotificationPreferencesController({ active }: { active: boole
       && runtime.readId === requestId && runtime.writeVersion === version
     notificationsConfig.preferences.status = 'loading'; notificationsConfig.preferences.error = null
     try {
-      const result = await api.GET('/notification-preferences', { alert: false })
+      const result = unwrapEnvelope<NotificationPreferences>(await api.GET('/notification-preferences', { alert: false }))
       if (!accepted()) return
       // 一次已接受的读取本身就是规范值：它满足冲突后的必要重读，旧缓存不再被当成可写状态。
       runtime.needsCanonicalRead = false
@@ -225,7 +225,7 @@ export function useNotificationPreferencesController({ active }: { active: boole
     }
     const owned = () => notificationsConfig.epoch === run.epoch && runtime.save === run
     try {
-      const result = await api.PUT('/notification-preferences', { alert: false, body })
+      const result = unwrapEnvelope<NotificationPreferences>(await api.PUT('/notification-preferences', { alert: false, body }))
       if (!owned()) return null
       runtime.writeVersion += 1; runtime.readId += 1
       notificationsConfig.preferences.snapshot = result
