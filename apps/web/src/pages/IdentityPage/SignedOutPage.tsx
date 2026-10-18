@@ -44,7 +44,7 @@ export function SignedOutPage() {
       setResult('active')
     } catch (error) {
       if (generation.current !== current) return
-      if (error instanceof ExAxiosError && error.code === 'SESSION_INVALID') {
+      if (error instanceof ExAxiosError && error.status === 401) {
         try {
           if (readToken(window.localStorage) !== token) { setResult('unavailable'); return }
           removeMatchingToken(window.localStorage, token)

@@ -16,10 +16,11 @@ const communityConfig = JSON.parse(
 
 /**
  * Server 的本地地址。
- * 与 `apps/server/src/server.ts` 的监听地址保持一致，并显式使用 127.0.0.1，
+ * 对接 webman 后端（exre 平台, `php windows.php` 监听 8787）；仍可用
+ * INTEGRATION_SERVER_PORT 覆盖。显式使用 127.0.0.1，
  * 避免在 Windows 上因 `localhost` 解析到 IPv6 而代理不到只绑定 IPv4 的服务。
  */
-const SERVER_ORIGIN = `http://127.0.0.1:${process.env.INTEGRATION_SERVER_PORT ?? '8080'}`
+const SERVER_ORIGIN = `http://127.0.0.1:${process.env.INTEGRATION_SERVER_PORT ?? '8787'}`
 const INTEGRATION_WEB_PORT = Number(process.env.INTEGRATION_WEB_PORT ?? '8081')
 const publicOrigin = process.env.SERVER_PUBLIC_WEB_BASE_URL
   ? new URL(process.env.SERVER_PUBLIC_WEB_BASE_URL) : undefined

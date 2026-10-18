@@ -49,23 +49,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
     try {
-      const data = await api.GET('/auth/me', { alert: false })
+      const result = await api.GET('/auth/me', { alert: false })
       if (currentGeneration !== generation.current) {
         return
       }
       if (readToken(window.localStorage) !== token) return
+      // 后端统一响应 {msg, data}；字段映射: username→nickname, avatar→avatarUrl
+      const payload = (result as unknown as { data: { username: string, avatar?: string } }).data
       setState({
           status: 'authenticated',
-          nickname: data.nickname,
-          initial: firstVisibleCharacter(data.nickname),
-          avatarUrl: data.avatarUrl ?? null,
+          nickname: payload.username,
+          initial: firstVisibleCharacter(payload.username),
+          avatarUrl: payload.avatar && payload.avatar !== '' ? payload.avatar : null,
         })
       return
     } catch (error) {
       if (currentGeneration === generation.current) {
         const latestToken = readToken(window.localStorage)
         if (latestToken !== null && latestToken !== token) return
-        if (error instanceof ExAxiosError && error.code === 'SESSION_INVALID') setState({ status: 'anonymous' })
+        if (error instanceof ExAxiosError && error.status === 401) {
+          // 会话已失效：清掉本地令牌，避免残留导致每次刷新都重试失败请求
+          removeMatchingToken(window.localStorage, token)
+          setState({ status: 'anonymous' })
+        }
         else setState({ status: 'unavailable', message: '暂时无法连接认证服务' })
       }
     }

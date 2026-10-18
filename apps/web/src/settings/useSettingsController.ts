@@ -47,11 +47,11 @@ export function useSettingsController() {
     try {
       const result = await api.GET('/auth/me', { alert: false })
       if (!current(token, revision)) return
-      settingsConfig.profile.snapshot = result
+      settingsConfig.profile.snapshot = adaptUser(result)
       settingsConfig.profile.status = 'ready'
     } catch (error) {
       if (current(token, revision)) {
-        if (error instanceof ExAxiosError && error.code === 'SESSION_INVALID') { invalidate(token); bindSettingsToken(null); return }
+        if (error instanceof ExAxiosError && error.status === 401) { invalidate(token); bindSettingsToken(null); return }
         settingsConfig.profile.status = 'error'
         settingsConfig.profile.error = error instanceof ExAxiosError ? error.message : '暂时无法读取设置资料'
       }
@@ -66,13 +66,13 @@ export function useSettingsController() {
     try {
       const result = await request()
       if (!current(token, revision)) throw new Error('登录状态已变更，请重新打开设置')
-      settingsConfig.profile.snapshot = result
+      settingsConfig.profile.snapshot = adaptUser(result)
       settingsConfig.profile.status = 'ready'
       try { await auth.refreshProfile() }
       catch { /* AuthContext manages its own unavailable state. The saved snapshot remains valid. */ }
     } catch (error) {
       if (error instanceof ExAxiosError) {
-        if (error.code === 'SESSION_INVALID') { auth.invalidateSession(token); bindSettingsToken(null) }
+        if (error.status === 401) { auth.invalidateSession(token); bindSettingsToken(null) }
         throw new Error(error.message)
       }
       if (error instanceof Error) throw error
@@ -125,6 +125,25 @@ function requireToken() {
   const token = readToken(window.localStorage)
   if (token === null) throw new Error('登录已失效，请重新登录')
   return token
+}
+
+/**
+ * 后端（webman）统一响应 {msg, data}，且用户字段名为 username/avatar；
+ * 设置界面消费契约的 CurrentUser（nickname/avatarUrl/fivemId），在此集中适配。
+ * fivemId 恒为 null：游戏身份必须走绑定流程，后端拒绝直填。
+ */
+function adaptUser(raw: unknown): CurrentUser {
+  const envelope = raw as { data?: unknown }
+  const source = envelope && typeof envelope === 'object' && 'data' in envelope
+    ? envelope.data as Record<string, unknown> : raw as Record<string, unknown>
+  return {
+    id: String(source.id ?? ''),
+    email: String(source.email ?? ''),
+    nickname: String(source.username ?? ''),
+    qq: typeof source.qq === 'string' && source.qq !== '' ? source.qq : null,
+    fivemId: null,
+    avatarUrl: typeof source.avatar === 'string' && source.avatar !== '' ? source.avatar : null,
+  }
 }
 
 function current(token: string, revision: number) {

@@ -37,7 +37,6 @@ export function AuthFlow({
   const [step, setStep] = useState<'credentials' | 'captcha'>('credentials')
   const [flowBusy, setFlowBusy] = useState(ssoRequestId !== undefined)
   const [email, setEmail] = useState(initialEmail)
-  const [fatalSsoError, setFatalSsoError] = useState<string | null>(null)
   const [ssoRetryError, setSsoRetryError] = useState<string | null>(null)
   const generation = useRef(0)
   const authForm = useRef<AuthFormHandle>(null)
@@ -70,7 +69,6 @@ export function AuthFlow({
   }, [ssoRequestId])
 
   async function prepareSso(requestId: string, current: number) {
-    setFatalSsoError(null)
     setSsoRetryError(null)
     setFlowBusy(true)
     try {
@@ -93,12 +91,11 @@ export function AuthFlow({
       finishSso(requestId)
     } catch (error) {
       if (current === generation.current) {
-        if (error instanceof ExAxiosError && error.code === 'SESSION_INVALID') {
+        if (error instanceof ExAxiosError && error.status === 401) {
           setFlowBusy(false)
           return
         }
-        if (error instanceof ExAxiosError && isFatalSsoCode(error.code)) setFatalSsoError(error.message)
-        else setSsoRetryError('暂时无法连接认证服务，请重试')
+        setSsoRetryError('暂时无法连接认证服务，请重试')
         setFlowBusy(false)
       }
     }
@@ -121,6 +118,9 @@ export function AuthFlow({
         body: { email: draft.email, password: draft.password }, alert: false,
       })
       if (current !== generation.current) return
+      // 后端统一响应 {msg, data}（与管理端方言一致），data.token 才是会话令牌
+      const payload = result as unknown as { data: { token: string } }
+      const newToken = payload.data.token
       let oldToken: string | null
       try {
         oldToken = readToken(window.localStorage)
@@ -128,7 +128,7 @@ export function AuthFlow({
         authForm.current?.setServerErrors({ form: '浏览器无法读取登录信息，请检查存储设置后重试' })
         return
       }
-      if (oldToken !== null && oldToken !== result.token) {
+      if (oldToken !== null && oldToken !== newToken) {
         try {
           await api.POST('/auth/logout', {
             headers: { Authorization: `Bearer ${oldToken}` }, alert: false,
@@ -136,7 +136,7 @@ export function AuthFlow({
           if (current !== generation.current) return
         } catch (error) {
           if (current !== generation.current) return
-          if (!(error instanceof ExAxiosError && error.code === 'SESSION_INVALID')) {
+          if (!(error instanceof ExAxiosError && error.status === 401)) {
             authForm.current?.setServerErrors({ form: '旧账号退出失败，请重试登录' })
             return
           }
@@ -149,13 +149,13 @@ export function AuthFlow({
           authForm.current?.setServerErrors({ form: '登录状态已在其他页面更改，请重试' })
           return
         }
-        writeToken(window.localStorage, result.token)
+        writeToken(window.localStorage, newToken)
       } catch {
         authForm.current?.setServerErrors({ form: '浏览器无法保存登录信息，请检查存储设置后重试' })
         return
       }
       if (onSessionCreated) {
-        onSessionCreated(result.token)
+        onSessionCreated(newToken)
         return
       }
       onFinished?.()
@@ -167,8 +167,7 @@ export function AuthFlow({
     } catch (error) {
       if (current !== generation.current) return
       if (error instanceof ExAxiosError) {
-        if (isFatalSsoCode(error.code)) setFatalSsoError(error.message)
-        else authForm.current?.setServerErrors(mapError(error.code, error.message))
+        authForm.current?.setServerErrors(mapError(error.status))
       } else authForm.current?.setServerErrors({ form: '暂时无法连接认证服务，请重试' })
     }
   }
@@ -193,10 +192,6 @@ export function AuthFlow({
   }
 
   const visibleFooter = step === 'captcha' ? null : footer
-
-  if (fatalSsoError !== null) {
-    return <><Alert variant="destructive" role="alert"><AlertDescription>{fatalSsoError}</AlertDescription></Alert>{visibleFooter}</>
-  }
 
   if (ssoRetryError !== null && ssoRequestId !== undefined) {
     return (
@@ -229,13 +224,13 @@ export function AuthFlow({
   )
 }
 
-function mapError(code: string, message: string): AuthFormErrors {
-  if (code === 'EMAIL_IN_USE') return { email: message }
-  if (code === 'INVALID_CREDENTIALS') return { form: '邮箱或密码错误' }
-  if (code.startsWith('CODE_')) return { code: message }
-  return { form: message || '请求失败，请稍后重试' }
-}
-
-function isFatalSsoCode(code: string): boolean {
-  return code === 'SSO_REQUEST_NOT_FOUND' || code === 'SSO_REQUEST_EXPIRED' || code === 'SSO_ACCOUNT_CONFLICT'
+/**
+ * 后端（webman）错误体为 {msg} 而非契约信封，ExAxiosError 不携带响应体，
+ * 因此按 HTTP 状态码映射登录表单文案。
+ */
+function mapError(status: number | undefined): AuthFormErrors {
+  if (status === 400) return { form: '邮箱或密码错误' }
+  if (status === 401) return { form: '登录状态已失效，请重新登录' }
+  if (status === 403) return { form: '当前账户已经被禁用' }
+  return { form: '请求失败，请稍后重试' }
 }

@@ -93,7 +93,7 @@ export function useNotificationsController() {
     setBulkPending(null); setBulkPreparing(null); setBulkError(null); setConfirm(null); setConfirmError(null)
   }, [])
   const sessionInvalid = useCallback((error: unknown) => {
-    if (!(error instanceof ExAxiosError) || error.code !== 'SESSION_INVALID') return false
+    if (!(error instanceof ExAxiosError) || error.status !== 401) return false
     const token = currentToken()
     if (token !== null) auth.invalidateSession(token)
     bindNotificationsToken(null); invalidatePages(); resetLocal(true)
