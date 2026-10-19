@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { Blob as NativeBlob, File as NativeFile } from 'node:buffer'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import type { components } from '@workspace/sdk/types'
 
 // Select the real Browser entry in jsdom, whose default package condition is Node.
 function selectBrowserEntry() {
@@ -47,6 +49,7 @@ beforeEach(async () => {
   replace.mockReset()
   storageUnavailable = false
   window.localStorage.clear()
+  window.sessionStorage.clear()
   respond = (_request, response) => json(response, 200, { nickname: 'Scoped account', avatarUrl: null })
   server = createServer((request, response) => {
     requests.push({ url: request.url!, authorization: request.headers.authorization })
@@ -75,6 +78,7 @@ afterEach(async () => {
   dispose = undefined
   vi.restoreAllMocks()
   window.localStorage.clear()
+  window.sessionStorage.clear()
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
   server.closeAllConnections()
@@ -508,4 +512,112 @@ it('keeps default failed-logout suppression when returning from a custom root wh
   storage.writeToken(window.localStorage, 'retained-default')
   await request()
   expect(requests.at(-1)?.authorization).toBe('Bearer retained-default')
+})
+
+const feedbackOptions: components['schemas']['FeedbackOptions'] = {
+  available: true, reason: null, fields: [], actions: [],
+  kinds: [{ kind: 'suggestion', available: true, reason: null }, { kind: 'complaint', available: true, reason: null }],
+  limits: { titleCodePoints: 200, userContentBytes: 65536, fileBytes: 20971520, files: 5, totalFileBytes: 104857600, largeFileInfoBytes: 16384 },
+}
+
+async function mountFeedback() {
+  const { ThemeProvider, ExMessageContext } = await import('@exre/exui')
+  const { FeedbackProvider, useFeedback } = await import('../pages/Support/feedback/FeedbackProvider')
+  await import('../pages/Support/feedback/FeedbackModal')
+  function Entry() {
+    const { openFeedback } = useFeedback()
+    return <button onClick={event => openFeedback('community', event.currentTarget)}>投诉和建议</button>
+  }
+  render(<ThemeProvider defaultTheme="light"><ExMessageContext /><MemoryRouter><FeedbackProvider><Entry /></FeedbackProvider></MemoryRouter></ThemeProvider>)
+  const entry = screen.getByRole('button', { name: '投诉和建议' })
+  fireEvent.click(entry)
+  fireEvent.click((await screen.findByText('反馈和建议')).closest('button')!)
+  fireEvent.change(screen.getByLabelText('标题'), { target: { value: 'A 的私密建议' } })
+  fireEvent.paste(screen.getByLabelText('内容'), {
+    clipboardData: { files: [], getData: (type: string) => type === 'text/plain' ? 'A 的私密正文' : '' },
+  })
+  return entry
+}
+
+it.each(['prepare', 'upload'] as const)('stops a same-token feedback submission after %s without sending its next stage to a replacement root', async stage => {
+  const storage = await install()
+  storage.writeToken(window.localStorage, 'same-feedback-token')
+  // Use the complete native binary APIs: jsdom File lacks arrayBuffer(), which
+  // would otherwise stop the flow before the HTTP boundary under test.
+  const nativeForm = await new Response(new URLSearchParams()).formData()
+  vi.stubGlobal('FormData', nativeForm.constructor)
+  vi.stubGlobal('Blob', NativeBlob)
+  vi.stubGlobal('File', NativeFile)
+  let release: (() => void) | undefined
+  let prepared: components['schemas']['FeedbackSnapshot'] | undefined
+  const attachmentBodies: string[] = []
+  respond = (request, response) => {
+    if (request.url?.includes('/options?')) { json(response, 200, feedbackOptions); return }
+    void (async () => {
+      const chunks: Buffer[] = []
+      for await (const chunk of request) chunks.push(Buffer.from(chunk))
+      const body = Buffer.concat(chunks).toString()
+      if (request.url === '/custom-api/support/feedback/submissions') {
+        const input = JSON.parse(body) as components['schemas']['FeedbackPrepare']
+        prepared = {
+          id: '11111111-1111-4111-8111-111111111111', submissionKey: input.submissionKey,
+          revision: 0, form: input.form, createdAt: 1, receiveExpiresAt: 86400001,
+          status: 'receiving', nextAction: 'upload', taskId: null, taskUrl: null, failure: null,
+          attachments: input.attachments.map((attachment, ordinal) => ({ ...attachment, ordinal, status: 'expected', remoteAttachmentId: null })),
+        }
+        if (stage === 'prepare') release = () => json(response, 200, prepared)
+        else json(response, 200, prepared)
+      } else if (request.url?.includes('/attachments/')) {
+        attachmentBodies.push(body)
+        prepared = { ...prepared!, revision: 1, status: 'ready', nextAction: 'continue', attachments: prepared!.attachments.map(attachment => ({ ...attachment, status: 'received' })) }
+        if (stage === 'upload') release = () => json(response, 200, prepared)
+        else json(response, 200, prepared)
+      } else {
+        json(response, 200, { ...prepared!, revision: 2, status: 'completed', nextAction: 'done' })
+      }
+    })()
+  }
+  await mountFeedback()
+  fireEvent.change(screen.getByLabelText(/^附件/), {
+    target: { files: [new NativeFile(['A-private-attachment'], 'private.txt', { type: 'text/plain' })] },
+  })
+  fireEvent.click(screen.getByRole('button', { name: '提交' }))
+  await waitFor(() => expect(release).toBeTypeOf('function'))
+  window.localStorage.setItem(`${storage.AUTH_TOKEN_KEY}:${encodeURIComponent(`${root}/custom-B`)}`, 'same-feedback-token')
+  await act(async () => { await install('/custom-B'); release!() })
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(requests.filter(request => request.url.startsWith('/custom-B/'))).toEqual([])
+  if (stage === 'prepare') expect(attachmentBodies).toEqual([])
+  else {
+    expect(attachmentBodies).toHaveLength(1)
+    expect(attachmentBodies[0]).toContain('A-private-attachment')
+    expect(requests.some(request => request.url.startsWith('/custom-api/support/feedback/submissions/') && request.url.includes('/attachments/'))).toBe(true)
+  }
+  expect(screen.queryByText('反馈已提交')).toBeNull()
+})
+
+it.each([false, true])('preserves equivalent-root feedback drafts and clears same-token root changes (reopen in same update: %s)', async reopenImmediately => {
+  const storage = await install()
+  storage.writeToken(window.localStorage, 'same-feedback-token')
+  respond = (_request, response) => json(response, 200, feedbackOptions)
+  const entry = await mountFeedback()
+  const title = screen.getByLabelText('标题') as HTMLInputElement
+  await act(async () => { await install(`${root}/custom-api///`) })
+  expect(screen.getByLabelText('标题')).toBe(title)
+  expect(title.value).toBe('A 的私密建议')
+  window.localStorage.setItem(`${storage.AUTH_TOKEN_KEY}:${encodeURIComponent(`${root}/custom-B`)}`, 'same-feedback-token')
+  await act(async () => {
+    await install('/custom-B')
+    if (reopenImmediately) fireEvent.click(entry)
+  })
+  if (!reopenImmediately) {
+    expect(screen.queryByRole('dialog')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '投诉和建议' }))
+  }
+  fireEvent.click((await screen.findByText('反馈和建议')).closest('button')!)
+  expect((screen.getByLabelText('标题') as HTMLInputElement).value).toBe('')
+  expect(screen.getByLabelText('内容').textContent).not.toContain('A 的私密正文')
+  expect(requests.map(request => request.url)).toEqual([
+    '/custom-api/support/feedback/options?area=community', '/custom-B/support/feedback/options?area=community',
+  ])
 })

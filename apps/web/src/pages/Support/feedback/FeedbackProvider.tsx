@@ -1,7 +1,7 @@
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useLocation } from 'react-router'
 import { ExMessage } from '@exre/exui'
-import { readToken, subscribeSessionChanges } from '../../../auth/storage'
+import { readToken, sessionScopeRevision, subscribeSessionChanges } from '../../../auth/storage'
 import type { FeedbackArea } from './flow'
 
 const FeedbackModal = lazy(() => import('./FeedbackModal').then(module => ({ default: module.FeedbackModal })))
@@ -20,14 +20,17 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
   const [openArea, setOpenArea] = useState<FeedbackArea | null>(null)
   const running = useRef<symbol | null>(null)
   const sessionToken = useRef(currentToken())
+  const sessionScope = useRef(sessionScopeRevision())
   const triggers = useRef<Partial<Record<FeedbackArea, HTMLElement>>>({})
   const location = useLocation()
 
   useEffect(() => { setOpenArea(null) }, [location.key])
   useEffect(() => subscribeSessionChanges(() => {
     const nextToken = currentToken()
-    if (nextToken === sessionToken.current) return
+    const nextScope = sessionScopeRevision()
+    if (nextToken === sessionToken.current && nextScope === sessionScope.current) return
     sessionToken.current = nextToken
+    sessionScope.current = nextScope
     running.current = null
     setOpenArea(null)
     setAreas([])
@@ -53,7 +56,7 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
   return <FeedbackContext value={{ openFeedback, claimSubmission }}>
     {children}
     <Suspense fallback={null}>
-      {areas.map(area => <FeedbackModal key={area} area={area} open={openArea === area}
+      {areas.map(area => <FeedbackModal key={`${sessionScope.current}:${area}`} area={area} open={openArea === area}
         onOpenChange={next => setOpenArea(current => next ? area : current === area ? null : current)}
         returnFocus={triggers.current[area]} />)}
     </Suspense>
