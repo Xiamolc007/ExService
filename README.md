@@ -53,3 +53,5 @@ Website 使用独立 PostgreSQL `exre`；Hydra 提供 OIDC 协议并使用独立
 `api/openapi.yaml` 与 `api/paths/`、`api/schemas/` 是唯一 HTTP Contract 源，统一生成 `api/generated/openapi.json` 和 Client 类型；`apps/server/` 是唯一 Website Fastify Server；Web API 调用只经 `packages/api-client/`。`pnpm dev`、`pnpm test` 和 `pnpm build` 先生成 Contract，生产启动只读取已有 JSON。`packages/common/` 通过 `@workspace/common/node/identity-config` 为 Server 与 runtime 提供共享的纯身份配置解析。ExUI 使用 pnpm lockfile 锁定的 registry 包。
 
 开发规则见 `AGENTS.md`，模块知识从 `.ai/README.md` 查阅，运行与资源边界见 `.ai/architectures/runtime/runtime-boundaries.md`，身份客户端边界见 `.ai/architectures/identity/integration-boundaries.md`。
+
+Webman 对接分支的 URL、请求参数及响应变化说明见 `docs/webman-api-change-notes.md`；该文档按指定提交范围核对，包含开发代理端口、注册发码与图片验证码传参的变化，以及统一运行器和原有契约的适配边界。
