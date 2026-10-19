@@ -16,6 +16,15 @@ function item(overrides: Partial<NotificationItemView> = {}): NotificationItemVi
 }
 
 describe('NotificationItemList', () => {
+  it('renders an announcement date from the API millisecond timestamp instead of 1970', () => {
+    const deliveredAt = new Date(2026, 9, 19, 12).getTime()
+    const { container } = render(<NotificationItemList items={[item({ deliveredAt })]} selectedId={null} onSelect={vi.fn()} />)
+    const time = container.querySelector('time')!
+    expect(time.textContent).toMatch(/(?:2026 年 )?10 月 19 日/)
+    expect(time.getAttribute('dateTime')).toBe(new Date(deliveredAt).toISOString())
+    expect(time.textContent).not.toContain('1970')
+  })
+
   it('exposes each row as a listitem with its own title button', () => {
     render(<NotificationItemList items={[item()]} selectedId={null} onSelect={vi.fn()} />)
     const rows = screen.getAllByRole('listitem')

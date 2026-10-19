@@ -12,6 +12,8 @@
 
 ## 单元与依赖
 
+当前接入的 webman 部署将反馈附件写入后端 `public/uploads/feedback/{attachmentId}/attachment.bin`，原始文件名保留在附件元数据中，不参与磁盘 key。这样中文、空格和大写扩展名不会触发通用 StorageKey 拒绝，上传脚本也不会按原始扩展名公开。单文件仍限制 20 MiB；后端请求包上限额外保留 1 MiB 给 multipart。只有字节数、SHA-256 校验和落盘均成功后才标记 uploaded；Website Fastify 自有存储实现仍由下述服务负责。
+
 `apps/server/src/modules/clickup/` 提供固定官方 API 的通用适配，不依赖反馈业务。`apps/server/src/domains/support/` 固化需求桶、六类任务类型与字段映射，依赖 ClickUp 与 Profile 公开能力；业务服务由构造参数注入，通过具名插件暴露。HTTP 使用 `api/paths/support.yaml` 的六个 operation，前端经共享 Client 调用。`ClickUpFieldInput` 与 `FileUploader` 是 `packages/components/` 中的受控表单组件，不访问 API 或保存提交状态。
 
 `apps/web/public/clickups/fields/` 中 Type、Domain、额外文件链接三个 UUID 命名 JSON 是公开字段定义的唯一编辑来源；Server 构建时校验并打包同一份配置。修改字段名称、选项或顺序后需重新构建并重启。options 与 prepare 按实际 ClickUp 字段、option ID 和任务类型适用范围核对，可用性按依赖的反馈类型给出；缺少操作 Tag 仅使对应操作不可用。字段身份、类型或业务关系变更仍需修改受控映射。当前目标 Space 未确认存在「新增」「修改」「删除」Tag；真实提交前须显式准备并复核，不在提交流程中自动创建。

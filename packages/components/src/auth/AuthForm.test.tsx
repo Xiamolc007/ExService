@@ -46,6 +46,25 @@ describe('AuthForm', () => {
     expect(screen.queryByRole('button', { name: '返回修改资料' })).toBeNull()
   })
 
+  it('updates only the captcha answer when its image changes and keeps field and form errors', async () => {
+    const user = userEvent.setup(), formRef = createRef<AuthFormHandle>()
+    const rendered = renderForm({ step: 'captcha', captchaImage: 'first-image' }, formRef)
+    const input = screen.getByLabelText('图片验证码') as HTMLInputElement
+    const form = input.closest('form')
+    await user.type(input, 'wrong')
+    act(() => formRef.current?.setServerErrors({ captcha: '验证码不正确，请重新输入', form: '本次登录失败' }))
+    rendered.rerender(<AuthForm {...rendered.props} ref={formRef} captchaImage="next-image" />)
+    expect(screen.getByLabelText('图片验证码')).toBe(input)
+    expect(input.closest('form')).toBe(form)
+    expect(input.value).toBe('')
+    expect(screen.getByText('验证码不正确，请重新输入')).toBeTruthy()
+    expect(screen.getByText('本次登录失败')).toBeTruthy()
+    expect(input.getAttribute('aria-invalid')).toBe('true')
+    await user.type(input, 'next')
+    await user.click(screen.getByRole('button', { name: '登录' }))
+    expect(rendered.props.onCaptchaSubmit).toHaveBeenCalledExactlyOnceWith('next')
+  })
+
   it('reserves disabled provider buttons and routes the join action through its callback', async () => {
     const user = userEvent.setup()
     const { props } = renderForm({})

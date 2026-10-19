@@ -23,7 +23,7 @@ it('renders the semantic application failure after the field and before submit, 
   expect(screen.getAllByText('未找到该邮箱的申请。')).toHaveLength(1)
   expect(screen.getByText('请先申请加入，获批后再回来注册。')).toBeTruthy()
   expect(input.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  expect(panel.compareDocumentPosition(screen.getByRole('button', { name: '继续' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(panel.compareDocumentPosition(screen.getByRole('button', { name: '发送验证码' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(input.getAttribute('aria-invalid')).toBe('false')
   expect(input.getAttribute('aria-describedby')).toBe(panel.id)
   await user.click(panel.querySelector('button')!)

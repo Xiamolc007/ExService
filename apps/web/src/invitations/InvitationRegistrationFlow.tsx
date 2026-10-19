@@ -7,13 +7,10 @@ import { api, unwrapEnvelope } from '@web/src/api/client'
 import { ExAxiosError } from '@workspace/sdk/http/browser'
 interface Props { presentation: 'page' | 'modal'; initialEmail?: string; onLogin?: (email: string) => void; onJoin?: () => void }
 type Verified = components['schemas']['InvitationVerified']
-type Eligibility = components['schemas']['InvitationEligibility']
 type CodeAccepted = components['schemas']['InvitationCodeAccepted']
 type FormStep = 'email' | 'code' | 'profile'
 type Step = FormStep | 'registered'
 interface PendingFeedback { targetStep: FormStep; generation: number; errors: InvitationFormErrors }
-const noApplication = '未找到该邮箱的申请。'
-const notEligible = '该邮箱暂不符合注册条件，请确认申请已通过且邀请仍有效'
 
 function readEntry(presentation: Props['presentation'], initialEmail: string) {
   if (presentation === 'modal' || typeof window === 'undefined') return { email: initialEmail, code: null as string | null, error: false }
@@ -66,18 +63,22 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
     } else pendingFeedback.current = { targetStep, generation: current, errors }
   }
   function cooldown(data: { serverTime: number; resendAvailableAt: number }) {
-    const now = Date.now(), delay = Math.max(0, data.resendAvailableAt - data.serverTime)
+    // webman 返回秒级时间戳，页面计时使用毫秒。
+    const now = Date.now(), delay = Math.max(0, data.resendAvailableAt - data.serverTime) * 1000
     setClock(now); setResendUntil(delay === 0 ? 0 : now + delay)
   }
-  function checkFailure(current: number, error: unknown) {
+  function sendFailure(targetStep: 'email' | 'code', current: number, error: unknown) {
     const status = error instanceof ExAxiosError ? error.status : undefined
-    if (status === 400) { deliverError('email', current, { email: '请输入有效的邮箱地址' }); return }
+    if (status === 400 && targetStep === 'email') { deliverError('email', current, { email: '请输入有效的邮箱地址' }); return }
+    if (status === 409) { deliverError(targetStep, current, targetStep === 'email'
+      ? { email: '该邮箱已注册，请直接登录' }
+      : { form: '该邮箱已注册，请直接登录', formKind: 'send-failed' }); return }
     const wait = retrySeconds(error)
-    const form = status === 404 ? noApplication : status === 409 ? notEligible : status === 429
-      ? wait > 0 ? `检查失败，请在 ${wait} 秒后重试` : '检查失败，请稍后重试'
-      : '检查失败，请重试'
-    const formKind = status === 404 ? 'application-not-found' : status === 409 ? 'not-eligible' : status === 429 ? 'rate-limited' : 'check-failed'
-    deliverError('email', current, { form, formKind })
+    if (status === 429 && wait > 0) { const now = Date.now(); setClock(now); setResendUntil(now + wait * 1000) }
+    const form = status === 429
+      ? wait > 0 ? `发送失败，请在 ${wait} 秒后重试` : '发送失败，请稍后重试'
+      : '发送失败，请重试'
+    deliverError(targetStep, current, { form, formKind: status === 429 ? 'rate-limited' : 'send-failed' })
   }
   function verifyFailure(current: number, error: unknown) {
     // 后端无错误信封, 按 HTTP 状态判定: 429=连续失败锁定（Retry-After 已由 core 解析）
@@ -95,29 +96,29 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
   }
   /** 拉取图片验证码挑战（进入验证码步 / 校验失败换图共用） */
   async function refreshCaptcha() {
+    const current = generation.current
     setCaptchaLoading(true)
     try {
       const data = unwrapEnvelope<{ challengeId: string, imageBase64: string }>(
         await api.POST('/auth/captcha/challenges', { alert: false }))
+      if (!valid(current)) return
       challenge.current = { challengeId: data.challengeId }
       setCaptchaImage(data.imageBase64)
     } catch {
+      if (!valid(current)) return
       challenge.current = null
       setCaptchaImage(null)
     } finally {
-      setCaptchaLoading(false)
+      if (valid(current)) setCaptchaLoading(false)
     }
   }
   function accepted(data: Verified) { clearFeedback(); grant.current = data; setEmail(data.email); setNickname(data.nickname); setRetry(false); setStep('profile') }
   async function runAutomatic(current: number, targetEmail: string, code: string) {
-    let inspected
-    try { inspected = unwrapEnvelope<Eligibility>(await api.POST('/auth/invitations/check', { body: { email: targetEmail }, alert: false })) }
-    catch (error) { return { stage: 'checkFailure' as const, error } }
     if (!valid(current)) return null
     try {
-      const result = unwrapEnvelope<Verified>(await api.POST('/auth/invitations/verify', { body: { email: inspected.email, code }, alert: false }))
-      return { stage: 'verify' as const, result, eligibility: inspected }
-    } catch (error) { return { stage: 'verifyFailure' as const, error, eligibility: inspected } }
+      const result = unwrapEnvelope<Verified>(await api.POST('/auth/invitations/verify', { body: { email: targetEmail, code }, alert: false }))
+      return { stage: 'verify' as const, result }
+    } catch (error) { return { stage: 'verifyFailure' as const, error } }
   }
   useEffect(() => {
     mounted.current = true
@@ -142,11 +143,10 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
       if (!subscribed || !valid(current) || outcome === null) return
       pending.current = false; setBusy(false)
       autoChain.current = null
-      if (outcome.stage === 'checkFailure') { checkFailure(current, outcome.error); return }
-      cooldown(outcome.eligibility); setEmail(outcome.eligibility.email)
       if (outcome.stage === 'verify') { accepted(outcome.result); return }
       setStep('code')
       verifyFailure(current, outcome.error)
+      if (!(outcome.error instanceof ExAxiosError && outcome.error.status === 422)) void refreshCaptcha()
     })
     const interval = window.setInterval(() => setClock(Date.now()), 1000)
     return () => {
@@ -161,20 +161,21 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
   function invalidate() {
     clearFeedback()
     generation.current++; pending.current = false; grant.current = null; autoChain.current = null
+    challenge.current = null; setCaptchaImage(null); setCaptchaLoading(false)
     entry.current!.code = null
     if (timer.current !== null) { window.clearTimeout(timer.current); timer.current = null }
     setBusy(false); setRetry(false)
   }
   function back() { invalidate(); setNickname(''); setLockedUntil(0); setResendUntil(0); setStep('email') }
-  async function check(targetEmail: string) {
+  async function requestCode(targetEmail: string) {
     if (pending.current) return
     const current = ++generation.current
     pending.current = true; setBusy(true); setEmail(targetEmail); clearFeedback()
     try {
-      const result = unwrapEnvelope<Eligibility>(await api.POST('/auth/invitations/check', { body: { email: targetEmail }, alert: false }))
+      const result = unwrapEnvelope<CodeAccepted>(await api.POST('/auth/invitations/code', { body: { email: targetEmail }, alert: false }))
       if (!valid(current)) return
-      cooldown(result); setEmail(result.email); void refreshCaptcha(); setStep('code')
-    } catch (error) { if (valid(current)) checkFailure(current, error) }
+      cooldown(result); void refreshCaptcha(); setStep('code')
+    } catch (error) { if (valid(current)) sendFailure('email', current, error) }
     finally { if (valid(current)) { pending.current = false; setBusy(false) } }
   }
   async function verify(code: string, captchaAnswer?: string) {
@@ -198,8 +199,8 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
     try {
       const result = unwrapEnvelope<CodeAccepted>(await api.POST('/auth/invitations/code', { body: { email }, alert: false }))
       if (!valid(current)) return false
-      cooldown(result); setRetry(false); void refreshCaptcha(); ExMessage.info('如邮箱符合邀请条件，将发送验证码'); return true
-    } catch { if (valid(current)) deliverError('code', current, { form: '发送失败，请重试', formKind: 'send-failed' }); return false }
+      cooldown(result); setRetry(false); void refreshCaptcha(); ExMessage.info('验证码已发送，请查收邮箱'); return true
+    } catch (error) { if (valid(current)) sendFailure('code', current, error); return false }
     finally { if (valid(current)) { pending.current = false; setBusy(false) } }
   }
   function login() {
@@ -239,7 +240,7 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
   }, [step])
   const join = () => { invalidate(); if (onJoin) onJoin(); else navigate('/communities/rifling-911') }
   return <>
-    {step === 'email' && <InvitationEmailForm ref={emailForm} initialEmail={email} busy={busy} onSubmit={check} onEmailChange={invalidate} onLogin={login} onJoin={join} />}
+    {step === 'email' && <InvitationEmailForm ref={emailForm} initialEmail={email} busy={busy} onSubmit={requestCode} onEmailChange={invalidate} onLogin={login} onJoin={join} />}
     {step === 'code' && <InvitationCodeForm ref={codeForm} email={email} busy={busy} retry={retry} resendSeconds={Math.max(0, Math.ceil((resendUntil - clock) / 1000))} lockedSeconds={Math.max(0, Math.ceil((lockedUntil - clock) / 1000))} onVerify={verify} onResend={resend} onBack={back} captchaImage={captchaImage ?? undefined} captchaLoading={captchaLoading} onRefreshCaptcha={() => void refreshCaptcha()} />}
     {step === 'profile' && <InvitationProfileForm ref={profileForm} email={email} nickname={nickname} busy={busy} onSubmit={complete} onBack={back} />}
     {step === 'registered' && <section aria-live="polite"><h2>注册成功</h2><p>账号已创建，即将前往登录。</p><Button onClick={login}>前往登录</Button></section>}

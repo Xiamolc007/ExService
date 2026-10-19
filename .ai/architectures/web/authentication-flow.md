@@ -2,7 +2,7 @@
 
 本文件说明共享认证 UI、应用流程和浏览器存储之间的边界。HTTP operation 与字段形状以 `api/openapi.yaml` 和生成 Client 类型为准。
 
-_最后更新：2026-10-16_
+_最后更新：2026-10-19_
 
 ## 责任分层
 
@@ -16,11 +16,11 @@ apps/web
   @workspace/api-client
 ```
 
-共享组件只管理字段、校验、焦点和可访问状态。它不读取浏览器存储、不调用 API、不决定导航。`apps/web` 负责请求分支、token 生命周期、SSO 上下文和整页跳转。设置 Modal 与 `/account/profile` 通过同一个设置控制层读取、更新及上传本人资料，界面由共享组件接收值和回调。
+共享组件只管理字段、校验、焦点和可访问状态。它不读取浏览器存储、不调用 API、不决定导航。`apps/web` 负责请求分支、token 生命周期、SSO 上下文和导航。设置 Modal 与 `/account/profile` 通过同一个设置控制层读取、更新及上传本人资料，界面由共享组件接收值和回调。
 
 登录与邀请注册表单使用 React Hook Form 与 Zod；服务端字段错误通过 `setError` 展示。`AuthForm` 只分派登录与图片验证码步骤；邀请的邮箱、数字码和完善资料各有独立表单。登录中的 Google、QQ 入口仅为禁用占位，不发请求，也不代表已经接入第三方认证。
 
-普通登录与 SSO 密码登录先在凭据表单点击“继续”，再于同一认证容器切换到图片验证码步骤。该步骤目前只显示矩形图片占位与可留空的输入框，明确提示尚未启用校验；点击“登录”时才由 `AuthFlow` 调用对应 operation，不附加伪造的验证码凭证。邀请注册不经过这个占位步骤。
+普通登录与 SSO 密码登录先在凭据表单点击“继续”，再于同一认证容器切换到图片验证码步骤。`AuthFlow` 请求 `/auth/captcha/challenges`，取图成功后提交 `captcha: { challengeId, answer }`；未取得挑战时保留现有可选验证码接口行为，不伪造凭证。webman 以 422 表示挑战错误或过期，页面换图并保留错误提示，只清空验证码字段。邀请注册使用自己的邮箱数字码步骤。
 
 ## 入口与容器
 
@@ -32,7 +32,7 @@ apps/web
 - 普通独立认证页通过左上角 Home 返回首页；带 `ssoRequestId` 的登录页面隐藏该入口。独立认证页与 SSO 成功页复用 `MeshGradient` 背景，共享组件不依赖着色器。
 - 登录入口只要 URL 中出现 `ssoRequestId`，就必须通过格式与单值检查；空值、重复值或非法值显示无效入口，不能回退成普通登录。
 
-图片验证码的取图与提交字段已在 Contract 中预留，真实校验启用前须单独决定有效期、重试规则以及要求凭证的版本策略。
+当前 webman 后端的图片挑战有效期为五分钟、校验一次即失效，登录接口仍允许缺省 `captcha`；若改为强制校验，须同步调整接口约定与取图失败时的交互。
 
 ## 社区展示与邀请注册
 
@@ -42,9 +42,9 @@ apps/web
 
 Hero 图片继续来自 `apps/web/public/images/heros/join/rifling-911/`。构建时按文件名排序收集支持的图片格式；多张图片时点击背景循环切换，也支持聚焦背景后按 Enter 或空格，不显示独立切换按钮；单张图片作为静态背景。
 
-`InvitationRegistrationFlow` 在应用层控制 email、code、profile、registered 四个状态。邮箱通过只读资格检查后才挂载空验证码表单；检查不请求发码。验证成功取得完善凭证才挂载用户名与密码表单，邮箱只读，QQ 来自申请。主动重发使用服务器时间差计算冷却，采用条件式发送反馈；验证的失败重试由用户输入或显式重试按钮触发，不由渲染循环驱动。
+`InvitationRegistrationFlow` 在应用层控制 email、code、profile、registered 四个状态。邮箱通过 Zod 格式校验和规范化后，直接以 `{ email }` 请求 `/auth/invitations/code`，成功才挂载空验证码表单，不再请求邀请资格检查。webman 在生成验证码、写入冷却或发送邮件之前检查邮箱占用，已注册返回 409；页面将其展示为邮箱字段错误并停留邮箱步骤。重发遇到相同冲突则在验证码表单提示直接登录。发码响应不含邮箱，后续验证继续使用提交时的规范化邮箱。验证成功取得完善凭证才挂载用户名与密码表单，完成请求传递 `completionToken`、`nickname` 和 `password`。当前对接的 webman 后端返回秒级 `serverTime`、`resendAvailableAt`，页面将两者差值乘以 1000 计算冷却；429 采用 `Retry-After`。取到图片挑战时显示显式验证按钮，并按后端要求附加 `captcha: { challengeId, answer }`；没有图片时仍可通过六位数字输入触发验证。验证失败后的重试由用户输入或显式重试按钮触发，不由渲染循环驱动。
 
-独立页纯读取一次 URL 入口快照。合法 email 只预填，合法 email/code 才自动检查后验证；非法或重复参数不请求。passive effect 删除所有 code 参数并保留 `history.state`。自动链 Promise 与响应订阅分别保存：StrictMode 重新订阅同一次请求，实际返回、修改邮箱或卸载则拒绝迟到结果和通知。数字码、密码和完善凭证只在内存保存，返回或关闭清理，不写日志、路由 state 或浏览器存储。
+独立页纯读取一次 URL 入口快照。合法 email 只预填，合法 email/code 直接验证已有数字码，不检查邀请资格或重发覆盖旧码；非法或重复参数不请求。passive effect 删除所有 code 参数并保留 `history.state`。自动链 Promise 与响应订阅分别保存：StrictMode 重新订阅同一次请求，实际返回、修改邮箱或卸载则拒绝迟到结果和通知，图片挑战响应同样受请求代次保护。数字码、密码和完善凭证只在内存保存，返回或关闭清理，不写日志、路由 state 或浏览器存储。
 
 注册成功清空敏感材料并使用 `ExMessage.info` 提示，随后一次性前往普通登录。页面 replace 到 `/login`，只用内存路由 state 传邮箱；弹窗切换原容器。手动前往登录或卸载清理自动切换计时器，不创建会话，不带入 SSO 上下文。资格检查与持续错误的通知规则统一见 `.ai/rules/frontend-notifications.md`。
 
@@ -80,8 +80,10 @@ Hero 图片继续来自 `apps/web/public/images/heros/join/rifling-911/`。构�
 
 ## SSO 接收流程
 
-SSO 页先检查请求，再尝试用已有本站 token 确认；失效 token 被清除后显示密码表单，网络或服务错误保留 token 并提供重试。密码确认使用独立 SSO operation，不把返回值写入 `localStorage`。
+当前 webman 接入使用设备码 SSO：插件以应用凭据调用 `/api/oauth/device/init`，打开返回的 `verification_uri_web`（用户站点 `/login?ssoRequestId=…`），浏览器确认后由插件轮询 `/api/oauth/device/token` 领取 OAuth 访问令牌。浏览器不持有应用密钥或轮询令牌。站点地址由后端 `config/userweb.php` 的 `USER_WEB_URL` 决定。此流程与 `/identity/*` 的 Hydra challenge 是独立协议。
 
-服务端确认完成后，当前标签页才把 `{ssoRequestId, confirmedAt}` 写入 `sessionStorage` 的 `exwebsite.auth.sso-success`，再整页替换到 `/sso/success`。成功页只接受五分钟内的当前标签页记录；该记录只控制提示，不是授权凭据。
+SSO 页先检查请求 ID、服务端状态和毫秒时间，再尝试用捕获的本站 token 通过显式 Authorization 确认。确认返回 401 时只清除仍匹配的旧 token 并显示密码表单；网络或服务错误保留 token 并提供重试。400、403、404、409 以及已过期的请求终止重试并提示重新发起。已经完成的请求直接显示成功页，不再重复确认。密码确认使用独立 SSO operation，不把返回值写入 `localStorage`。迟到响应受请求代次和当前 token 检查保护。
+
+确认响应的请求 ID 和完成状态匹配后，当前标签页才把 `{ssoRequestId, confirmedAt}` 写入 `sessionStorage` 的 `exwebsite.auth.sso-success`，再通过 React Router replace 到 `/sso/success`。成功页只接受五分钟内的当前标签页记录；该记录只控制提示，不是授权凭据。
 
 成功页复用登录页的品牌 Icon 和外围 Glass 卡片。有效成功记录时提示“登录成功”“正在返回应用”，五秒后尝试关闭当前页面；浏览器可能拒绝脚本关闭非脚本打开的标签页，此时提示用户手动关闭。缺少有效记录时在同一卡片内直接显示居中的“发生错误”标题与原因，不叠加错误 Alert 的 Glass，并提供左上角 Home 入口；此时不启动关闭计时。

@@ -1,16 +1,20 @@
 # 邀请注册错误的归属与挂载交接
 
-_最后更新：2026-10-10_
+_最后更新：2026-10-19_
 
 邀请注册的三个表单各自持有 React Hook Form 错误。`apps/web/src/invitations/InvitationRegistrationFlow.tsx` 负责请求分支和固定文案映射，不保留已显示错误的第二份 state。登录表单的 AuthFormHandle 不受注册专用 handle 影响。
 
 ## 单一展示入口
 
-邮箱资格问题、入口参数问题、重发失败和完善资料的非字段问题进入目标表单的 `root.server`。语义 kind 存在 `root.server.type`，文案存在 message；`packages/components/src/auth/invitationFeedback.ts` 只把语义 kind 适配成标题、说明与加入操作，不解析 HTTP 状态或异常。
+注册流程不再请求邀请资格检查。首次发码失败、入口参数问题、重发失败和完善资料的非字段问题进入目标表单的 `root.server`。语义 kind 存在 `root.server.type`，文案存在 message；`packages/components/src/auth/invitationFeedback.ts` 只把语义 kind 适配成展示，不解析 HTTP 状态或异常。
 
-字段错误继续归属于 FieldError：资格检查 400 写入邮箱字段，验证码验证失败写入验证码字段。重发失败是验证码表单的根错误，不能把验证码输入标为无效。邮箱根面板位于邮箱控件之后、提交之前，同时追加描述 ID；清除根错误即移除描述关联。ErrorPanel 的布局与播报约束见 `.ai/knowledge/components/error-panel.md`。
+字段错误继续归属于 FieldError：首次发码 400 写入邮箱字段，409 表示邮箱已注册，同样写入邮箱字段并停留当前步骤；验证码验证失败写入验证码字段。重发失败是验证码表单的根错误，409 提示直接登录，不能把验证码输入标为无效。邮箱根面板位于邮箱控件之后、提交之前，同时追加描述 ID；清除根错误即移除描述关联。ErrorPanel 的布局与播报约束见 `.ai/knowledge/components/error-panel.md`。
 
 流程不再为同一失败渲染外层 Alert 或发送 ExMessage.error；主动重发和注册成功的 ExMessage.info 仍保留。429 等待时间仅在有限且为正时进入固定用户文案，否则采用无数字的重试提示，不回显异常消息。
+
+## 图片验证码换图与错误保留
+
+登录与注册的图片挑战更换只更新图片并清空旧的图片答案，不能重置整个表单或在取图成功后清除服务端错误。登录 `CaptchaForm` 使用 `resetField('answer', { keepError: true })`，保留验证码字段错误和 `root.server`；注册换图还须保留邮箱数字码。失败提示应在新图片加载完成后继续可见，表单及输入节点保持挂载。下一次主动提交仍按原流程清理上次错误。
 
 ## 为什么需要待投递 ref
 

@@ -20,14 +20,14 @@ export const CaptchaForm = forwardRef<AuthFormHandle, AuthFormProps>(function Ca
   busy, onCaptchaSubmit, description, captchaImage, captchaLoading, onRefreshCaptcha,
 }, ref) {
   const id = useId()
-  const { register, handleSubmit, setError, clearErrors, getFieldState, reset,
+  const { register, handleSubmit, setError, clearErrors, getFieldState, resetField,
     formState: { errors, isSubmitting } } = useForm<CaptchaFields>({
     resolver: zodResolver(captchaSchema),
     defaultValues: { answer: '' },
   })
   const disabled = busy || isSubmitting
-  // 换图后旧答案对新挑战无效, 清空输入
-  useEffect(() => { reset({ answer: '' }) }, [captchaImage, reset])
+  // 换图只清空旧答案，保留本次校验失败的提示。
+  useEffect(() => { resetField('answer', { keepError: true }) }, [captchaImage, resetField])
 
   useImperativeHandle(ref, () => ({
     setServerErrors(nextErrors) {

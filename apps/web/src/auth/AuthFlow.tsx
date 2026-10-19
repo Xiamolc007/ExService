@@ -9,7 +9,8 @@ import {
 } from '@workspace/components'
 import { api, unwrapEnvelope } from '@web/src/api/client'
 import { ExAxiosError } from '@workspace/sdk/http/browser'
-import { readToken, writeSsoSuccess, writeToken } from '@web/src/auth/storage'
+import { readToken, removeMatchingToken, writeSsoSuccess, writeToken } from '@web/src/auth/storage'
+import type { components } from '@workspace/api-client'
 
 export interface AuthFlowProps {
   initialMode?: 'login'
@@ -37,7 +38,7 @@ export function AuthFlow({
   const [step, setStep] = useState<'credentials' | 'captcha'>('credentials')
   const [flowBusy, setFlowBusy] = useState(ssoRequestId !== undefined)
   const [email, setEmail] = useState(initialEmail)
-  const [ssoRetryError, setSsoRetryError] = useState<string | null>(null)
+  const [ssoFeedback, setSsoFeedback] = useState<{ message: string; retryable: boolean } | null>(null)
   const [captchaImage, setCaptchaImage] = useState<string | null>(null)
   const [captchaLoading, setCaptchaLoading] = useState(false)
   const challenge = useRef<{ challengeId: string } | null>(null)
@@ -58,7 +59,6 @@ export function AuthFlow({
         await api.POST('/auth/captcha/challenges', { alert: false }))
       challenge.current = { challengeId: data.challengeId }
       setCaptchaImage(data.imageBase64)
-      authForm.current?.clearServerErrors()
     } catch {
       challenge.current = null
       setCaptchaImage(null)
@@ -91,12 +91,18 @@ export function AuthFlow({
   }, [ssoRequestId])
 
   async function prepareSso(requestId: string, current: number) {
-    setSsoRetryError(null)
+    setSsoFeedback(null)
     setFlowBusy(true)
+    let token: string | null = null
     try {
-      await api.POST('/auth/sso/inspect', { body: { ssoRequestId: requestId }, alert: false })
+      const info = unwrapEnvelope<components['schemas']['SsoRequestInfo']>(await api.POST('/auth/sso/inspect', { body: { ssoRequestId: requestId }, alert: false }))
       if (current !== generation.current) return
-      let token: string | null
+      if (info.ssoRequestId !== requestId || info.expiresAt <= info.serverTime) {
+        setSsoFeedback({ message: '登录请求已失效，请从发起应用重新登录', retryable: false })
+        setFlowBusy(false)
+        return
+      }
+      if (info.status === 'completed') { finishSso(requestId); return }
       try {
         token = readToken(window.localStorage)
       } catch {
@@ -108,16 +114,28 @@ export function AuthFlow({
         setFlowBusy(false)
         return
       }
-      await api.POST('/auth/sso/confirm', { body: { ssoRequestId: requestId }, alert: false })
+      const result = unwrapEnvelope<components['schemas']['SsoCompleted']>(await api.POST('/auth/sso/confirm', {
+        body: { ssoRequestId: requestId }, headers: { Authorization: `Bearer ${token}` }, alert: false,
+      }))
       if (current !== generation.current) return
+      if (readToken(window.localStorage) !== token) {
+        setSsoFeedback({ message: '登录账号已变更，请从发起应用重新登录', retryable: false })
+        setFlowBusy(false)
+        return
+      }
+      if (result.status !== 'completed' || result.ssoRequestId !== requestId) throw new Error('Invalid SSO response')
       finishSso(requestId)
     } catch (error) {
       if (current === generation.current) {
         if (error instanceof ExAxiosError && error.status === 401) {
+          if (token !== null) {
+            try { removeMatchingToken(window.localStorage, token) } catch { /* 保留密码登录入口。 */ }
+          }
           setFlowBusy(false)
           return
         }
-        setSsoRetryError('暂时无法连接认证服务，请重试')
+        const terminal = error instanceof ExAxiosError && [400, 403, 404, 409].includes(error.status ?? 0)
+        setSsoFeedback({ message: terminal ? '登录请求已失效或无法授权，请从发起应用重新登录' : '暂时无法连接认证服务，请重试', retryable: !terminal })
         setFlowBusy(false)
       }
     }
@@ -130,10 +148,11 @@ export function AuthFlow({
       ? { challengeId: challenge.current.challengeId, answer: captchaAnswer } : undefined
     try {
       if (ssoRequestId !== undefined) {
-        await api.POST('/auth/sso/login', {
+        const result = unwrapEnvelope<components['schemas']['SsoCompleted']>(await api.POST('/auth/sso/login', {
           body: { ssoRequestId, email: draft.email, password: draft.password, ...(captcha ? { captcha } : {}) }, alert: false,
-        })
+        }))
         if (current !== generation.current) return
+        if (result.status !== 'completed' || result.ssoRequestId !== ssoRequestId) throw new Error('Invalid SSO response')
         finishSso(ssoRequestId)
         return
       }
@@ -191,6 +210,10 @@ export function AuthFlow({
     } catch (error) {
       if (current !== generation.current) return
       if (error instanceof ExAxiosError) {
+        if (ssoRequestId !== undefined && [404, 409].includes(error.status ?? 0)) {
+          setSsoFeedback({ message: '登录请求已失效或已被处理，请从发起应用重新登录', retryable: false })
+          return
+        }
         // 验证码错误(422): 挑战已一次性焚毁, 自动换新图让用户重输
         if (error.status === 422) void refreshCaptcha()
         authForm.current?.setServerErrors(mapError(error.status))
@@ -214,19 +237,19 @@ export function AuthFlow({
       return
     }
     onFinished?.()
-    window.location.replace('/sso/success')
+    navigate('/sso/success', { replace: true })
   }
 
   const visibleFooter = step === 'captcha' ? null : footer
 
-  if (ssoRetryError !== null && ssoRequestId !== undefined) {
+  if (ssoFeedback !== null && ssoRequestId !== undefined) {
     return (
       <>
         <Alert variant="destructive" role="alert">
-          <AlertDescription>{ssoRetryError}</AlertDescription>
-          <Button type="button" variant="outline" onClick={() => void prepareSso(ssoRequestId, ++generation.current)}>
-            重试
-          </Button>
+          <AlertDescription>{ssoFeedback.message}</AlertDescription>
+          {ssoFeedback.retryable
+            ? <Button type="button" variant="outline" onClick={() => void prepareSso(ssoRequestId, ++generation.current)}>重试</Button>
+            : <Button type="button" variant="outline" onClick={() => navigate('/')}>返回首页</Button>}
         </Alert>
         {visibleFooter}
       </>

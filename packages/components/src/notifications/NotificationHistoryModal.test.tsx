@@ -72,6 +72,21 @@ function props(overrides: Partial<NotificationHistoryModalProps> = {}): Notifica
 }
 
 describe('NotificationHistoryModal', () => {
+  it('shows the same correct announcement date in the history list and detail', () => {
+    const deliveredAt = new Date(2026, 9, 19, 12).getTime()
+    render(<NotificationHistoryModal {...props({
+      selectedId: 'receipt-1',
+      list: { ...props().list, items: [{ ...item, deliveredAt }] },
+      detail: { ...props().detail, status: 'ready', value: { ...detail, deliveredAt } },
+    })} />)
+    const times = screen.getByRole('dialog').querySelectorAll('time')
+    expect(times).toHaveLength(2)
+    for (const time of times) {
+      expect(time.textContent).toMatch(/(?:2026 年 )?10 月 19 日/)
+      expect(time.getAttribute('dateTime')).toBe(new Date(deliveredAt).toISOString())
+      expect(time.textContent).not.toContain('1970')
+    }
+  })
 
   it('loads once per intersection and rechecks continuously visible short pages after layout', async () => {
     const onLoadMore = vi.fn()

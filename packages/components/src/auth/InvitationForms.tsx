@@ -90,14 +90,8 @@ export const InvitationEmailForm = forwardRef<InvitationFormHandle, EmailProps>(
         <div className={`${styles.intro} ${styles.loginIntro}`}>
           <ExIcon size="6rem" className={styles.authIcon} />
           <h2>注册Exre账号</h2>
-          <p>请使用申请获批的邮箱继续。</p>
+          <p>请输入邮箱以获取注册验证码。</p>
           <p className={styles.registrationLinks}>
-            <span>
-              还没有申请？
-              <Button type="button" variant="link" onClick={onJoin}>
-                申请加入
-              </Button>
-            </span>
             <span>
               已经有账号？
               <Button type="button" variant="link" onClick={onLogin}>
@@ -135,7 +129,7 @@ export const InvitationEmailForm = forwardRef<InvitationFormHandle, EmailProps>(
         </Field>
         <InvitationRootError error={form.formState.errors.root?.server} id={`${id}-panel`} onJoin={onJoin} />
         <Button type="submit" disabled={disabled}>
-          {disabled ? "检查中" : "继续"}
+          {disabled ? "发送中" : "发送验证码"}
         </Button>
       </form>
     );
@@ -214,7 +208,7 @@ export const InvitationCodeForm = forwardRef<InvitationFormHandle, CodeProps>(
           <ExIcon size="6rem" className={styles.authIcon} />
           <h2>验证邮箱</h2>
           <p>{email}</p>
-          <p>请输入邀请邮件中的六位验证码</p>
+          <p>请输入邮件中的六位验证码</p>
         </div>
         <Field data-invalid={!!form.formState.errors.code}>
           <FieldContent>
@@ -287,9 +281,9 @@ export const InvitationCodeForm = forwardRef<InvitationFormHandle, CodeProps>(
         {lockedSeconds > 0 && (
           <p role="status">验证暂时锁定，{lockedSeconds} 秒后重试</p>
         )}
-        {retry && (
+        {(retry || captchaImage) && (
           <Button type="submit" disabled={disabled}>
-            重试验证
+            {retry ? "重试验证" : "验证邮箱"}
           </Button>
         )}
         <Button
