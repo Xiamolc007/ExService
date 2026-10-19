@@ -2,7 +2,7 @@
  * 通知共享 UI 的视图模型与文案。
  *
  * `packages/components` 不访问 API、不定义路由，因此这里的类型只描述**组件需要的形状**，
- * 由 `apps/web` 把 `@workspace/api-client` 生成的 DTO 直接映射过来。字段与 Contract
+ * 由 `apps/web` 把 `@workspace/sdk/types` 的 Contract 生成 DTO 映射过来。字段与 Contract
  * 同名同义，任何漂移都会在 `apps/web` 的赋值处被 TypeScript 拒绝。
  *
  * 文案集中在一处：同一句提示在 Popup、历史 Modal 与设置分区里必须是同一句话。

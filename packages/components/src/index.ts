@@ -1,7 +1,7 @@
 /**
  * `@workspace/components` 的公开入口。
  *
- * 与 `@workspace/api-client` 一致：本包以**源码形式**导出（`exports` 直接指向 `src/index.ts`），
+ * 本包以**源码形式**导出（`exports` 直接指向 `packages/components/src/index.ts`），
  * 由消费方的打包器（Vite）编译，因此没有自己的构建步骤。
  *
  * 公开站点组件与可复用的 `ExIcon`；`Logo` / `ThemeToggle` 仍是包内模块。

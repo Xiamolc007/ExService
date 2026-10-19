@@ -1,11 +1,15 @@
 # 前端只经共享 Client 调用，base URL 由配置决定
 
-- 状态：已接受
+- 状态：共享入口和可配置 API root 原则继续适用；旧 Client 接入已被 SDK 取代
 - 模块：`web`
 - 日期：2026-09-16
 - 来源：`.notes/archive/backend-sandbox/specs/2026-09-16-backend-sandbox-scaffold-design.md` §7.2
 
-_最后更新：2026-09-29_
+_最后更新：2026-10-19_
+
+## 当前适用范围
+
+以下正文记录早期 Client 选择。当前本站业务请求统一使用 `@workspace/sdk` 的 `instance({...})`，`apps/web/src/api/client.ts` 在请求前安装 root 与会话失效处理，不再创建 Client。Browser 缺省 root、非默认 root 的显式凭据规则见 `.ai/architectures/sdk/client-boundaries.md`；实际开发代理与端口以 `.ai/architectures/runtime/runtime-boundaries.md` 为准。旧固定代理目标与 factory 描述不能作为当前启动指南。
 
 ## 背景
 

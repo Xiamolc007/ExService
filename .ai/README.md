@@ -2,20 +2,20 @@
 
 本目录记录源码难以直接表达的模块边界、已接受决策、数据规则与运行陷阱。仓库以 `api/openapi.yaml` 为唯一 HTTP Contract；`apps/server/` 是唯一 Fastify Server，使用独立 PostgreSQL `exre`。当前仍是单实例开发阶段，不代表已可公网部署。
 
-_最后更新：2026-10-15_
+_最后更新：2026-10-19_
 
 ## 模块与入口
 
 | 模块 | 代码路径 | 知识入口 |
 | --- | --- | --- |
 | API Contract | `api/openapi.yaml`、`api/paths/`、`api/schemas/`、`api/generated/openapi.json` | `.ai/architectures/api/contract-layout.md` |
-| 生成式 Client | `packages/api-client/` | `.ai/decisions/api-client/01-generated-types-committed-and-read-only.md` |
+| 本站 SDK | `packages/sdk/` | `.ai/architectures/sdk/client-boundaries.md`；旧 Client 决策见 `.ai/decisions/api-client/01-generated-types-committed-and-read-only.md` |
 | 共享组件 | `packages/components/` | `.ai/knowledge/components/ex-message-host-lifecycle.md`、`.ai/knowledge/components/error-panel.md`、`.ai/knowledge/components/tiptap-content-boundaries.md` |
 | 共享纯逻辑 | `packages/common/` | `.agents/rules/common.md`；反馈内容接线见 `.ai/architectures/support-center/feedback-lifecycle.md` |
 | Web | `apps/web/` | `.ai/architectures/web/authentication-flow.md`、`.ai/knowledge/web/invitation-error-handoff.md` |
 | 通用内容与 About | `apps/web/build/content/`、`apps/web/build/about/`、`apps/web/src/content/`、`apps/web/src/pages/AboutUs/` | `.ai/architectures/web/content-rendering.md`、`.ai/knowledge/web/content-authoring.md` |
 | Server | `apps/server/src/modules/`、`apps/server/src/domains/`、`apps/server/src/http/` | `.ai/architectures/server/request-lifecycle.md`、`.ai/architectures/server/authentication-lifecycle.md`、`.ai/knowledge/server/multipart-lifecycle-traps.md` |
-| 存储与 SDK | `apps/server/src/modules/storage/`、`packages/sdk/` | `.ai/knowledge/storage/lifecycle-traps.md` |
+| 存储上传 | `apps/server/src/modules/storage/`、`packages/sdk/src/storage/` | `.ai/knowledge/storage/lifecycle-traps.md` |
 | 独立身份系统 | `apps/server/src/modules/identity/`、`packages/common/src/node/identity-config/`、`scripts/runtime/hydra-client.mjs` | `.ai/architectures/identity/integration-boundaries.md`；Common 消费规则见 `.agents/rules/package-common.md` |
 | 运行配置与进程 | `scripts/runtime/`、`infra/runtime/` | `.ai/architectures/runtime/runtime-boundaries.md` |
 | Contract Test | `tests/contract/` | `.ai/architectures/contract-tests/test-layers.md` |

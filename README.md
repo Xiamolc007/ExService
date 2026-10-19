@@ -46,10 +46,18 @@ Website 使用独立 PostgreSQL `exre`；Hydra 提供 OIDC 协议并使用独立
 | 构建 | `pnpm build` |
 | Contract 与类型检查 | `pnpm api:lint` / `pnpm api:generate` / `pnpm api:check` / `pnpm typecheck` |
 
+首次本地测试前先执行 `pnpm exec playwright install chromium`，准备默认测试使用的 Browser SDK Chromium 夹具；Linux 需要系统依赖时使用 `pnpm exec playwright install --with-deps chromium`。日常 runtime 不自动安装浏览器。
+
 测试使用临时数据库，不连接开发库；Build 不连接数据库或启动 Docker。自动测试、本机生命周期、浏览器和部署验收分别报告。
 
 ## 工程入口
 
-`api/openapi.yaml` 与 `api/paths/`、`api/schemas/` 是唯一 HTTP Contract 源，统一生成 `api/generated/openapi.json` 和 Client 类型；`apps/server/` 是唯一 Website Fastify Server；Web API 调用只经 `packages/api-client/`。`pnpm dev`、`pnpm test` 和 `pnpm build` 先生成 Contract，生产启动只读取已有 JSON。`packages/common/` 通过 `@workspace/common/node/identity-config` 为 Server 与 runtime 提供共享的纯身份配置解析。ExUI 使用 pnpm lockfile 锁定的 registry 包。
+`api/openapi.yaml` 与 `api/paths/`、`api/schemas/` 是唯一 HTTP Contract 源，统一生成 `api/generated/openapi.json` 和 `packages/sdk/src/generated/schema.d.ts`；`apps/server/` 是唯一 Website Fastify Server；Browser 与 Node 的本站业务 HTTP 调用统一使用 `@workspace/sdk` 的 `instance({...})`，上传使用同包 `storage`。生产启动只读取已有产物。`packages/common/` 通过 `@workspace/common/node/identity-config` 为 Server 与 runtime 提供共享的纯身份配置解析。ExUI 使用 pnpm lockfile 锁定的 registry 包。
+
+根 `pnpm dev`、`pnpm typecheck`、`pnpm test`（含 watch 每轮）和 `pnpm build` 按顺序准备 Contract → SDK 构建，再启动各自消费者；单独 Server 开发入口也先准备。SDK 的公开入口读取 `dist/`，仅运行 `tsc --noEmit` 不会生成可消费产物。
+
+直接运行低层 Web 开发命令前，先依次执行 `pnpm api:generate`、`pnpm --filter @workspace/sdk build`，再执行 `pnpm --filter @workspace/web dev`。该低层入口不自动重建 SDK；修改 Contract 或 SDK 后优先使用根 `pnpm dev`，其监督器会停止应用、串行准备并重新启动，重建失败则保持应用停止，等待下一次源码修改。
+
+同一 checkout 同时只允许一个写入 Contract/SDK 产物的命令。不要并行运行 dev、test/watch、typecheck、build、`api:generate` 或 SDK build；需要独立验证时先停止当前命令，或使用不同 checkout。应用锁不等于跨命令构建锁。
 
 开发规则见 `AGENTS.md`，模块知识从 `.ai/README.md` 查阅，运行与资源边界见 `.ai/architectures/runtime/runtime-boundaries.md`，身份客户端边界见 `.ai/architectures/identity/integration-boundaries.md`。
