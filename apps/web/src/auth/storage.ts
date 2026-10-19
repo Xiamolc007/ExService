@@ -4,6 +4,8 @@ export const AUTH_TOKEN_KEY = 'exwebsite.auth.token'
 export const SSO_SUCCESS_KEY = 'exwebsite.auth.sso-success'
 interface ScopeState {
   suppressed?: { baseline: string | null | undefined }
+  // A reader may release suppression before the storage synchronization runs.
+  needsSdkRestore?: boolean
   persistedLogin?: { storage: Pick<Storage, 'setItem'>; token: string }
 }
 // Suppression belongs to the root even while another root is selected.
@@ -60,11 +62,14 @@ function releaseSessionSync(): void {
 
 export function syncSessionToken(): string | null | undefined {
   try {
-    const token = readToken(window.localStorage)
-    if (selected.custom) {
+    const persistent = window.localStorage
+    const token = readToken(persistent)
+    const state = scopeState()
+    if (selected.custom || state.needsSdkRestore) {
       setAccessToken(token)
-      scopeState().persistedLogin = token === null ? undefined : { storage: window.localStorage, token }
-    } else if (scopeState().suppressed) {
+      state.persistedLogin = token === null ? undefined : { storage: persistent, token }
+      state.needsSdkRestore = undefined
+    } else if (state.suppressed) {
       setAccessToken(null)
     }
     changed()
@@ -91,6 +96,7 @@ export function readToken(storage: Pick<Storage, 'getItem'>): string | null {
     if (suppressed.baseline === undefined) suppressed.baseline = raw
     if (suppressed.baseline === raw) return null
     state.suppressed = undefined
+    state.needsSdkRestore = true
   }
   return raw
 }
@@ -100,6 +106,7 @@ export function writeToken(storage: Pick<Storage, 'setItem'>, token: string): vo
   setAccessToken(token)
   scopeState().persistedLogin = { storage, token }
   scopeState().suppressed = undefined
+  scopeState().needsSdkRestore = undefined
   changed()
 }
 
@@ -136,6 +143,7 @@ export function expirePersistedSession(): void {
 export function clearBrowserSession(): void {
   const state = scopeState()
   state.persistedLogin = undefined
+  state.needsSdkRestore = undefined
   let baseline: string | null | undefined
   try { baseline = readRawToken(window.localStorage) } catch { /* adopt the first readable baseline */ }
   state.suppressed = { baseline }
