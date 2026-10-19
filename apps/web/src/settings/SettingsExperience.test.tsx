@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { writeToken } from '@web/src/auth/storage'
@@ -84,6 +84,14 @@ const preferences = {
   serverTime: 0,
 }
 
+beforeEach(() =>
+  vi.stubGlobal('matchMedia', () => ({
+    matches: false,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  })),
+)
+
 function respond(overrides: { failPreferences?: boolean; failProfile?: boolean } = {}) {
   get.mockImplementation((path: string) => {
     if (path === '/notification-preferences') {
@@ -106,6 +114,7 @@ afterEach(() => {
   bindNotificationsToken(null)
   window.localStorage.clear()
   authState.status = 'authenticated'
+  vi.unstubAllGlobals()
 })
 
 describe('SettingsExperience', () => {
