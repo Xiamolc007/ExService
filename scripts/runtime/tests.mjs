@@ -21,6 +21,7 @@ export function testSpecifications({ workspace = root, inherited = process.env }
     'packages/common/test/config.test.mjs',
     'packages/common/test/entry.test.mjs',
     'scripts/runtime/settings.test.mjs',
+    'scripts/runtime/frontend.test.mjs',
     'scripts/runtime/identity-runtime.test.mjs',
     'scripts/runtime/output.test.mjs',
     'scripts/runtime/deployment.test.mjs',
