@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { Ajv } from 'ajv'
-import type { components } from '@workspace/api-client/types'
+import type { components } from '@workspace/sdk/types'
 import { readContract } from '../../contract/document.js'
 import { analyzeRequest, composeBug, normalizeMime, utf8Bytes, FEEDBACK_LIMITS } from '@workspace/common/feedback-content'
 import { FeedbackError } from './errors.js'

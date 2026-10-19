@@ -1,4 +1,5 @@
 export type StorageSdkErrorCode =
+  | 'CONFIG_CHANGED'
   | 'INVALID_INPUT'
   | 'UNAUTHORIZED'
   | 'FORBIDDEN'
@@ -12,7 +13,7 @@ export type StorageSdkErrorCode =
   | 'BUSY'
   | 'NETWORK'
   | 'UNKNOWN'
-import { ExAxiosError } from './http/core.js'
+import { ExAxiosError } from './http/errors.js'
 
 const SERVER_CODE_TO_SDK_CODE: Record<string, StorageSdkErrorCode> = {
   STORAGE_INVALID_INPUT: 'INVALID_INPUT',
@@ -34,7 +35,7 @@ const SERVER_CODE_TO_SDK_CODE: Record<string, StorageSdkErrorCode> = {
 /**
  * SDK 对外抛出的稳定错误。
  *
- * `message` 里绝不出现临时凭证、上传票据或完整 URL —— 服务端文案会被过滤后才拼进来。
+ * `message` 使用固定文案，避免服务端或云异常中的凭证、票据与签名 URL 外泄。
  */
 export class StorageSdkError extends Error {
   readonly code: StorageSdkErrorCode
@@ -50,12 +51,6 @@ export class StorageSdkError extends Error {
   }
 }
 
-/** 去掉 URL 后再拼进 message：票据与签名地址不能被日志或 UI 带出去。 */
-export function sanitizeDetail(message: unknown): string | undefined {
-  if (typeof message !== 'string' || message === '') return undefined
-  return message.replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, '[url]').slice(0, 200)
-}
-
 export function serverCodeToSdkCode(code: unknown): StorageSdkErrorCode {
   return typeof code === 'string' && code in SERVER_CODE_TO_SDK_CODE
     ? SERVER_CODE_TO_SDK_CODE[code]!
@@ -68,11 +63,12 @@ export function serverCodeToSdkCode(code: unknown): StorageSdkErrorCode {
  */
 export function toStorageSdkError(input: { error?: unknown; status?: number; cause?: unknown }): StorageSdkError {
   const { error, status, cause } = input
+  if (cause instanceof StorageSdkError) return cause
   if (cause instanceof ExAxiosError) {
     const code = cause.code === 'SESSION_INVALID' ? 'UNAUTHORIZED'
       : cause.code === 'TIMEOUT' || cause.code === 'CANCELLED' ? 'TIMEOUT'
       : cause.code === 'NETWORK_ERROR' ? 'NETWORK' : serverCodeToSdkCode(cause.code)
-    return new StorageSdkError(code, { status: cause.status, requestId: cause.requestId, detail: sanitizeDetail(cause.kind === 'http' ? cause.message : undefined) })
+    return new StorageSdkError(code, { status: cause.status, requestId: cause.requestId })
   }
   const envelope = typeof error === 'object' && error !== null
     ? (error as { error?: { code?: unknown; message?: unknown; requestId?: unknown } }).error
@@ -80,14 +76,13 @@ export function toStorageSdkError(input: { error?: unknown; status?: number; cau
   const code = serverCodeToSdkCode(envelope?.code)
   const requestId = typeof envelope?.requestId === 'string' ? envelope.requestId : undefined
   if (code !== 'UNKNOWN') {
-    return new StorageSdkError(code, { status, requestId, detail: sanitizeDetail(envelope?.message) })
+    return new StorageSdkError(code, { status, requestId })
   }
   if (cause !== undefined) {
-    const message = cause instanceof Error ? cause.message : String(cause)
     if (cause instanceof Error && (cause.name === 'TimeoutError' || cause.name === 'AbortError')) {
       return new StorageSdkError('TIMEOUT', { status })
     }
-    return new StorageSdkError('NETWORK', { status, detail: sanitizeDetail(message) })
+    return new StorageSdkError('NETWORK', { status })
   }
   return new StorageSdkError('UNKNOWN', { status, requestId })
 }

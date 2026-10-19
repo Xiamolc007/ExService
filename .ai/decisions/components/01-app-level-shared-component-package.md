@@ -1,11 +1,15 @@
 # 共享 UI 组件放在独立工作区包，而不是 app 内部目录
 
-- 状态：已接受
+- 状态：共享 UI 包边界继续适用；与旧 Client 形态对齐的背景已被取代
 - 模块：`components`
 - 日期：2026-09-18
 - 来源：`packages/components/package.json`、`packages/components/src/index.ts` 的共享包实现
 
-_最后更新：2026-09-18_
+_最后更新：2026-10-19_
+
+## 当前适用范围
+
+`packages/components/` 仍以源码形式导出且没有独立构建步骤。以下正文中用 `packages/api-client/` 作为同级包和形态来源的描述保留为历史；该包已退役，不能据此推断 SDK 也源码导出。`packages/sdk/` 的当前构建与条件入口见 `.ai/architectures/sdk/client-boundaries.md`。
 
 ## 背景
 

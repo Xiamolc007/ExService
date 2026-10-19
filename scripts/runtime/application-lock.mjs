@@ -22,7 +22,7 @@ export function acquireApplicationLock(state, { inspect = processIdentity, platf
     if (!record) return { cleanupRequired: false }
     const run = readJson(runPath)
     if (platform !== 'win32' || record.persistent || !/^[a-f0-9-]{36}$/.test(record.runId) ||
-        !Array.isArray(record.children) || !['starting', 'ready', 'stopping', 'stopped', 'cleanup-failed'].includes(run.state) ||
+        !Array.isArray(record.children) || !['preparing', 'rebuilding', 'rebuild-failed', 'starting', 'ready', 'stopping', 'stopped', 'cleanup-failed'].includes(run.state) ||
         ['version', 'mode', 'fingerprint', 'runId', 'identity', 'children', 'resources'].some(key => digest(record[key]) !== digest(run[key])) ||
         !record.resources || Object.keys(record.resources).sort().join(',') !== 'containerProofs,createdStopped,preRunning,started' ||
         Object.values(record.resources).some(value => !Array.isArray(value) || value.length))

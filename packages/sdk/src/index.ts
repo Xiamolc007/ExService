@@ -1,18 +1,14 @@
-/**
- * 包根的公开类型面。
- *
- * 这里刻意不导出运行时实现：`browser` 与 `node` 条件各自指向对应产物，
- * 二者的公开类型一致，因此 types 只需描述这一份契约。
- */
-import type { SdkOptions, StorageSdk } from './shared.js'
-
-export type { SdkOptions, UploadOptions, UploadData, Medium, StorageSdk } from './shared.js'
-export type { StorageSdkErrorCode } from './errors.js'
+import type { SdkInstance, SessionExpiredHandler } from './request-types.js'
+import type { Storage } from './storage/types.js'
+export declare const instance: SdkInstance
+export declare const storage: Storage
+export declare function setBaseUrl(url: string): void
+export declare function setAccessToken(token: string | null): void
+export declare function setSessionExpiredHandler(handler: SessionExpiredHandler | null): void
+export { ExAxiosError } from './http/errors.js'
+export type { ExAxiosErrorKind } from './http/errors.js'
 export { StorageSdkError } from './errors.js'
-
-/**
- * 创建 SDK。`browser` 条件解析到浏览器产物，`node` 条件解析到 Node 产物。
- */
-export declare function createSdk(options: SdkOptions): StorageSdk
-export { ExAxios, createExAxios, ExAxiosError, createApiClient } from './http/browser.js'
-export type { ExAxiosOptions, ExAxiosInstance, ExAxiosRequestConfig, ExAxiosErrorKind, SessionExpiredContext, ApiClient, CreateApiClientOptions, paths, operations, components } from './http/browser.js'
+export type { StorageSdkErrorCode } from './errors.js'
+export type { RequestConfig, SdkInstance, SessionExpiredContext, SessionExpiredHandler } from './request-types.js'
+export type { Storage, UploadOptions, UploadData, Medium } from './storage/types.js'
+export type { paths, operations, components } from './generated/schema.js'

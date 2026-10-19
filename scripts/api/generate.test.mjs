@@ -37,7 +37,7 @@ test('restores both artifacts when publishing the second artifact fails', async 
 function workspaceFixture() {
   const root = mkdtempSync(join(tmpdir(), 'exwebsite-contract-test-'));
   mkdirSync(join(root, 'api/generated'), { recursive: true });
-  mkdirSync(join(root, 'packages/api-client/src/generated'), { recursive: true });
+  mkdirSync(join(root, 'packages/sdk/src/generated'), { recursive: true });
   writeFileSync(join(root, 'api/openapi.yaml'), JSON.stringify({
     openapi: '3.1.1', info: { title: 'Fixture', version: '1' }, servers: [{ url: '/api' }], tags: [{ name: 'fixture', description: 'Fixture' }],
     paths: { '/fixture': { get: { operationId: 'readFixture', summary: 'Read fixture', tags: ['fixture'], security: [], responses: { '200': { description: 'ok' } } } } },
@@ -51,10 +51,10 @@ test('checks stale artifacts without replacing either official artifact', async 
   const root = workspaceFixture();
   try {
     writeFileSync(join(root, 'api/generated/openapi.json'), 'stale json');
-    writeFileSync(join(root, 'packages/api-client/src/generated/schema.d.ts'), 'stale types');
+    writeFileSync(join(root, 'packages/sdk/src/generated/schema.d.ts'), 'stale types');
     await assert.rejects(generateContract({ workspace: root, mode: 'check' }), /missing or stale/);
     assert.equal(readFileSync(join(root, 'api/generated/openapi.json'), 'utf8'), 'stale json');
-    assert.equal(readFileSync(join(root, 'packages/api-client/src/generated/schema.d.ts'), 'utf8'), 'stale types');
+    assert.equal(readFileSync(join(root, 'packages/sdk/src/generated/schema.d.ts'), 'utf8'), 'stale types');
     assert.deepEqual(readdirSync(join(root, '.local')), []);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
@@ -65,10 +65,10 @@ test('never publishes when lint fails', async () => {
   try {
     writeFileSync(join(root, 'api/openapi.yaml'), 'openapi: invalid');
     writeFileSync(join(root, 'api/generated/openapi.json'), 'original json');
-    writeFileSync(join(root, 'packages/api-client/src/generated/schema.d.ts'), 'original types');
+    writeFileSync(join(root, 'packages/sdk/src/generated/schema.d.ts'), 'original types');
     await assert.rejects(generateContract({ workspace: root }), /command failed/);
     assert.equal(readFileSync(join(root, 'api/generated/openapi.json'), 'utf8'), 'original json');
-    assert.equal(readFileSync(join(root, 'packages/api-client/src/generated/schema.d.ts'), 'utf8'), 'original types');
+    assert.equal(readFileSync(join(root, 'packages/sdk/src/generated/schema.d.ts'), 'utf8'), 'original types');
     assert.equal(existsSync(join(root, '.local')), false);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
@@ -79,7 +79,7 @@ test('bundle generates only JSON, then generate and check preserve unchanged mti
   try {
     await generateContract({ workspace: root, mode: 'bundle' });
     const jsonPath = join(root, 'api/generated/openapi.json');
-    const typesPath = join(root, 'packages/api-client/src/generated/schema.d.ts');
+    const typesPath = join(root, 'packages/sdk/src/generated/schema.d.ts');
     assert.equal(existsSync(typesPath), false);
     assert.equal(JSON.parse(readFileSync(jsonPath, 'utf8')).paths['/fixture'].get.operationId, 'readFixture');
     await generateContract({ workspace: root });

@@ -28,9 +28,9 @@ import {
 } from "@exre/exui";
 import { ClickUpFieldInput, FileUploader } from "@workspace/components";
 import { ArrowLeft } from "lucide-react";
-import type { components } from "@workspace/api-client";
+import type { components } from "@workspace/sdk/types";
 import { FEEDBACK_LIMITS, FREQUENCIES } from "@workspace/common/feedback-content";
-import { readToken, subscribeSessionChanges } from "../../../auth/storage";
+import { readToken, sessionScopeRevision, subscribeSessionChanges } from "../../../auth/storage";
 import { feedbackPort, getFeedbackOptions } from "./api";
 import {
   FeedbackFlow,
@@ -146,6 +146,7 @@ export function FeedbackModal({ area, open, onOpenChange: setOpen, returnFocus }
     mounted = useRef(true),
     flowRef = useRef<FeedbackFlow | null>(null);
   const uiEpoch = useRef(0);
+  const scope = useRef(sessionScopeRevision()).current;
   const schema = useMemo(
     () => feedbackSchema(kind ?? "campaign", options ?? emptyOptions),
     [kind, options],
@@ -168,6 +169,7 @@ export function FeedbackModal({ area, open, onOpenChange: setOpen, returnFocus }
       },
       () =>
         active.current &&
+        scope === sessionScopeRevision() &&
         token.current !== null &&
         readToken(window.localStorage) === token.current,
       undefined,
@@ -177,7 +179,7 @@ export function FeedbackModal({ area, open, onOpenChange: setOpen, returnFocus }
   useEffect(() => {
     mounted.current = true;
     const unsubscribe = subscribeSessionChanges(() => {
-      if (readToken(window.localStorage) === token.current) return;
+      if (scope === sessionScopeRevision() && readToken(window.localStorage) === token.current) return;
       uiEpoch.current++;
       active.current = false;
       token.current = null;
@@ -192,12 +194,12 @@ export function FeedbackModal({ area, open, onOpenChange: setOpen, returnFocus }
     return () => {
       mounted.current = false;
       active.current = false;
-      flow.stop();
+      flow.stop(true);
       unsubscribe();
     };
-  }, [flow, form]);
+  }, [flow, form, scope]);
   useEffect(() => {
-    if (!open) return;
+    if (!open || scope !== sessionScopeRevision()) return;
     let disposed = false;
     active.current = true;
     token.current = readToken(window.localStorage);
@@ -206,13 +208,13 @@ export function FeedbackModal({ area, open, onOpenChange: setOpen, returnFocus }
     setNotice(null);
     void getFeedbackOptions(area)
       .then((next) => {
-        if (!disposed) setOptions(next);
+        if (!disposed && scope === sessionScopeRevision()) setOptions(next);
       })
       .catch(() => {
-        if (!disposed) setNotice("暂时无法读取反馈选项，请稍后重新打开。");
+        if (!disposed && scope === sessionScopeRevision()) setNotice("暂时无法读取反馈选项，请稍后重新打开。");
       })
       .finally(() => {
-        if (!disposed) setOptionsLoading(false);
+        if (!disposed && scope === sessionScopeRevision()) setOptionsLoading(false);
       });
     const epoch = uiEpoch.current;
     const hadSubmission = flow.hasPending();
@@ -221,7 +223,7 @@ export function FeedbackModal({ area, open, onOpenChange: setOpen, returnFocus }
     void flow
       .recover()
       .then((next) => {
-        if (disposed) return;
+        if (disposed || scope !== sessionScopeRevision()) return;
         setFailure(null);
         if (next?.nextAction === "done") {
           flow.reset();
@@ -242,17 +244,17 @@ export function FeedbackModal({ area, open, onOpenChange: setOpen, returnFocus }
         }
       })
       .catch((error) => {
-        if (!disposed && !(error instanceof FeedbackStopped)) {
+        if (!disposed && scope === sessionScopeRevision() && !(error instanceof FeedbackStopped)) {
           if (flow.hasPending()) setFailure(current => current === "rejected" ? current : "uncertain");
           ExMessage.warn("提交结果待确认，请稍后核对。");
         }
       })
       .finally(() => {
         release?.();
-        if (mounted.current && epoch === uiEpoch.current) setBusy(false);
+        if (mounted.current && scope === sessionScopeRevision() && epoch === uiEpoch.current) setBusy(false);
       });
     return () => { disposed = true; };
-  }, [open, flow, form, area, claimSubmission]);
+  }, [open, flow, form, area, claimSubmission, scope]);
   const frozen = flow.hasPending();
   const locked = busy || frozen;
   const currentAvailability = options?.kinds.find(
@@ -297,7 +299,7 @@ export function FeedbackModal({ area, open, onOpenChange: setOpen, returnFocus }
   async function process(
     action: () => Promise<FeedbackSnapshot | null | undefined>,
   ): Promise<void> {
-    if (busy) return;
+    if (busy || scope !== sessionScopeRevision()) return;
     const release = claimSubmission();
     if (!release) return;
     const epoch = uiEpoch.current;
@@ -306,7 +308,7 @@ export function FeedbackModal({ area, open, onOpenChange: setOpen, returnFocus }
     setNotice(null);
     try {
       const next = await action();
-      if (epoch !== uiEpoch.current || !active.current || !mounted.current) {
+      if (scope !== sessionScopeRevision() || epoch !== uiEpoch.current || !active.current || !mounted.current) {
         return;
       }
       if (next) setSnapshot(next);
@@ -330,6 +332,7 @@ export function FeedbackModal({ area, open, onOpenChange: setOpen, returnFocus }
     } catch (error) {
       if (
         !(error instanceof FeedbackStopped) &&
+        scope === sessionScopeRevision() &&
         epoch === uiEpoch.current &&
         active.current &&
         mounted.current
@@ -345,7 +348,7 @@ export function FeedbackModal({ area, open, onOpenChange: setOpen, returnFocus }
       }
     } finally {
       release();
-      if (mounted.current && epoch === uiEpoch.current) setBusy(false);
+      if (mounted.current && scope === sessionScopeRevision() && epoch === uiEpoch.current) setBusy(false);
     }
   }
   const submit = form.handleSubmit(async (draft) => {

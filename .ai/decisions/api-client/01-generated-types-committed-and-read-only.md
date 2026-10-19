@@ -1,11 +1,15 @@
 # 生成的类型纳入版本控制，共享 Client 以源码形式导出
 
-- 状态：已接受
+- 状态：部分被 SDK 单例方案取代；生成类型入库、禁止手改与 Contract 同步提交原则继续适用
 - 模块：`api-client`
 - 日期：2026-09-16
 - 来源：`.notes/archive/backend-sandbox/specs/2026-09-16-backend-sandbox-scaffold-design.md` §5.1、§9
 
-_最后更新：2026-10-11_
+_最后更新：2026-10-19_
+
+## 当前适用范围
+
+以下正文保留当时的决策与证据。旧 `packages/api-client/`、openapi-fetch factory、源码运行时导出和 Node 限制均属历史，已由 `packages/sdk/` 的 Browser/Node 构建入口与单例对象请求 API 取代；当前边界见 `.ai/architectures/sdk/client-boundaries.md`。生成目标现为 `api/generated/openapi.json` 与 `packages/sdk/src/generated/schema.d.ts`，只由生成器维护并随 Contract 提交的原则不变。
 
 ## 背景
 

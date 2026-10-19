@@ -1,8 +1,8 @@
 # ExWebsite
 
-本仓库以单份 HTTP Contract 驱动 Web、生成式 Client 和唯一 Fastify Server。Server 使用独立的 PostgreSQL `exre` 数据库；目前仍处开发阶段。
+本仓库以单份 HTTP Contract 驱动 Web、本站 SDK 和唯一 Fastify Server。Server 使用独立的 PostgreSQL `exre` 数据库；目前仍处开发阶段。
 
-_最后更新：2026-10-15_
+_最后更新：2026-10-19_
 
 ## Language
 
@@ -46,9 +46,9 @@ _Avoid_: SQLite 基线、历史数据导入
 开发专用命令：显式确认 `exre` 后，核验回环地址、连接身份和对象归属，清理本应用结构并重新应用基线；不删除头像目录，也不触及其他数据库。
 _Avoid_: 清库、重置环境、删除数据库
 
-**共享 Client**:
-前端发起 HTTP 请求的唯一通道，由 Contract 生成的类型支撑。它不定义 endpoint，只承载调用。
-_Avoid_: API 封装、请求库、SDK wrapper
+**本站 SDK**:
+Browser 与 Node 发起本站业务 HTTP 请求及上传的统一入口，由 Contract 生成的类型支撑；公开对象请求 `instance({...})` 与 `storage`，不定义第二份 endpoint。配置和会话边界见 `.ai/architectures/sdk/client-boundaries.md`。
+_Avoid_: 旧 api-client、SDK wrapper、独立 endpoint 表
 
 **API base URL**:
 前端请求前缀。开发环境缺省 `/api`，Vite 将请求代理到唯一 Server。

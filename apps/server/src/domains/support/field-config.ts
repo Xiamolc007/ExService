@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
-import type { components } from '@workspace/api-client/types'
+import type { components } from '@workspace/sdk/types'
 import { FIELD_IDS, FIELD_DEFINITIONS, parseSupportField } from '../../../../../scripts/support-field-definition.mjs'
 
 export type FieldDefinition = components['schemas']['FeedbackFieldDefinition']

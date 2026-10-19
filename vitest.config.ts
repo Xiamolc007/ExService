@@ -12,7 +12,6 @@ export default defineConfig({
     alias: [
       { find: '@web', replacement: resolve(repositoryRoot, 'apps/web') },
       { find: '@server', replacement: resolve(repositoryRoot, 'apps/server') },
-      { find: '@api-client', replacement: resolve(repositoryRoot, 'packages/api-client') },
       { find: '@sdk', replacement: resolve(repositoryRoot, 'packages/sdk') },
       // COS 运行库只装在 packages/sdk 与 apps/server 下（同一版本、同一 store 条目）。
       // 统一解析路径，测试才能用裸包名 mock 掉云 SDK。
@@ -36,7 +35,6 @@ export default defineConfig({
       'tests/**/*.test.{ts,tsx}',
       'apps/web/src/**/*.test.{ts,tsx}',
       'apps/server/src/**/*.test.{ts,tsx}',
-      'packages/api-client/src/**/*.test.{ts,tsx}',
       'packages/components/src/**/*.test.{ts,tsx}',
       'packages/sdk/src/**/*.test.{ts,tsx}',
       'packages/common/src/**/*.test.{ts,tsx}',

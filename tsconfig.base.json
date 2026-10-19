@@ -22,8 +22,6 @@
       "@web/*": ["./apps/web/*"],
       "@server": ["./apps/server"],
       "@server/*": ["./apps/server/*"],
-      "@api-client": ["./packages/api-client"],
-      "@api-client/*": ["./packages/api-client/*"],
       "@components": ["./packages/components"],
       "@components/*": ["./packages/components/*"],
       "@tests": ["./tests"],

@@ -1,4 +1,4 @@
-import type { components } from '@workspace/api-client/types'
+import type { components } from '@workspace/sdk/types'
 import type { SqlExecutor } from '@server/src/db/client.js'
 import { validateStoredJoinForm, type JoinForm } from '@server/src/domains/join/applications/form-validation.js'
 

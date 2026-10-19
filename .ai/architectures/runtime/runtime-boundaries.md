@@ -2,7 +2,7 @@
 
 运行入口由 `scripts/runtime/entry.mjs`、`settings.mjs`、`services.mjs`、`applications.mjs` 和 `native.mjs` 分担。日常启动和首次准备检查单集中在 `README.md`；身份客户端边界见 `.ai/architectures/identity/integration-boundaries.md`。
 
-_最后更新：2026-10-16_
+_最后更新：2026-10-19_
 
 ## 配置来源与消费者
 
@@ -30,7 +30,11 @@ PG 管理角色由 `POSTGRES_USER` 配置，缺省为新安装的 `postgres`；�
 
 ## 构建、测试与证据
 
-`pnpm dev` 在只读 preflight 和应用启动前生成 Contract JSON 与 Client 类型；单独的 Server 开发入口使用同一生成流程。`pnpm test` 的每轮测试（含 watch 重跑）及 `pnpm build` 也先生成，内容未变化时不重写。watch 观察 `api/` 源变更，排除 `api/generated/` 和 Client 生成目录，避免产物触发下一轮。生产 `start` 与 Nginx 渲染只读取已有 `api/generated/openapi.json`，不在运行时生成 Contract 或修改数据库。生成与消费路径详见 `.ai/architectures/api/contract-layout.md`。
+根 `pnpm dev` 在只读 preflight 和应用启动前依次生成 Contract JSON/SDK 类型、构建 SDK；单独 Server 开发入口复用同一准备流程。根 `pnpm typecheck`、`pnpm test` 的每轮测试（含 watch 重跑）与 `pnpm build` 也先按此顺序准备；Contract 内容未变化时不重写。生产 `start`、维护入口与 Nginx 渲染只读取已有产物，不在运行时生成 Contract 或修改数据库。生成与消费路径详见 `.ai/architectures/api/contract-layout.md` 与 `.ai/architectures/sdk/client-boundaries.md`。
+
+根 dev 的应用锁覆盖准备阶段，准备子进程与应用使用同一归属登记与清理机制。监督器监听 `api/` 源及 SDK 源码和构建配置，排除生成目录和产物；变化先使旧 readiness 失效、停止所选应用，再串行准备，连续变化合并到后续准备，只启动最后一代产物。首次准备或 preflight 失败结束本轮；就绪后重建准备失败则保留应用停止，等待下一次源码变化。中断和控制停止同时取消准备与 readiness，并回收可证明归属的子进程；清理失败保留证明，不能提前释放归属。
+
+同一 checkout 的所有 Contract/SDK 产物写入命令必须串行，包括根 dev、test/watch、typecheck、build、手动生成和 SDK build。现有应用锁不协调独立构建命令；并行验证应使用不同 checkout。低层 Web dev 不承担准备与 SDK 重建，手动准备顺序见 `README.md`。
 
 Build 只读取工具和固定公开编译设置，生成 Contract 并构建 SDK、Website Web/Server，不要求运行秘密、数据库或服务。生产 Website 维护 CLI 使用编译入口。根自动测试执行 Website Vitest 与 runtime/共享身份配置的 Node 测试，使用临时 PG18 和独立 schema/库；不连接开发库。完整范围见 `.ai/architectures/contract-tests/test-layers.md`。
 

@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { Alert, AlertDescription, Button, Card } from '@exre/exui'
-import { api } from '@web/src/api/client'
-import { ExAxiosError } from '@workspace/sdk/http/browser'
+import { instance, ExAxiosError } from '@workspace/sdk'
 import { AuthFlow } from '@web/src/auth/AuthFlow'
-import { readToken, removeMatchingToken } from '@web/src/auth/storage'
+import { readToken, removeMatchingToken, sessionScopeRevision } from '@web/src/auth/storage'
 import { AuthBackdrop } from '@web/src/pages/AuthPage/AuthBackdrop'
 import styles from '@web/src/pages/AuthPage/AuthPage.module.scss'
 import identityStyles from './OidcPage.module.scss'
@@ -15,14 +14,14 @@ type ClientInfo = { clientName: string; scopes: string[] }
 type Stage = 'checking' | 'login-required' | 'restart' | 'retry-inspect' | 'retry-accept' | 'invalid'
 
 function inspectOidc(phase: 'login' | 'consent', challenge: string) {
-  return api.POST('/auth/oidc/inspect', { body: { phase, challenge }, alert: false })
+  return instance({ url: '/auth/oidc/inspect', method: 'POST', data: { phase, challenge }, alert: false })
 }
 
 function acceptOidc(phase: Phase, challenge: string, token: string) {
-  const request = { body: { challenge }, headers: { Authorization: `Bearer ${token}` }, alert: false }
-  if (phase === 'login') return api.POST('/auth/oidc/login/accept', request)
-  if (phase === 'consent') return api.POST('/auth/oidc/consent/accept', request)
-  return api.POST('/auth/oidc/logout/accept', request)
+  const request = { data: { challenge }, headers: { Authorization: `Bearer ${token}` }, alert: false }
+  if (phase === 'login') return instance({ url: '/auth/oidc/login/accept', method: 'POST', ...request })
+  if (phase === 'consent') return instance({ url: '/auth/oidc/consent/accept', method: 'POST', ...request })
+  return instance({ url: '/auth/oidc/logout/accept', method: 'POST', ...request })
 }
 
 function challengeFromSearch(search: string, phase: Phase): string | null {
@@ -70,9 +69,12 @@ function OidcChallenge({ phase, search }: { phase: Phase; search: string }) {
   const [attempt, setAttempt] = useState(0)
   const inspectRequest = useRef<{ key: string; promise: ReturnType<typeof inspectOidc> } | null>(null)
   const acceptRequest = useRef<{ key: string; promise: ReturnType<typeof acceptOidc> } | null>(null)
+  // A challenge belongs to the API scope where this page was mounted.
+  const scope = useRef(sessionScopeRevision()).current
+  const ownsScope = () => scope === sessionScopeRevision()
 
   useEffect(() => {
-    if (challenge === null || phase === 'logout') return
+    if (!ownsScope() || challenge === null || phase === 'logout') return
     let active = true
     const key = `${phase}:${challenge}`
     if (inspectRequest.current?.key !== key) {
@@ -82,18 +84,18 @@ function OidcChallenge({ phase, search }: { phase: Phase; search: string }) {
       }
     }
     void inspectRequest.current.promise.then(result => {
-      if (!active) return
+      if (!active || !ownsScope()) return
       setInfo(result)
       setStage('checking')
     }).catch(error => {
-      if (active) setStage(error instanceof ExAxiosError && (error.status === 400 || error.status === 403)
+      if (active && ownsScope()) setStage(error instanceof ExAxiosError && (error.status === 400 || error.status === 403)
         ? 'invalid' : 'retry-inspect')
     })
     return () => { active = false }
   }, [challenge, phase, attempt])
 
   useEffect(() => {
-    if (challenge === null || (phase !== 'logout' && info === null)
+    if (!ownsScope() || challenge === null || (phase !== 'logout' && info === null)
       || stage === 'invalid' || stage === 'restart'
       || stage === 'retry-inspect' || stage === 'retry-accept') return
     if (token === null) {
@@ -113,7 +115,7 @@ function OidcChallenge({ phase, search }: { phase: Phase; search: string }) {
       }
     }
     void acceptRequest.current.promise.then(result => {
-      if (!active) return
+      if (!active || !ownsScope()) return
       const latestToken = currentToken()
       if (latestToken !== token) {
         setToken(latestToken)
@@ -123,7 +125,7 @@ function OidcChallenge({ phase, search }: { phase: Phase; search: string }) {
       if (phase === 'logout') removeMatchingToken(window.localStorage, token)
       if (!redirectToHydra(result.redirectUrl)) setStage('invalid')
     }).catch(error => {
-      if (!active) return
+      if (!active || !ownsScope()) return
       const latestToken = currentToken()
       if (latestToken !== null && latestToken !== token) {
         setToken(latestToken)
@@ -135,7 +137,7 @@ function OidcChallenge({ phase, search }: { phase: Phase; search: string }) {
           navigate('/identity/signed-out', { replace: true })
           return
         }
-        removeMatchingToken(window.localStorage, token)
+        if (latestToken === token) removeMatchingToken(window.localStorage, token)
         setToken(null)
         setStage(phase === 'login' ? 'login-required' : 'restart')
         return

@@ -1,5 +1,6 @@
 import { proxy } from 'valtio'
-import type { components } from '@workspace/api-client'
+import type { components } from '@workspace/sdk/types'
+import { sessionScopeRevision } from '@web/src/auth/storage'
 
 export type NotificationItem = components['schemas']['NotificationItem']
 export type NotificationDetail = components['schemas']['NotificationDetail']
@@ -77,12 +78,15 @@ export interface NotificationGeneration {
 }
 
 let ownerToken: string | null = null
+let ownerScope = sessionScopeRevision()
 let epoch = 0
 let seq = 0
 
 export function bindNotificationsToken(token: string | null) {
-  if (ownerToken === token) return
+  const scope = sessionScopeRevision()
+  if (ownerToken === token && ownerScope === scope) return
   ownerToken = token
+  ownerScope = scope
   epoch += 1
   notificationsConfig.epoch = epoch
   notificationsConfig.summary.status = token === null ? 'idle' : 'loading'
@@ -110,7 +114,7 @@ export function captureNotificationWrite(): NotificationGeneration {
 }
 
 export function isCurrentNotificationGeneration(generation: NotificationGeneration): boolean {
-  return generation.epoch === epoch && generation.seq === seq
+  return ownerScope === sessionScopeRevision() && generation.epoch === epoch && generation.seq === seq
 }
 
 /** 未读计数的展示态：失败时是「未更新」，绝不画成 0。 */

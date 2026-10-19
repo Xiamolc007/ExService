@@ -2,8 +2,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import { createApp, serviceHandlers } from '@workspace/server'
 import { createTestAuth, type TestAuth } from '@tests/helpers/auth'
-import { createApiClient } from '@api-client/src/client'
-import { createHttpCore } from '@sdk/src/http/core'
+import { createRuntime } from '@sdk/src/runtime'
 const fixtures: TestAuth[] = [], apps: Array<ReturnType<typeof createApp>> = []
 afterEach(async () => { await Promise.all(apps.splice(0).map(app => app.close())); await Promise.all(fixtures.splice(0).map(f => f.close())) })
 async function setup() { const f=await createTestAuth(); fixtures.push(f); const app=createApp({...f}); apps.push(app); return {f,app} }
@@ -15,10 +14,10 @@ describe('authentication regression after invited registration cutover', () => {
   await f.seedUser({ email: 'transport@example.com', nickname: 'Transport', password: 'valid password' })
   const { token } = await f.authServices.login({ email: 'transport@example.com', password: 'valid password' })
   const origin = await app.listen({ host: '127.0.0.1', port: 0 })
-  const http = createHttpCore({ environment, origin }, { baseUrl: `${origin}/api`, websiteBaseUrl: `${origin}/api`, alert: false })
-  http.setToken(token)
-  const client = createApiClient({ baseUrl: `${origin}/api`, transport: request => http(request) })
-  await expect(client.POST('/auth/logout')).resolves.toEqual({ status: 'signed-out' })
+  const sdk = createRuntime({ environment, origin }, async () => { throw new Error('COS is not part of this fixture') })
+  sdk.setBaseUrl(`${origin}/api`)
+  sdk.setAccessToken(token)
+  await expect(sdk.instance({ url: '/auth/logout', method: 'POST', alert: false })).resolves.toEqual({ status: 'signed-out' })
   expect((await app.inject({ method: 'GET', url: '/api/auth/me', headers: { authorization: `Bearer ${token}` } })).statusCode).toBe(401)
  })
  it('returns the captcha placeholder over HTTP and from its registered handler', async()=>{

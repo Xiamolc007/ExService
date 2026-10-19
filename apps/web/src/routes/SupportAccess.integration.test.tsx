@@ -16,7 +16,9 @@ const content = vi.hoisted(() => ({ load: vi.fn(), registry: {
   featured: ['example'], contacts: [], categories: [{ id: 'setup', label: 'Setup', order: 0 }],
   clickup: { game: { title: 'Fixture panel', embedUrl: 'https://fixture.invalid/view' }, community: { title: 'Fixture community panel', embedUrl: 'https://fixture.invalid/community' }, requestBucket: { title: 'Fixture request bucket', embedUrl: 'https://fixture.invalid/requests' } },
 } }))
-vi.mock('@web/src/api/client', () => ({ api }))
+vi.mock('@workspace/sdk', async importOriginal => ({ ...await importOriginal<object>(),
+  instance: (config: { method?: string }) => config.method === 'POST' ? api.POST(config) : api.GET(config),
+}))
 vi.mock('../content/support/registry', async () => {
   const { createContentStore } = await import('../content/store')
   return { supportRegistry: content.registry, supportImage: (image: ContentImageData) => image,
@@ -37,7 +39,7 @@ it('requires the real session restore result, then unloads protected content on 
   api.GET.mockImplementation(() => new Promise(resolve => { finish = resolve }))
   render(tree())
   expect(screen.queryByTitle('支持面板')).toBeNull()
-  expect(api.GET).toHaveBeenCalledWith('/auth/me', { alert: false })
+  expect(api.GET).toHaveBeenCalledWith({ url: '/auth/me', method: 'GET', alert: false })
   await act(async () => finish({ nickname: 'Tester', avatarUrl: null }))
   expect(screen.getByTitle('支持面板')).toBeTruthy()
   act(() => {

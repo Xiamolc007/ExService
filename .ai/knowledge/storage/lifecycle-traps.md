@@ -2,7 +2,7 @@
 
 存储介质的目录检查、读取释放和 SDK 请求异常都需要覆盖失败路径，顺序成功请求无法证明这些约束。
 
-_最后更新：2026-09-30_
+_最后更新：2026-10-19_
 
 ## 并发创建父目录
 
@@ -18,10 +18,12 @@ _最后更新：2026-09-30_
 
 ## SDK 本站请求异常
 
-`packages/sdk/src/shared.ts` 经共享 Client 执行 prepare、file upload 和 complete，三个阶段都必须捕获请求层 rejection，并复用 `packages/sdk/src/errors.ts` 的映射。网络异常归为 `NETWORK`，`TimeoutError` 与 `AbortError` 归为 `TIMEOUT`；HTTP envelope 继续保留服务端错误码映射、status 与 requestId。失败时不重试、不继续后续阶段。
+`packages/sdk/src/storage/core.ts` 经同一 HTTP 管线执行 prepare、file upload 和 complete，三个阶段都捕获请求层 rejection，并复用 `packages/sdk/src/errors.ts` 的映射。网络异常归为 `NETWORK`，超时和取消归为 `TIMEOUT`；HTTP 错误保留服务端错误码映射、status 与 requestId。失败时不重试、不继续后续阶段。
+
+上传开始时捕获配置和 token 版本，在字节读取、本站请求及 COS 阶段之间核对；API root 或有效凭据变化抛 `CONFIG_CHANGED`，不把后续阶段发送到新配置。已经完成的直传不会回滚。COS 传输只在 prepare 选中 COS 后懒加载，每次上传独立持有临时凭据，避免并发串用。单例配置与会话规则见 `.ai/architectures/sdk/client-boundaries.md`。
 
 ## 证据
 
 - `apps/server/src/modules/storage/adapters/file.ts` 与 `tests/storage/file-adapter.test.ts`：并发写入、链接拒绝与提前释放读取。
-- `apps/server/src/modules/storage/handlers.ts`、`apps/server/src/modules/storage/transport.ts` 与 `tests/contract/storage-sockets.test.ts`：真实 HTTP 下载期限和迟到读取释放。
-- `packages/sdk/src/shared.ts`、`packages/sdk/src/errors.ts` 与 `tests/sdk/storage-sdk.test.ts`：三个本站请求阶段的网络、超时及中止异常。
+- `apps/server/src/modules/storage/api/handlers.ts`、`apps/server/src/modules/storage/api/transport.ts` 与 `tests/contract/storage-sockets.test.ts`：真实 HTTP 下载期限和迟到读取释放。
+- `packages/sdk/src/storage/core.ts`、`packages/sdk/src/errors.ts` 与 `tests/sdk/storage-sdk.test.ts`：三个本站请求阶段的网络、超时及中止异常。

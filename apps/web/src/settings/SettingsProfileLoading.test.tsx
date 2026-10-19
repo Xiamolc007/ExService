@@ -7,7 +7,12 @@ import { bindSettingsToken } from '@web/src/settings/settingsConfig'
 import { bindNotificationsToken } from '@web/src/notifications/notificationsConfig'
 
 const get = vi.hoisted(() => vi.fn())
-vi.mock('@web/src/api/client', () => ({ api: { GET: get } }))
+vi.mock('@workspace/sdk', async importOriginal => ({ ...await importOriginal<object>(),
+  instance: (config: { method?: string }) => {
+    const handlers = { GET: get }
+    return handlers[(config.method ?? 'GET') as keyof typeof handlers](config)
+  },
+}))
 vi.mock('@web/src/auth/AuthContext', () => ({ useAuth: () => ({
   state: { status: 'authenticated' }, invalidateSession: vi.fn(),
   refreshProfile: vi.fn(), retrySession: vi.fn(), logout: vi.fn(),
@@ -43,7 +48,7 @@ it.each([false, true])('shows the returned profile in the real settings panel (S
   get.mockResolvedValue(profile)
   const panel = <SettingsExperience initialCategory="profile" />
   render(strict ? <StrictMode>{panel}</StrictMode> : panel)
-  expect(get).toHaveBeenCalledWith('/auth/me', { alert: false })
+  expect(get).toHaveBeenCalledWith({ url: '/auth/me', method: 'GET', alert: false })
   await waitFor(() => expect(screen.queryByRole('button', { name: '编辑用户名' })?.textContent ?? '')
     .toContain('Person'), { onTimeout: (error) => error })
 })
@@ -72,7 +77,7 @@ it('keeps the new notification read when the discarded StrictMode read completes
   writeToken(window.localStorage, 'test-token')
   let resolveOld!: (value: typeof preferences) => void
   let notificationReads = 0
-  get.mockImplementation((path: string) => {
+  get.mockImplementation(({ url: path }: { url: string }) => {
     if (path !== '/notification-preferences') return Promise.resolve(profile)
     notificationReads += 1
     // 第一次读取被 StrictMode 清理丢弃，只有第二次的结果可以落地。

@@ -6,10 +6,15 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation } from 'react-router'
 import { ExMessage } from '@exre/exui'
 import { InvitationRegistrationFlow } from '@web/src/invitations/InvitationRegistrationFlow'
-import { ExAxiosError } from '@workspace/sdk/http/browser'
+import { ExAxiosError } from '@workspace/sdk'
 
 const post = vi.hoisted(() => vi.fn())
-vi.mock('@web/src/api/client', () => ({ api: { POST: post } }))
+vi.mock('@workspace/sdk', async importOriginal => ({ ...await importOriginal<object>(),
+  instance: (config: { method?: string }) => {
+    const handlers = { POST: post }
+    return handlers[(config.method ?? 'GET') as keyof typeof handlers](config)
+  },
+}))
 class TestResizeObserver { observe() {} unobserve() {} disconnect() {} }
 vi.stubGlobal('ResizeObserver', TestResizeObserver)
 Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: () => document.body })
@@ -34,7 +39,7 @@ it('checks eligibility before mounting an empty OTP and never sends a code impli
   expect(screen.queryByLabelText('密码')).toBeNull()
   await user.click(screen.getByRole('button', { name: '继续' }))
   expect(await screen.findByLabelText('6 位验证码')).toBeTruthy()
-  expect(post).toHaveBeenCalledExactlyOnceWith('/auth/invitations/check', { body: { email: 'member@example.com' }, alert: false })
+  expect(post).toHaveBeenCalledExactlyOnceWith({ url: '/auth/invitations/check', method: 'POST', data: { email: 'member@example.com' }, alert: false })
   expect(screen.queryByText(/验证码已发送/)).toBeNull()
 })
 
@@ -48,8 +53,8 @@ it('sanitizes every code while preserving history state and subscribes once to t
   expect(post).toHaveBeenCalledTimes(1)
   await act(async () => { first.resolve(eligible) })
   expect(await screen.findByRole('heading', { name: '完善账号' })).toBeTruthy()
-  expect(post.mock.calls.map(([path]) => path)).toEqual(['/auth/invitations/check', '/auth/invitations/verify'])
-  expect(post).toHaveBeenLastCalledWith('/auth/invitations/verify', { body: { email: 'member@example.com', code: '001234' }, alert: false })
+  expect(post.mock.calls.map(([config]) => config.url)).toEqual(['/auth/invitations/check', '/auth/invitations/verify'])
+  expect(post).toHaveBeenLastCalledWith({ url: '/auth/invitations/verify', method: 'POST', data: { email: 'member@example.com', code: '001234' }, alert: false })
   expect(screen.queryByLabelText('邮箱')).toBeNull()
 })
 
@@ -155,7 +160,7 @@ it('back cancels late verification and requires the new email to be checked agai
   expect(screen.queryByRole('heading', { name: '完善账号' })).toBeNull()
   await user.clear(screen.getByLabelText('邮箱')); await user.type(screen.getByLabelText('邮箱'), 'other@example.com')
   await user.click(screen.getByRole('button', { name: '继续' }))
-  expect(post).toHaveBeenLastCalledWith('/auth/invitations/check', { body: { email: 'other@example.com' }, alert: false })
+  expect(post).toHaveBeenLastCalledWith({ url: '/auth/invitations/check', method: 'POST', data: { email: 'other@example.com' }, alert: false })
 })
 
 it('unmount during the automatic check prevents verification and late notifications', async () => {
@@ -176,7 +181,7 @@ it.each(['modal', 'page'] as const)('completes %s without a session, clears sens
   const password = await screen.findByLabelText('密码')
   await user.type(password, ' password-one ')
   await user.click(screen.getByRole('button', { name: '完成注册' }))
-  expect(post).toHaveBeenLastCalledWith('/auth/invitations/complete', { body: { completionToken: verified.completionToken, nickname: '成员', password: ' password-one ' }, alert: false })
+  expect(post).toHaveBeenLastCalledWith({ url: '/auth/invitations/complete', method: 'POST', data: { completionToken: verified.completionToken, nickname: '成员', password: ' password-one ' }, alert: false })
   expect(screen.queryByLabelText('密码')).toBeNull()
   expect(notify).toHaveBeenCalledExactlyOnceWith('注册成功，请前往登录')
   await user.click(screen.getByRole('button', { name: '前往登录' }))

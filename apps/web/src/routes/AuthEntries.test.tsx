@@ -7,7 +7,12 @@ import { AuthProvider } from '@web/src/auth/AuthContext'
 import { RootLayout } from '@web/src/routes/RootLayout'
 import { ExMessage } from '@exre/exui'
 const { post, get } = vi.hoisted(() => ({ post: vi.fn(), get: vi.fn() }))
-vi.mock('@web/src/api/client', () => ({ api: { POST: post, GET: get } }))
+vi.mock('@workspace/sdk', async importOriginal => ({ ...await importOriginal<object>(),
+  instance: (config: { method?: string }) => {
+    const handlers = { POST: post, GET: get }
+    return handlers[(config.method ?? 'GET') as keyof typeof handlers](config)
+  },
+}))
 let mobile = false
 class TestResizeObserver { observe() {} unobserve() {} disconnect() {} }
 vi.stubGlobal('ResizeObserver', TestResizeObserver)
@@ -62,5 +67,5 @@ it('switches the same registration dialog to ordinary login with only the comple
   expect(screen.getByRole('dialog', { name: '登录' })).toBe(dialog)
   expect((screen.getByLabelText('邮箱') as HTMLInputElement).value).toBe('member@example.com')
   expect((screen.getByLabelText('密码') as HTMLInputElement).value).toBe('')
-  expect(post.mock.calls.map(([path]) => path)).toEqual(['/auth/invitations/check', '/auth/invitations/verify', '/auth/invitations/complete'])
+  expect(post.mock.calls.map(([config]) => config.url)).toEqual(['/auth/invitations/check', '/auth/invitations/verify', '/auth/invitations/complete'])
 })

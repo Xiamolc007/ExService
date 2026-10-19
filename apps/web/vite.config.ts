@@ -37,7 +37,6 @@ export default defineConfig({
     alias: {
       '@web': resolve(repositoryRoot, 'apps/web'),
       '@server': resolve(repositoryRoot, 'apps/server'),
-      '@api-client': resolve(repositoryRoot, 'packages/api-client'),
       '@components': resolve(repositoryRoot, 'packages/components'),
       '@tests': resolve(repositoryRoot, 'tests'),
     },

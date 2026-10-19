@@ -7,9 +7,8 @@ import {
   type AuthFormErrors,
   type LoginDraft,
 } from '@workspace/components'
-import { api } from '@web/src/api/client'
-import { ExAxiosError } from '@workspace/sdk/http/browser'
-import { readToken, writeSsoSuccess, writeToken } from '@web/src/auth/storage'
+import { instance, ExAxiosError } from '@workspace/sdk'
+import { readRawToken, readToken, sessionScopeRevision, writeSsoSuccess, writeToken } from '@web/src/auth/storage'
 
 export interface AuthFlowProps {
   initialMode?: 'login'
@@ -42,6 +41,8 @@ export function AuthFlow({
   const generation = useRef(0)
   const authForm = useRef<AuthFormHandle>(null)
   const pendingDraft = useRef<LoginDraft | null>(null)
+  const scope = useRef(sessionScopeRevision()).current
+  const ownsScope = () => scope === sessionScopeRevision()
 
   useEffect(() => () => {
     generation.current += 1
@@ -70,12 +71,14 @@ export function AuthFlow({
   }, [ssoRequestId])
 
   async function prepareSso(requestId: string, current: number) {
+    if (!ownsScope()) return
+    const isCurrent = () => current === generation.current && ownsScope()
     setFatalSsoError(null)
     setSsoRetryError(null)
     setFlowBusy(true)
     try {
-      await api.POST('/auth/sso/inspect', { body: { ssoRequestId: requestId }, alert: false })
-      if (current !== generation.current) return
+      await instance({ url: '/auth/sso/inspect', method: 'POST', data: { ssoRequestId: requestId }, alert: false })
+      if (!isCurrent()) return
       let token: string | null
       try {
         token = readToken(window.localStorage)
@@ -88,11 +91,11 @@ export function AuthFlow({
         setFlowBusy(false)
         return
       }
-      await api.POST('/auth/sso/confirm', { body: { ssoRequestId: requestId }, alert: false })
-      if (current !== generation.current) return
+      await instance({ url: '/auth/sso/confirm', method: 'POST', data: { ssoRequestId: requestId }, alert: false })
+      if (!isCurrent()) return
       finishSso(requestId)
     } catch (error) {
-      if (current === generation.current) {
+      if (isCurrent()) {
         if (error instanceof ExAxiosError && error.code === 'SESSION_INVALID') {
           setFlowBusy(false)
           return
@@ -105,47 +108,43 @@ export function AuthFlow({
   }
 
   async function submitLogin(draft: LoginDraft) {
+    if (!ownsScope()) return
     const current = ++generation.current
+    const isCurrent = () => current === generation.current && ownsScope()
     authForm.current?.clearServerErrors()
     try {
       if (ssoRequestId !== undefined) {
-        await api.POST('/auth/sso/login', {
-          body: { ssoRequestId, email: draft.email, password: draft.password }, alert: false,
-        })
-        if (current !== generation.current) return
+        await instance({ url: '/auth/sso/login', method: 'POST', data: { ssoRequestId, email: draft.email, password: draft.password }, alert: false })
+        if (!isCurrent()) return
         finishSso(ssoRequestId)
         return
       }
 
-      const result = await api.POST('/auth/login', {
-        body: { email: draft.email, password: draft.password }, alert: false,
-      })
-      if (current !== generation.current) return
+      const result = await instance({ url: '/auth/login', method: 'POST', data: { email: draft.email, password: draft.password }, alert: false })
+      if (!isCurrent()) return
       let oldToken: string | null
       try {
-        oldToken = readToken(window.localStorage)
+        oldToken = readRawToken(window.localStorage)
       } catch {
         authForm.current?.setServerErrors({ form: '浏览器无法读取登录信息，请检查存储设置后重试' })
         return
       }
       if (oldToken !== null && oldToken !== result.token) {
         try {
-          await api.POST('/auth/logout', {
-            headers: { Authorization: `Bearer ${oldToken}` }, alert: false,
-          })
-          if (current !== generation.current) return
+          await instance({ url: '/auth/logout', method: 'POST', headers: { Authorization: `Bearer ${oldToken}` }, alert: false })
+          if (!isCurrent()) return
         } catch (error) {
-          if (current !== generation.current) return
+          if (!isCurrent()) return
           if (!(error instanceof ExAxiosError && error.code === 'SESSION_INVALID')) {
             authForm.current?.setServerErrors({ form: '旧账号退出失败，请重试登录' })
             return
           }
           // ExAxios may already have removed this expired token; never accept a replacement token.
-          if (readToken(window.localStorage) === null) oldToken = null
+          if (readRawToken(window.localStorage) === null) oldToken = null
         }
       }
       try {
-        if (readToken(window.localStorage) !== oldToken) {
+        if (readRawToken(window.localStorage) !== oldToken) {
           authForm.current?.setServerErrors({ form: '登录状态已在其他页面更改，请重试' })
           return
         }
@@ -165,7 +164,7 @@ export function AuthFlow({
         window.location.replace('/')
       }
     } catch (error) {
-      if (current !== generation.current) return
+      if (!isCurrent()) return
       if (error instanceof ExAxiosError) {
         if (isFatalSsoCode(error.code)) setFatalSsoError(error.message)
         else authForm.current?.setServerErrors(mapError(error.code, error.message))

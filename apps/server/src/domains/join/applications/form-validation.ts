@@ -1,6 +1,6 @@
 import { Ajv, type ValidateFunction } from 'ajv'
 import { readContract } from '../../../contract/document.js'
-import type { components } from '@workspace/api-client/types'
+import type { components } from '@workspace/sdk/types'
 import { AuthError } from '@server/src/modules/auth/errors.js'
 
 export type JoinApplicationInput = components['schemas']['JoinApplicationPayload']

@@ -9,13 +9,18 @@ import { ExMessage } from '@exre/exui'
 import { writeToken } from '@web/src/auth/storage'
 import { bindNotificationsToken, captureNotificationWrite } from '@web/src/notifications/notificationsConfig'
 import { bindSettingsToken } from '@web/src/settings/settingsConfig'
-import { ExAxiosError } from '@workspace/sdk/http/browser'
+import { ExAxiosError } from '@workspace/sdk'
 
 const get = vi.hoisted(() => vi.fn())
 const put = vi.hoisted(() => vi.fn())
 const invalidateSession = vi.hoisted(() => vi.fn())
 const authState = vi.hoisted(() => ({ status: 'authenticated' as 'authenticated' | 'anonymous' }))
-vi.mock('@web/src/api/client', () => ({ api: { GET: get, PUT: put } }))
+vi.mock('@workspace/sdk', async importOriginal => ({ ...await importOriginal<object>(),
+  instance: (config: { method?: string }) => {
+    const handlers = { GET: get, PUT: put }
+    return handlers[(config.method ?? 'GET') as keyof typeof handlers](config)
+  },
+}))
 vi.mock('@web/src/auth/AuthContext', () => ({ useAuth: () => ({
   state: { status: authState.status }, invalidateSession, refreshProfile: vi.fn(),
   retrySession: vi.fn(), logout: vi.fn(),
@@ -57,7 +62,7 @@ afterEach(() => {
 })
 
 function respond(overrides: { failPreferences?: boolean } = {}) {
-  get.mockImplementation((path: string) => {
+  get.mockImplementation(({ url: path }: { url: string }) => {
     if (path === '/notification-preferences') {
       return overrides.failPreferences
         ? Promise.reject(new Error('通知设置暂时无法读取'))
@@ -69,7 +74,7 @@ function respond(overrides: { failPreferences?: boolean } = {}) {
 /** 按顺序列出后续偏好读取；`'reject'` 表示一次读取失败，用尽后回落到 `stored`。 */
 function respondSequence(responses: Array<Stored | 'reject'>) {
   let index = 0
-  get.mockImplementation((path: string) => {
+  get.mockImplementation(({ url: path }: { url: string }) => {
     if (path !== '/notification-preferences') return Promise.resolve(profile)
     const next = responses[index]
     index += 1
@@ -113,10 +118,7 @@ describe('notification preferences real seam', () => {
     put.mockResolvedValueOnce({ ...stored, revision: 5, optionalCategories: { announcement: false, personal_update: true } })
     await userEvent.click(a.getByRole('button', { name: '重试保存' }))
     await waitFor(() => expect(put).toHaveBeenCalledTimes(3))
-    expect(put).toHaveBeenLastCalledWith('/notification-preferences', {
-      alert: false,
-      body: { expectedRevision: 4, optionalCategories: { announcement: false, personal_update: true } },
-    })
+    expect(put).toHaveBeenLastCalledWith({ url: '/notification-preferences', method: 'PUT', alert: false, data: { expectedRevision: 4, optionalCategories: { announcement: false, personal_update: true } } })
     await waitFor(() => expect(checkedIn(a, '社区动态')).toBe('false'))
     expect(a.queryByRole('alert')).toBeNull()
     expect(a.queryByText(/已保存/)).toBeNull()
@@ -225,10 +227,7 @@ describe('notification preferences real seam', () => {
     put.mockResolvedValue({ ...stored, revision: 9, optionalCategories: { announcement: false, personal_update: false } })
     await userEvent.click(b.getByRole('switch', { name: '个人提醒' }))
     await waitFor(() => expect(put).toHaveBeenCalledTimes(2))
-    expect(put).toHaveBeenLastCalledWith('/notification-preferences', {
-      alert: false,
-      body: { expectedRevision: 8, optionalCategories: { announcement: false, personal_update: false } },
-    })
+    expect(put).toHaveBeenLastCalledWith({ url: '/notification-preferences', method: 'PUT', alert: false, data: { expectedRevision: 8, optionalCategories: { announcement: false, personal_update: false } } })
     expect(b.queryByText('设置已由其他设备更新，请重新调整。')).toBeNull()
     expect(b.queryByText(/已保存/)).toBeNull()
   })
@@ -340,7 +339,7 @@ describe('notification preferences real seam', () => {
   })
 
   it('keeps preference acceptance independent from receipt write generations and profile failures', async () => {
-    get.mockImplementation((path: string) => {
+    get.mockImplementation(({ url: path }: { url: string }) => {
       if (path === '/notification-preferences') return Promise.resolve(stored)
       return Promise.reject(new Error('资料暂时无法读取'))
     })

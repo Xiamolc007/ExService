@@ -54,7 +54,9 @@ GET、HEAD 和 lookup 不认领、清理或写远端。过期在途读取只派�
 
 development 的 sessionStorage key 保持 `exwebsite.feedback.v2`，community 使用 `exwebsite.feedback.community.v1`，仅保存提交 key／ID；两个入口分别保留原提交并拒绝错入口表单与快照。冻结 prepare、正文与 File 留在当前 SPA 内存；关闭弹窗或站内导航不清理进行中的任务。刷新或关闭浏览器不能保证任务继续执行，重新进入后读取原记录并按需重新选择附件。只有 key 时的 404 不能自动生成新 key；已确认可重试的 prepare 沿用原 key 和冻结载荷，未知结果只能只读 lookup。
 
-会话切换销毁已挂载的反馈表单、清空 pending、File 与快照，并释放当前账号的命令认领。每次命令与迟到成功/失败分支都核对 epoch 和会话；旧命令的完成回调不能覆盖新会话指针、显示旧账号的结果或释放新任务的认领。停止命令不代表撤回已经发出的远端写入。
+反馈流程以 `sessionScopeRevision()` 和 token 共同确定归属。实际切换 API root，即使 token 字符串相同，也销毁已挂载的反馈表单、清空 pending、File 与快照，并释放命令认领；等价的规范化 root 保留草稿。Modal 的挂载 key 包含范围版本，切换后同批更新内立即重开也会创建新表单并读取新 root 的选项。
+
+每个流程阶段在发送前和接收结果后核对 epoch、API 范围与会话，选项读取和页面成功/失败分支也拒绝旧范围结果。范围检查直接参与 Flow 的有效性判定，不依赖 React 卸载完成；旧 prepare 或附件响应不能在新 root 继续上传或 advance，也不能覆盖新会话指针、显示旧账号的结果或释放新任务的认领。停止命令不代表撤回已经发出的远端写入。
 
 维护入口为 `pnpm --filter @workspace/server support-feedback`，具体命令参数见 `.notes/support-center/rfcs/support-feedback-rfc.md` 第 9 节。CLI 只显式运行，支持安全 inspect、任务/附件回填、有限未执行证据确认和过期接收清理计划。回填要求精确 attempt 和远端归属；附件还须校验维护者提供的下载文件字节。清理默认只读，应用需显式确认，只能删除未开始外部同步的过期 receiving。
 

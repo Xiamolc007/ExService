@@ -1,13 +1,18 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ExAxiosError } from '@workspace/sdk/http/browser'
-import { AUTH_TOKEN_KEY, SSO_SUCCESS_KEY, bindSessionHttp, writeToken } from '@web/src/auth/storage'
+import { ExAxiosError, setAccessToken } from '@workspace/sdk'
+import { AUTH_TOKEN_KEY, SSO_SUCCESS_KEY, readToken, syncSessionToken, writeToken } from '@web/src/auth/storage'
 import { bindSettingsToken, settingsConfig } from '@web/src/settings/settingsConfig'
 
 const get = vi.hoisted(() => vi.fn())
 const post = vi.hoisted(() => vi.fn())
-vi.mock('@web/src/api/client', () => ({ api: { GET: get, POST: post } }))
+vi.mock('@workspace/sdk', async importOriginal => ({ ...await importOriginal<object>(), setAccessToken: vi.fn(),
+  instance: (config: { method?: string }) => {
+    const handlers = { GET: get, POST: post }
+    return handlers[(config.method ?? 'GET') as keyof typeof handlers](config)
+  },
+}))
 
 import { AuthProvider, useAuth } from '@web/src/auth/AuthContext'
 
@@ -16,7 +21,7 @@ function CurrentState() {
   return <><p>{auth.state.status}</p><button onClick={auth.logout}>退出登录</button></>
 }
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); get.mockReset(); post.mockReset(); window.localStorage.clear(); window.sessionStorage.clear(); bindSettingsToken(null) })
+afterEach(() => { cleanup(); vi.restoreAllMocks(); get.mockReset(); post.mockReset(); window.localStorage.clear(); window.sessionStorage.clear(); syncSessionToken(); bindSettingsToken(null) })
 
 describe('explicit logout', () => {
   it.each([
@@ -37,13 +42,11 @@ describe('explicit logout', () => {
     await waitFor(() => expect(window.localStorage.getItem(AUTH_TOKEN_KEY)).toBeNull())
     expect(window.sessionStorage.getItem(SSO_SUCCESS_KEY)).toBeNull()
     expect(screen.getByText('anonymous')).toBeTruthy()
-    expect(post).toHaveBeenCalledWith('/auth/logout', { headers: { Authorization: 'Bearer current-token' }, alert: false })
+    expect(post).toHaveBeenCalledWith({ url: '/auth/logout', method: 'POST', headers: { Authorization: 'Bearer current-token' }, alert: false })
   })
 
   it.each(['success', 'failure'] as const)('exits before a pending request settles and ignores its late %s after a new login', async result => {
     writeToken(window.localStorage, 'old-token')
-    const setHttpToken = vi.fn()
-    bindSessionHttp(setHttpToken)
     bindSettingsToken('old-token')
     settingsConfig.profile.snapshot = { id: 'user-one', email: 'private@example.com', nickname: 'Member', qq: null, fivemId: null, avatarUrl: null }
     settingsConfig.profile.status = 'ready'
@@ -55,7 +58,7 @@ describe('explicit logout', () => {
     fireEvent.click(screen.getByRole('button', { name: '退出登录' }))
 
     expect(window.localStorage.getItem(AUTH_TOKEN_KEY)).toBeNull()
-    expect(setHttpToken).toHaveBeenLastCalledWith(null)
+    expect(setAccessToken).toHaveBeenLastCalledWith(null)
     expect(settingsConfig.profile.snapshot).toBeNull()
     expect(screen.getByText('anonymous')).toBeTruthy()
     act(() => writeToken(window.localStorage, 'new-token'))
@@ -128,4 +131,22 @@ describe('auth session restore', () => {
     await waitFor(() => expect(window.localStorage.getItem(AUTH_TOKEN_KEY)).toBe('new-token'))
     expect(screen.getByText('loading')).toBeTruthy()
   })
+})
+
+it('does not restore UI from a retained token after explicit logout fails to delete persistence', async () => {
+  writeToken(window.localStorage, 'retained-token')
+  get.mockResolvedValue({ nickname: 'Member', avatarUrl: null })
+  post.mockRejectedValue(new Error('offline'))
+  render(<AuthProvider><CurrentState /></AuthProvider>)
+  await screen.findByText('authenticated')
+  const remove = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new Error('denied') })
+  fireEvent.click(screen.getByRole('button', { name: '退出登录' }))
+  expect(window.localStorage.getItem(AUTH_TOKEN_KEY)).toBe('retained-token')
+  expect(readToken(window.localStorage)).toBeNull()
+  act(() => { syncSessionToken() })
+  await screen.findByText('anonymous')
+  expect(get).toHaveBeenCalledTimes(1)
+  remove.mockRestore()
+  act(() => writeToken(window.localStorage, 'retained-token'))
+  await screen.findByText('authenticated')
 })

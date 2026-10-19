@@ -1,9 +1,11 @@
-import { spawn } from 'node:child_process'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { spawn } from 'node:child_process'
 import { root } from './shared.mjs'
 import { LocalError } from './local-config.mjs'
 import { readRuntimeConfiguration } from './settings.mjs'
+import { prepareSdk } from './sdk-preparation.mjs'
+import { runOwned, signalScope } from './ownership.mjs'
 
 export function serverSpecification(action, args = [], { workspace = root, inherited = process.env } = {}) {
   const entries = { dev: 'src/server.ts', start: 'dist/server.js', 'db:migrate': 'src/db/migrate.ts', 'db:reset': 'src/db/reset.ts',
@@ -18,19 +20,32 @@ export function serverSpecification(action, args = [], { workspace = root, inher
   return { command: process.execPath, cwd: join(workspace, 'apps/server'), environment,
     args: [...(action === 'start' || compiled ? [] : ['--import', 'tsx']), ...(action === 'dev' ? ['--watch'] : []), entry, ...(args[0] === '--' ? args.slice(1) : args)] }
 }
-export async function main(action = process.argv[2], args = process.argv.slice(3)) {
-  if (action === 'dev') {
-    const { generate } = await import('../api/generate.mjs')
-    await generate('generate')
-  }
-  const spec = serverSpecification(action, args), child = spawn(spec.command, spec.args, { cwd: spec.cwd, env: spec.environment, stdio: 'inherit', shell: false, windowsHide: true })
-  const relay = signal => { if (!child.killed) child.kill(signal) }
-  const interrupt = () => relay('SIGINT'), terminate = () => relay('SIGTERM')
-  process.on('SIGINT', interrupt); process.on('SIGTERM', terminate)
+/** Maintenance stdout/stderr are CLI data, not development log records. */
+async function runServerCli(specification, { signal } = {}) {
+  signal?.throwIfAborted()
+  const child = spawn(specification.command, specification.args, { cwd: specification.cwd,
+    env: specification.environment, stdio: 'inherit', shell: false, windowsHide: true })
+  const interrupt = () => { if (!child.killed) child.kill('SIGTERM') }
+  signal?.addEventListener('abort', interrupt, { once: true })
+  if (signal?.aborted) interrupt()
   try {
-    const result = await new Promise((accept, reject) => { child.once('error', reject); child.once('exit', (code, signal) => accept(code ?? (signal ? 1 : 0))) })
-    process.exitCode = result
-  } finally { process.off('SIGINT', interrupt); process.off('SIGTERM', terminate) }
+    return await new Promise((resolve, reject) => {
+      child.once('error', () => reject(new LocalError('APP_SPAWN_FAILED')))
+      child.once('close', (code, signal) => resolve({ code: code ?? (signal ? 1 : 0) }))
+    })
+  } finally { signal?.removeEventListener('abort', interrupt) }
+}
+
+export async function main(action = process.argv[2], args = process.argv.slice(3),
+  { workspace = root, inherited = process.env, execute, prepare = prepareSdk } = {}) {
+  const scope = signalScope(), onLog = (name, line) => console.log(`[${name}] ${line}`)
+  const executeChild = execute ?? (action === 'dev' ? runOwned : runServerCli)
+  try {
+    if (action === 'dev') await prepare({ workspace, inherited, execute: executeChild, signal: scope.signal, onLog })
+    scope.check()
+    const result = await executeChild(serverSpecification(action, args, { workspace, inherited }), { signal: scope.signal, onLog })
+    if (action !== 'dev' && result?.code !== undefined) process.exitCode = result.code
+  } finally { scope.close() }
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try { await main() } catch (error) { console.error(error instanceof LocalError ? error.message : 'RUNTIME_SERVER_FAILED'); process.exitCode = 1 }

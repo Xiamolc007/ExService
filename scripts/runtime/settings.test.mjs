@@ -766,12 +766,14 @@ test('new parser separates dependency and native commands and rejects unknown/re
 })
 
 test('unified tests exclude real lifecycle probes and remove development credentials from every group', async () => {
-  const specs = testSpecifications({ workspace: root, inherited: { DATABASE_URL: 'developer-private', REDIS_URL: 'developer-redis' } })
+  const options = { workspace: root, tools: { node: process.execPath, corepack: join(root, 'fake-corepack.js') },
+    inherited: { DATABASE_URL: 'developer-private', REDIS_URL: 'developer-redis' } }
+  const specs = testSpecifications(options)
   assert.equal(specs.length, 2); assert.ok(specs.every(spec => !Object.values(spec.environment).includes('developer-private')))
   assert.ok(specs[1].args.every(value => !value.endsWith('-real.test.mjs')))
   assert.ok(specs[1].args.includes('scripts/api/generate.test.mjs'))
   const executed = []
-  await assert.rejects(runTests({ workspace: root }, async spec => {
+  await assert.rejects(runTests(options, async spec => {
     executed.push(spec.name)
     if (spec.name === 'runtime') throw new Error('group failed')
   }, async options => { assert.equal(options.workspace, root); executed.push('API Contract') }), /group failed/)
@@ -787,18 +789,21 @@ test('Contract generation failure prevents every test group from starting', asyn
   assert.deepEqual(executed, [])
 })
 
-test('root development generates before preflight and cannot launch after generation failure', async t => {
+test('root development hands preparation to the locked supervisor rather than generating before lock acquisition', async t => {
   const state = fixture(t).read(), executed = []
   await runtimeEntry.runDevelopmentWithContract(state, { verbose: true }, {
-    generate: async options => { assert.equal(options.workspace, state.workspace); executed.push('generate') },
-    launch: async (received, options) => { assert.equal(received, state); assert.equal(options.verbose, true); executed.push('preflight/start') },
+    prepare: async options => { assert.equal(options.workspace, state.workspace); executed.push('prepare') },
+    launch: async (received, options) => {
+      assert.equal(received, state); assert.equal(options.verbose, true); executed.push('locked lifecycle')
+      await options.prepare({ workspace: state.workspace }); executed.push('preflight/start')
+    },
   })
-  assert.deepEqual(executed, ['generate', 'preflight/start'])
+  assert.deepEqual(executed, ['locked lifecycle', 'prepare', 'preflight/start'])
   await assert.rejects(runtimeEntry.runDevelopmentWithContract(state, {}, {
-    generate: async () => { throw new Error('contract generation failed') },
-    launch: async () => { executed.push('unexpected start') },
+    prepare: async () => { throw new Error('contract generation failed') },
+    launch: async (_state, options) => { await options.prepare({ workspace: state.workspace }); executed.push('unexpected start') },
   }), /contract generation failed/)
-  assert.deepEqual(executed, ['generate', 'preflight/start'])
+  assert.deepEqual(executed, ['locked lifecycle', 'prepare', 'preflight/start'])
 })
 
 test('test watch accepts Contract source changes and ignores generated outputs including Windows paths', () => {
@@ -807,7 +812,7 @@ test('test watch accepts Contract source changes and ignores generated outputs i
   for (const path of ['generated/openapi.json', 'generated\\openapi.json.random.tmp'])
     assert.equal(runtimeTests.isTestSourceChange('api', path), false)
   for (const path of ['generated/schema.d.ts', 'generated\\schema.d.ts.random.tmp'])
-    assert.equal(runtimeTests.isTestSourceChange('packages/api-client/src', path), false)
+    assert.equal(runtimeTests.isTestSourceChange('packages/sdk/src', path), false)
   assert.equal(runtimeTests.isTestSourceChange('apps/server/src', 'modules/auth/plugin.ts'), true)
   assert.equal(runtimeTests.isTestSourceChange('scripts', 'node_modules/tool/index.js'), false)
   assert.equal(runtimeTests.isTestSourceChange('scripts', 'run.log'), false)

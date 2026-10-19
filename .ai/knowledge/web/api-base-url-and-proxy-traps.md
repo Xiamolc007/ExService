@@ -2,11 +2,11 @@
 
 本页记录开发入口能打开、后续请求却失败时容易忽略的原因。进程、代理和可信转发的完整边界见 `.ai/architectures/runtime/runtime-boundaries.md`。
 
-_最后更新：2026-10-15_
+_最后更新：2026-10-19_
 
-## 空字符串 base URL 会绕过 `/api`
+## 空字符串不能成为显式 API root
 
-`VITE_API_BASE_URL=` 与未设置一样需要回退到 `/api`。`apps/web/src/api/client.ts` 使用 `||`；若改为 `??`，空字符串会先被 `new URL` 解析成 Website 根地址，再由共享 Client 把 operation 发向根路径，导致 API 请求 404。此处的 URL 规范化使旧的“模块加载阶段抛错”解释不再适用。
+`VITE_API_BASE_URL=` 与未设置一样选择当前 origin `/api`。`apps/web/src/api/client.ts` 的 `installSdkIntegration()` 每次都先调用 `setBaseUrl`，参数为 `VITE_API_BASE_URL` 的 truthy 值，否则为当前 origin 加 `/api`，再选择应用会话范围和替换旧集成；因此空字符串不会直接传给 setter，从自定义 root 返回默认配置也会重设 SDK root。非空非法根地址会被 SDK 拒绝，保留原应用范围和集成，不能回退到 Website 根路径发送请求。SDK 配置隔离见 `.ai/architectures/sdk/client-boundaries.md`，Web 按 root 保存凭据及自定义 root 升级后的首次登录要求见 `.ai/architectures/web/authentication-flow.md`。
 
 ## 代理目标与启动方式有关
 
