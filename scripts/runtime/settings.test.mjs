@@ -766,12 +766,14 @@ test('new parser separates dependency and native commands and rejects unknown/re
 })
 
 test('unified tests exclude real lifecycle probes and remove development credentials from every group', async () => {
-  const specs = testSpecifications({ workspace: root, inherited: { DATABASE_URL: 'developer-private', REDIS_URL: 'developer-redis' } })
+  const options = { workspace: root, tools: { node: process.execPath, corepack: join(root, 'fake-corepack.js') },
+    inherited: { DATABASE_URL: 'developer-private', REDIS_URL: 'developer-redis' } }
+  const specs = testSpecifications(options)
   assert.equal(specs.length, 2); assert.ok(specs.every(spec => !Object.values(spec.environment).includes('developer-private')))
   assert.ok(specs[1].args.every(value => !value.endsWith('-real.test.mjs')))
   assert.ok(specs[1].args.includes('scripts/api/generate.test.mjs'))
   const executed = []
-  await assert.rejects(runTests({ workspace: root }, async spec => {
+  await assert.rejects(runTests(options, async spec => {
     executed.push(spec.name)
     if (spec.name === 'runtime') throw new Error('group failed')
   }, async options => { assert.equal(options.workspace, root); executed.push('API Contract') }), /group failed/)
