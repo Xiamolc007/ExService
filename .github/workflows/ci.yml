@@ -55,6 +55,9 @@ jobs:
       - name: Install Website dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Chromium for SDK Browser tests
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Verify generated API Contract
         run: pnpm api:check
 

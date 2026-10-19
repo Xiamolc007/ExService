@@ -1,5 +1,5 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
-import type { operations } from '@workspace/api-client/types'
+import type { operations } from '@workspace/sdk/types'
 
 export type OperationId = keyof operations
 type Parameter<Id extends OperationId, Key extends 'query' | 'path'> =

@@ -1,6 +1,7 @@
-import type { components } from '@workspace/api-client'
+import type { components } from '@workspace/sdk/types'
 import { proxy } from 'valtio'
 import type { SettingsTheme } from '@workspace/components'
+import { sessionScopeRevision } from '@web/src/auth/storage'
 
 export type CurrentUser = components['schemas']['CurrentUser']
 
@@ -14,13 +15,16 @@ export const settingsConfig = proxy({
 })
 
 let ownerToken: string | null = null
+let ownerScope = sessionScopeRevision()
 let revision = 0
 let writing = false
 let consumers = 0
 
 export function bindSettingsToken(token: string | null) {
-  if (ownerToken === token) return
+  const scope = sessionScopeRevision()
+  if (ownerToken === token && ownerScope === scope) return
   ownerToken = token
+  ownerScope = scope
   revision += 1
   writing = false
   settingsConfig.profile.snapshot = null
@@ -35,7 +39,7 @@ export function beginSettingsRequest(token: string) {
 }
 
 export function settingsRequestCurrent(token: string, requestRevision: number) {
-  return ownerToken === token && revision === requestRevision
+  return ownerScope === sessionScopeRevision() && ownerToken === token && revision === requestRevision
 }
 
 export function attachSettingsConsumer() {
@@ -57,5 +61,5 @@ export function beginSettingsWrite(token: string) {
 }
 
 export function endSettingsWrite(token: string, requestRevision: number) {
-  if (ownerToken === token && revision === requestRevision) writing = false
+  if (settingsRequestCurrent(token, requestRevision)) writing = false
 }

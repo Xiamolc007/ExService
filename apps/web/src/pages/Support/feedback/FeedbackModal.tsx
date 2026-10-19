@@ -28,7 +28,7 @@ import {
 } from "@exre/exui";
 import { ClickUpFieldInput, FileUploader } from "@workspace/components";
 import { ArrowLeft } from "lucide-react";
-import type { components } from "@workspace/api-client";
+import type { components } from "@workspace/sdk/types";
 import { FEEDBACK_LIMITS, FREQUENCIES } from "@workspace/common/feedback-content";
 import { readToken, subscribeSessionChanges } from "../../../auth/storage";
 import { feedbackPort, getFeedbackOptions } from "./api";

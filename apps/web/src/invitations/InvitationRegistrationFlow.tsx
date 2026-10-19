@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router'
 import { Button, ExMessage } from '@exre/exui'
 import { InvitationEmailForm, InvitationCodeForm, InvitationProfileForm, invitationEmailSchema, type InvitationFormHandle, type InvitationFormErrors, type InvitationProfileValues } from '@workspace/components'
-import type { components } from '@workspace/api-client'
-import { api } from '@web/src/api/client'
-import { ExAxiosError } from '@workspace/sdk/http/browser'
+import type { components } from '@workspace/sdk/types'
+import { instance, ExAxiosError } from '@workspace/sdk'
+import { sessionScopeRevision, subscribeSessionChanges } from '@web/src/auth/storage'
 
 interface Props { presentation: 'page' | 'modal'; initialEmail?: string; onLogin?: (email: string) => void; onJoin?: () => void }
 type Verified = components['schemas']['InvitationVerified']
@@ -23,7 +23,13 @@ function readEntry(presentation: Props['presentation'], initialEmail: string) {
   return { email: email.success && emails.length === 1 ? email.data : initialEmail, code: !invalid && codes.length === 1 ? codes[0]! : null, error: invalid }
 }
 
-export function InvitationRegistrationFlow({ presentation, initialEmail = '', onLogin, onJoin }: Props) {
+export function InvitationRegistrationFlow(props: Props) {
+  const scope = useSyncExternalStore(subscribeSessionChanges, sessionScopeRevision, sessionScopeRevision)
+  // A different API root needs fresh RHF owners as well as fresh request guards.
+  return <InvitationScopeFlow key={scope} {...props} scope={scope} />
+}
+
+function InvitationScopeFlow({ presentation, initialEmail = '', onLogin, onJoin, scope }: Props & { scope: number }) {
   const navigate = useNavigate()
   const entry = useRef<ReturnType<typeof readEntry> | null>(null)
   if (entry.current === null) entry.current = readEntry(presentation, initialEmail)
@@ -45,7 +51,8 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
   const timer = useRef<number | null>(null), finished = useRef(false)
   const autoChain = useRef<ReturnType<typeof runAutomatic> | null>(null)
 
-  const valid = (current: number) => mounted.current && current === generation.current
+  const ownsScope = () => scope === sessionScopeRevision()
+  const valid = (current: number) => mounted.current && current === generation.current && ownsScope()
   function formFor(targetStep: Step) {
     return targetStep === 'email' ? emailForm.current : targetStep === 'code' ? codeForm.current : targetStep === 'profile' ? profileForm.current : null
   }
@@ -84,12 +91,13 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
   }
   function accepted(data: Verified) { clearFeedback(); grant.current = data; setEmail(data.email); setNickname(data.nickname); setRetry(false); setStep('profile') }
   async function runAutomatic(current: number, targetEmail: string, code: string) {
+    if (!valid(current)) return null
     let inspected
-    try { inspected = await api.POST('/auth/invitations/check', { body: { email: targetEmail }, alert: false }) }
+    try { inspected = await instance({ url: '/auth/invitations/check', method: 'POST', data: { email: targetEmail }, alert: false }) }
     catch (error) { return { stage: 'checkFailure' as const, error } }
     if (!valid(current)) return null
     try {
-      const result = await api.POST('/auth/invitations/verify', { body: { email: inspected.email, code }, alert: false })
+      const result = await instance({ url: '/auth/invitations/verify', method: 'POST', data: { email: inspected.email, code }, alert: false })
       return { stage: 'verify' as const, result, eligibility: inspected }
     } catch (error) { return { stage: 'verifyFailure' as const, error, eligibility: inspected } }
   }
@@ -141,50 +149,50 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
   }
   function back() { invalidate(); setNickname(''); setLockedUntil(0); setResendUntil(0); setStep('email') }
   async function check(targetEmail: string) {
-    if (pending.current) return
+    if (!ownsScope() || pending.current) return
     const current = ++generation.current
     pending.current = true; setBusy(true); setEmail(targetEmail); clearFeedback()
     try {
-      const result = await api.POST('/auth/invitations/check', { body: { email: targetEmail }, alert: false })
+      const result = await instance({ url: '/auth/invitations/check', method: 'POST', data: { email: targetEmail }, alert: false })
       if (!valid(current)) return
       cooldown(result); setEmail(result.email); setStep('code')
     } catch (error) { if (valid(current)) checkFailure(current, error) }
     finally { if (valid(current)) { pending.current = false; setBusy(false) } }
   }
   async function verify(code: string) {
-    if (pending.current || Date.now() < lockedUntil) return
+    if (!ownsScope() || pending.current || Date.now() < lockedUntil) return
     const current = generation.current
     pending.current = true; setBusy(true); setRetry(false); clearFeedback()
     try {
-      const result = await api.POST('/auth/invitations/verify', { body: { email, code }, alert: false })
+      const result = await instance({ url: '/auth/invitations/verify', method: 'POST', data: { email, code }, alert: false })
       if (!valid(current)) return
       accepted(result)
     } catch (error) { if (valid(current)) verifyFailure(current, error) }
     finally { if (valid(current)) { pending.current = false; setBusy(false) } }
   }
   async function resend() {
-    if (pending.current || Date.now() < lockedUntil || Date.now() < resendUntil) return false
+    if (!ownsScope() || pending.current || Date.now() < lockedUntil || Date.now() < resendUntil) return false
     const current = generation.current
     pending.current = true; setBusy(true); clearFeedback()
     try {
-      const result = await api.POST('/auth/invitations/code', { body: { email }, alert: false })
+      const result = await instance({ url: '/auth/invitations/code', method: 'POST', data: { email }, alert: false })
       if (!valid(current)) return false
       cooldown(result); setRetry(false); ExMessage.info('如邮箱符合邀请条件，将发送验证码'); return true
     } catch { if (valid(current)) deliverError('code', current, { form: '发送失败，请重试', formKind: 'send-failed' }); return false }
     finally { if (valid(current)) { pending.current = false; setBusy(false) } }
   }
   function login() {
-    if (finished.current) return
+    if (!ownsScope() || finished.current) return
     finished.current = true; invalidate()
     if (presentation === 'page') navigate('/login', { replace: true, state: { email } })
     else onLogin?.(email)
   }
   async function complete(values: InvitationProfileValues) {
-    if (pending.current || grant.current === null) return
+    if (!ownsScope() || pending.current || grant.current === null) return
     const current = generation.current, completionToken = grant.current.completionToken
     pending.current = true; setBusy(true); clearFeedback()
     try {
-      await api.POST('/auth/invitations/complete', { body: { completionToken, ...values }, alert: false })
+      await instance({ url: '/auth/invitations/complete', method: 'POST', data: { completionToken, ...values }, alert: false })
       if (!valid(current)) return
       clearFeedback(); grant.current = null; setNickname(''); setStep('registered'); ExMessage.info('注册成功，请前往登录')
     } catch (error) { if (valid(current)) {
@@ -208,7 +216,7 @@ export function InvitationRegistrationFlow({ presentation, initialEmail = '', on
     pendingFeedback.current = null
     target.setServerErrors(feedback.errors)
   }, [step])
-  const join = () => { invalidate(); if (onJoin) onJoin(); else navigate('/communities/rifling-911') }
+  const join = () => { if (!ownsScope()) return; invalidate(); if (onJoin) onJoin(); else navigate('/communities/rifling-911') }
   return <>
     {step === 'email' && <InvitationEmailForm ref={emailForm} initialEmail={email} busy={busy} onSubmit={check} onEmailChange={invalidate} onLogin={login} onJoin={join} />}
     {step === 'code' && <InvitationCodeForm ref={codeForm} email={email} busy={busy} retry={retry} resendSeconds={Math.max(0, Math.ceil((resendUntil - clock) / 1000))} lockedSeconds={Math.max(0, Math.ceil((lockedUntil - clock) / 1000))} onVerify={verify} onResend={resend} onBack={back} />}

@@ -2,7 +2,8 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
 import { ThemeProvider, GlassSeed, ExMessageContext } from '@exre/exui'
-import { api } from '@web/src/api/client'
+import { instance } from '@workspace/sdk'
+import { installSdkIntegration } from '@web/src/api/client'
 import { App } from '@web/src/App'
 import { SettingsThemeProjection } from '@web/src/settings/SettingsThemeProjection'
 import { WebsiteThemePreferenceReconciliation } from '@web/src/settings/WebsiteThemePreferenceReconciliation'
@@ -11,6 +12,9 @@ import { WebsiteThemePreferenceReconciliation } from '@web/src/settings/WebsiteT
 import '@exre/exui/style.css'
 import '@web/src/styles/website-theme.css'
 import '@web/src/styles/index.scss'
+
+const disposeSdkIntegration = installSdkIntegration()
+import.meta.hot?.dispose(disposeSdkIntegration)
 
 document.documentElement.classList.add('website-theme-profile')
 
@@ -55,7 +59,7 @@ createRoot(container).render(
  */
 async function checkServer(): Promise<void> {
   try {
-    await api.GET('/health', { alert: false })
+    await instance({ url: '/health', method: 'GET', alert: false })
 
     console.info('[dev] GET /api/health reached the Server.')
   } catch (cause) {

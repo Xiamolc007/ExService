@@ -2,11 +2,16 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router'
-import { ExAxiosError } from '@workspace/sdk/http/browser'
+import { ExAxiosError } from '@workspace/sdk'
 import { AUTH_TOKEN_KEY, writeToken } from '@web/src/auth/storage'
 
 const get = vi.hoisted(() => vi.fn())
-vi.mock('@web/src/api/client', () => ({ api: { GET: get } }))
+vi.mock('@workspace/sdk', async importOriginal => ({ ...await importOriginal<object>(),
+  instance: (config: { method?: string }) => {
+    const handlers = { GET: get }
+    return handlers[(config.method ?? 'GET') as keyof typeof handlers](config)
+  },
+}))
 
 import { SignedOutPage } from '@web/src/pages/IdentityPage/SignedOutPage'
 
@@ -46,9 +51,7 @@ describe('signed-out landing', () => {
       throw new ExAxiosError('http', 'SESSION_INVALID', 'Invalid session', { status: 401 })
     })
     render(<MemoryRouter><SignedOutPage /></MemoryRouter>)
-    await waitFor(() => expect(get).toHaveBeenCalledWith('/auth/me', {
-      headers: { Authorization: 'Bearer old-token' }, alert: false,
-    }))
+    await waitFor(() => expect(get).toHaveBeenCalledWith({ url: '/auth/me', method: 'GET', headers: { Authorization: 'Bearer old-token' }, alert: false }))
     expect(window.localStorage.getItem(AUTH_TOKEN_KEY)).toBe('new-token')
   })
 

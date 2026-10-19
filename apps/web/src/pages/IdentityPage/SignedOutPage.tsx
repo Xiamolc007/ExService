@@ -2,8 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { Button, Spinner } from '@exre/exui'
 import { CircleAlert, CircleCheck, Info } from 'lucide-react'
-import { api } from '@web/src/api/client'
-import { ExAxiosError } from '@workspace/sdk/http/browser'
+import { instance, ExAxiosError } from '@workspace/sdk'
 import { readToken, removeMatchingToken, subscribeSessionChanges } from '@web/src/auth/storage'
 
 import styles from './SignedOutStatus.module.scss'
@@ -33,9 +32,7 @@ export function SignedOutPage() {
       return
     }
     try {
-      await api.GET('/auth/me', {
-        headers: { Authorization: `Bearer ${token}` }, alert: false,
-      })
+      await instance({ url: '/auth/me', method: 'GET', headers: { Authorization: `Bearer ${token}` }, alert: false })
       if (generation.current !== current) return
       if (readToken(window.localStorage) !== token) {
         setResult('unavailable')

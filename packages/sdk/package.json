@@ -12,27 +12,8 @@
       "node": "./dist/node.js",
       "default": "./dist/browser.js"
     },
-    "./browser": {
-      "types": "./dist/browser.d.ts",
-      "default": "./dist/browser.js"
-    },
-    "./node": {
-      "types": "./dist/node.d.ts",
-      "default": "./dist/node.js"
-    },
-    "./http": {
-      "types": "./dist/http-browser.d.ts",
-      "browser": "./dist/http-browser.js",
-      "node": "./dist/http-node.js",
-      "default": "./dist/http-browser.js"
-    },
-    "./http/browser": {
-      "types": "./dist/http-browser.d.ts",
-      "default": "./dist/http-browser.js"
-    },
-    "./http/node": {
-      "types": "./dist/http-node.d.ts",
-      "default": "./dist/http-node.js"
+    "./types": {
+      "types": "./dist/schema.d.ts"
     }
   },
   "files": [
@@ -52,12 +33,13 @@
     "@exre/exui": "^0.8.0"
   },
   "peerDependenciesMeta": {
-    "@exre/exui": { "optional": true }
+    "@exre/exui": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@exre/exui": "^0.8.0",
     "@types/node": "^22.20.3",
-    "@workspace/api-client": "workspace:*",
     "rollup": "^4.52.5",
     "rollup-plugin-dts": "^6.5.1",
     "typescript": "^5.9.3",

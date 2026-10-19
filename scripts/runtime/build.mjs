@@ -1,24 +1,19 @@
-import { existsSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { root } from './shared.mjs'
 import { runOwned } from './ownership.mjs'
 import { LocalError } from './local-config.mjs'
-import { operatingEnvironment, environmentFile, withNodePath } from './settings.mjs'
+import { preparationContext, sdkPreparationSpecifications } from './sdk-preparation.mjs'
 import { reporter } from './output.mjs'
 
 /** Build needs no runtime receipt, database, Docker or backend credentials. */
-export function buildSpecifications({ workspace = root, inherited = process.env } = {}) {
-  const configured = environmentFile(join(workspace, '.env.local'))
-  const node = inherited.INTEGRATION_NODE_BIN ?? configured.INTEGRATION_NODE_BIN ?? process.execPath,
-    corepack = inherited.INTEGRATION_COREPACK_JS ?? configured.INTEGRATION_COREPACK_JS ?? join(dirname(process.execPath), 'node_modules/corepack/dist/corepack.js')
-  if (!existsSync(node) || !existsSync(corepack)) throw new LocalError('RUNTIME_BUILD_TOOLS_MISSING')
-  const os = withNodePath(operatingEnvironment(inherited), node)
+export function buildSpecifications({ workspace = root, inherited = process.env, tools } = {}) {
+  const context = preparationContext({ workspace, inherited, tools }), { node, corepack } = context.tools
+  const os = context.environment
   const publicEnv = { ...os, NODE_ENV: 'production', VITE_API_BASE_URL: '/api' }
   return [
-    { name: 'API Contract', command: node, cwd: workspace,
-      args: [join(workspace, 'scripts/api/generate.mjs'), 'generate'], environment: publicEnv },
-    ...['@workspace/sdk', '@workspace/web', '@workspace/server'].map(name => ({ name, command: node, cwd: workspace,
+    ...sdkPreparationSpecifications({ workspace, inherited, tools: context.tools }).map(spec => ({ ...spec, environment: publicEnv })),
+    ...['@workspace/web', '@workspace/server'].map(name => ({ name, command: node, cwd: workspace,
       args: [corepack, 'pnpm', '--filter', name, 'build'], environment: publicEnv })),
   ]
 }

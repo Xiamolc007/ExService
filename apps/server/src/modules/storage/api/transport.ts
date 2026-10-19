@@ -1,4 +1,4 @@
-import type { components } from '@workspace/api-client/types'
+import type { components } from '@workspace/sdk/types'
 import type { Medium } from '../service.js'
 import type { FastifyInstance, FastifyReply, FastifyRequest, RouteOptions } from 'fastify'
 import { authenticateBearer } from '@server/src/modules/auth/api/security.js'

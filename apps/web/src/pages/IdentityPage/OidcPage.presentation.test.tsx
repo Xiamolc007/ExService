@@ -5,7 +5,12 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const post = vi.hoisted(() => vi.fn())
-vi.mock('@web/src/api/client', () => ({ api: { POST: post } }))
+vi.mock('@workspace/sdk', async importOriginal => ({ ...await importOriginal<object>(),
+  instance: (config: { method?: string }) => {
+    const handlers = { POST: post }
+    return handlers[(config.method ?? 'GET') as keyof typeof handlers](config)
+  },
+}))
 vi.mock('@web/src/pages/AuthPage/AuthBackdrop', () => ({ AuthBackdrop: () => null }))
 
 class TestResizeObserver {

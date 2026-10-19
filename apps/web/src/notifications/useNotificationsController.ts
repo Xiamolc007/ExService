@@ -2,10 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useSnapshot } from 'valtio'
 import { ExMessage } from '@exre/exui'
-import { api } from '@web/src/api/client'
+import { instance, ExAxiosError } from '@workspace/sdk'
 import { useAuth } from '@web/src/auth/AuthContext'
 import { readToken, subscribeSessionChanges } from '@web/src/auth/storage'
-import { ExAxiosError } from '@workspace/sdk/http/browser'
 import {
   applyUnreadCount, bindNotificationsToken, captureNotificationRead, captureNotificationWrite,
   isCurrentNotificationGeneration, mergeNotificationPage, notificationsConfig,
@@ -131,7 +130,7 @@ export function useNotificationsController() {
     const accepted = () => mounted.current && requestId === summaryRequestId.current && isCurrentNotificationGeneration(generation)
     notificationsConfig.summary.status = 'loading'; notificationsConfig.summary.error = null
     try {
-      const result = await api.GET('/notifications/summary', { alert: false })
+      const result = await instance({ url: '/notifications/summary', method: 'GET', alert: false })
       if (!accepted()) return
       scheduler.recordSuccess(); applyUnreadCount(result.unreadCount, result.readThroughToken)
     } catch (error) {
@@ -239,9 +238,9 @@ export function useNotificationsController() {
     const promise = Promise.resolve().then(async () => {
       if (!accepted()) return
       try {
-        const result = await api.GET('/notifications', { alert: false, params: { query: {
+        const result = await instance({ url: '/notifications', method: 'GET', alert: false, params: {
           view: view === 'unread' ? 'unread' : 'history', limit: PAGE_LIMIT, ...(cursor === null ? {} : { cursor }),
-        } } })
+        } })
         if (!accepted()) return
         if (cursor !== null) run.completed.add(cursor)
         slice.items = cursor === null ? dedupe(result.items) : mergeNotificationPage(slice, result)
@@ -281,7 +280,7 @@ export function useNotificationsController() {
       && detailRequestId.current === requestId && isCurrentNotificationGeneration(generation)
     setDetail(null); setDetailStatus('loading')
     try {
-      const result = await api.GET('/notifications/{notificationId}', { alert: false, params: { path: { notificationId: receiptId } } })
+      const result = await instance({ url: '/notifications/{notificationId}', method: 'GET', alert: false, pathParams: { notificationId: receiptId } })
       if (!accepted()) return
       setDetail(result); setDetailStatus('ready')
     } catch (error) {
@@ -300,8 +299,7 @@ export function useNotificationsController() {
     const accepted = () => mounted.current && requestId === readRequestId.current && isCurrentNotificationGeneration(generation)
     setReadPending(true); setReadError(null)
     try {
-      const result = await api.PATCH('/notifications/{notificationId}/state', { alert: false,
-        params: { path: { notificationId: receiptId } }, body: { read, expectedRevision } })
+      const result = await instance({ url: '/notifications/{notificationId}/state', method: 'PATCH', alert: false, pathParams: { notificationId: receiptId }, data: { read, expectedRevision } })
       if (!accepted()) return
       patchLocalItem(receiptId, result.stateRevision, result.read)
       setDetail(current => current?.receiptId !== receiptId ? current : {
@@ -362,7 +360,7 @@ export function useNotificationsController() {
         readAllIntent.current = { requestId: newRequestId(), readThroughToken: fresh.readThroughToken, count: fresh.unreadCount }
         setConfirm({ kind, count: fresh.unreadCount })
       } else {
-        const result = await api.POST('/notifications/clear-preview', { alert: false, body: {} })
+        const result = await instance({ url: '/notifications/clear-preview', method: 'POST', alert: false, data: {} })
         if (!accepted()) return
         if (result.itemCount === 0) {
           void loadSummary(); void loadPage('all', null, { force: true }); ExMessage.info('暂无可清理通知。')
@@ -403,13 +401,11 @@ export function useNotificationsController() {
     setBulkPending(kind); setConfirmError(null)
     try {
       if (kind === 'read-all' && readIntent !== null) {
-        await api.POST('/notifications/read-all', { alert: false,
-          body: { requestId: readIntent.requestId, readThroughToken: readIntent.readThroughToken } })
+        await instance({ url: '/notifications/read-all', method: 'POST', alert: false, data: { requestId: readIntent.requestId, readThroughToken: readIntent.readThroughToken } })
         if (!accepted()) return
         ExMessage.info('已标记本次选定通知，新到通知仍未读。')
       } else if (preview !== null) {
-        const result = await api.POST('/notifications/clear-all', { alert: false,
-          body: { requestId: preview.requestId, clearSnapshotToken: preview.token } })
+        const result = await instance({ url: '/notifications/clear-all', method: 'POST', alert: false, data: { requestId: preview.requestId, clearSnapshotToken: preview.token } })
         if (!accepted()) return
         ExMessage.info(`已清理 ${result.affectedCount} 条，跳过 ${result.skippedCount} 条；新到通知仍保留。`)
         detailRequestId.current += 1; setSelectedId(null); setDetail(null); setDetailStatus('idle')

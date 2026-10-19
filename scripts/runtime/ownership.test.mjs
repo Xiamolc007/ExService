@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { setTimeout as delay } from 'node:timers/promises'
 import { acquireLock, identityAlive, processIdentity, redact, sameIdentity, spawnOwned, stopOwned } from './ownership.mjs'
 import { assertPortFree, supervise } from './local-dev.mjs'
-import { LocalError } from './local-config.mjs'
+import { atomicJson, LocalError, readJson } from './local-config.mjs'
 import { createServer } from 'node:net'
 import { existsSync } from 'node:fs'
 const identity = pid => ({ pid, creation: 'creation', executable: 'node', commandDigest: 'command' })
@@ -146,6 +146,37 @@ test('real fixture child and descendants are cleaned while an independent child 
     assert.equal(identityAlive(descendantIdentity), false)
     assert.equal(identityAlive(foreign.identity), true)
   } finally { await stopOwned([...(owned ? [owned] : []), foreign]) }
+})
+
+test('control stop during real owned SDK preparation cleans its helper and descendants before releasing the lock', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'owned-sdk-prepare-')), messages = []
+  const lock = acquireLock({ mode: 'local', fingerprint: 'fixture', directory }), release = lock.release
+  let preparer, descendant, launched = false
+  lock.release = () => {
+    assert.equal(identityAlive(preparer), false); assert.equal(identityAlive(descendant), false); release()
+  }
+  const running = supervise({ directory, lock, mode: 'local', fingerprint: 'fixture', pollInterval: 25,
+    specifications: [{ name: 'server' }], readiness: async () => { launched = true }, onLog: (_name, line) => messages.push(line),
+    prepareGeneration: ({ execute }) => execute({ name: 'SDK build', command: process.execPath, cwd: resolve('.'),
+      args: [resolve('tests/dev/fixture-process.mjs'), 'descendant'], environment: process.env }) })
+  try {
+    for (let count = 0; count < 200; count++) {
+      if (messages.some(line => line.startsWith('DESCENDANT:')) && readJson(join(directory, 'run.json')).children.length) break
+      await delay(50)
+    }
+    const run = readJson(join(directory, 'run.json'))
+    assert.equal(run.state, 'preparing'); assert.equal(run.children.length, 1)
+    assert.equal(run.children[0].name, 'SDK build'); preparer = run.children[0].identity
+    const pid = Number(messages.find(line => line.startsWith('DESCENDANT:'))?.split(':')[1])
+    assert.ok(pid); descendant = processIdentity(pid)
+    atomicJson(join(directory, 'control-request.json'), { runId: lock.record.runId, action: 'stop' })
+    await running
+    assert.equal(launched, false); assert.equal(existsSync(lock.path), false)
+    assert.equal(readJson(join(directory, 'run.json')).state, 'stopped')
+  } finally {
+    atomicJson(join(directory, 'control-request.json'), { runId: lock.record.runId, action: 'stop' })
+    await running.catch(() => {}); release(); rmSync(directory, { recursive: true, force: true })
+  }
 })
 test('child logs redact original database credentials, identity URLs/tokens/challenges and SQL', () => {
   const environment = { DATABASE_URL: 'postgres://user:secret@host/exre', AUTH_CODE_HMAC_KEY: 'sensitive-hmac', IDENTITY_FLOW_KEY: 'flow-secret' }

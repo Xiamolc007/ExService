@@ -2,16 +2,21 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { writeToken } from '@web/src/auth/storage'
+import { selectSessionScope, writeToken } from '@web/src/auth/storage'
 import { bindNotificationsToken, captureNotificationWrite, notificationsConfig } from '@web/src/notifications/notificationsConfig'
-import { ExAxiosError } from '@workspace/sdk/http/browser'
+import { ExAxiosError } from '@workspace/sdk'
 import type { NotificationPreferencesDraft, PreferenceField } from '@workspace/components'
 
 const get = vi.hoisted(() => vi.fn())
 const put = vi.hoisted(() => vi.fn())
 const invalidateSession = vi.hoisted(() => vi.fn())
 const authState = vi.hoisted(() => ({ status: 'authenticated' as 'authenticated' | 'anonymous' }))
-vi.mock('@web/src/api/client', () => ({ api: { GET: get, PUT: put } }))
+vi.mock('@workspace/sdk', async importOriginal => ({ ...await importOriginal<object>(),
+  instance: (config: { method?: string }) => {
+    const handlers = { GET: get, PUT: put }
+    return handlers[(config.method ?? 'GET') as keyof typeof handlers](config)
+  },
+}))
 vi.mock('@web/src/auth/AuthContext', () => ({ useAuth: () => ({
   state: { status: authState.status }, invalidateSession, refreshProfile: vi.fn(),
   retrySession: vi.fn(), logout: vi.fn(),
@@ -40,6 +45,7 @@ afterEach(() => {
   authState.status = 'authenticated'
   bindNotificationsToken(null)
   window.localStorage.clear()
+  selectSessionScope('/api')
 })
 
 /** 一个设置宿主；`active` 与 SettingsExperience 的分类投影同源。 */
@@ -63,6 +69,24 @@ function deferred<T = unknown>() {
 const updated = (overrides: Partial<Stored> = {}) => ({ ...stored, ...overrides })
 
 describe('notification preferences controller', () => {
+  it('clears preferences and discards a same-token old-root read', async () => {
+    selectSessionScope('/scope-a')
+    writeToken(window.localStorage, 'session-token')
+    const pending = deferred()
+    get.mockResolvedValueOnce(stored).mockReturnValueOnce(pending.promise)
+    const target = host()
+    await load(target)
+    expect(notificationsConfig.preferences.snapshot).toEqual(stored)
+    let old!: Promise<void>
+    act(() => { old = target.result.current.load() })
+    window.localStorage.setItem(`exwebsite.auth.token:${encodeURIComponent(new URL('/scope-b', window.location.origin).href)}`, 'session-token')
+    act(() => selectSessionScope('/scope-b'))
+    expect(notificationsConfig.preferences.snapshot).toBeNull()
+    await act(async () => { pending.resolve(stored); await old })
+    expect(notificationsConfig.preferences.snapshot).toBeNull()
+    expect(notificationsConfig.preferences.status).toBe('idle')
+  })
+
   it('settles an already-sent PUT into a surviving owner after its original owner exits', async () => {
     get.mockResolvedValue(stored)
     const writer = host(), surviving = host()
@@ -229,7 +253,9 @@ describe('notification preferences controller', () => {
     expect(await act(async () => await duplicate)).toEqual(canonical)
     expect(canonicalResult).toEqual(canonical)
   })
-  it.each(['success', 'error'] as const)('isolates old-account save %s and finally from a new-account pending save', async outcome => {
+  it.each([
+    ['token', 'success'], ['token', 'error'], ['scope', 'success'], ['scope', 'error'],
+  ] as const)('isolates an old %s save returning %s from a new pending save', async (change, outcome) => {
     get.mockResolvedValue(stored)
     const old = deferred<Stored>(), next = deferred<Stored>()
     put.mockReturnValueOnce(old.promise).mockReturnValueOnce(next.promise)
@@ -238,17 +264,22 @@ describe('notification preferences controller', () => {
     let first!: Promise<unknown>
     act(() => { first = send(hook, 'announcement').catch(() => null) })
     await act(async () => {
-      writeToken(window.localStorage, 'other-token'); bindNotificationsToken('other-token')
+      if (change === 'token') { writeToken(window.localStorage, 'other-token'); bindNotificationsToken('other-token') }
+      else {
+        window.localStorage.setItem(`exwebsite.auth.token:${encodeURIComponent(new URL('/scope-b', window.location.origin).href)}`, 'session-token')
+        selectSessionScope('/scope-b')
+      }
       await hook.result.current.load()
     })
     let second!: Promise<unknown>
     act(() => { second = send(hook, 'personal_update') })
     await act(async () => {
       if (outcome === 'success') old.resolve(updated({ revision: 99 }))
-      else old.reject(new Error('old private error'))
+      else old.reject(new ExAxiosError('http', 'SESSION_INVALID', 'expired', { status: 401 }))
       await first
     })
     expect(hook.result.current.slice.saving).toBe(true)
+    expect(invalidateSession).not.toHaveBeenCalled()
     expect(notificationsConfig.preferences.snapshot?.revision).toBe(3)
     await act(async () => { next.resolve(updated({ revision: 4 })); await second })
     expect(hook.result.current.slice.saving).toBe(false)
@@ -313,7 +344,7 @@ describe('notification preferences controller', () => {
     await act(async () => { pending.resolve(updated({ revision: 99 })); await task })
     expect(notificationsConfig.preferences.snapshot?.revision).toBe(99)
     // 静默保存的主证据：请求本身不带 alert，模块里也没有成功文案字段。
-    expect(put.mock.calls[0]?.[1]).toMatchObject({ alert: false })
+    expect(put.mock.calls[0]?.[0]).toMatchObject({ alert: false })
     expect('message' in notificationsConfig.preferences).toBe(false)
   })
 
@@ -322,19 +353,16 @@ describe('notification preferences controller', () => {
     put.mockResolvedValue(updated({ revision: 4, optionalCategories: { announcement: false, personal_update: false } }))
     const hook = host()
     await load(hook)
-    expect(get).toHaveBeenCalledWith('/notification-preferences', { alert: false })
+    expect(get).toHaveBeenCalledWith({ url: '/notification-preferences', method: 'GET', alert: false })
     expect(hook.result.current.slice.preferences).toEqual({ announcement: true, personal_update: false })
     await act(async () => {
       await send(hook, 'announcement', { announcement: false, personal_update: false })
     })
     // 必要类别只留在规范缓存，PUT 精确只有 expectedRevision 与两个可选字段。
-    expect(put).toHaveBeenCalledWith('/notification-preferences', {
-      alert: false,
-      body: {
+    expect(put).toHaveBeenCalledWith({ url: '/notification-preferences', method: 'PUT', alert: false, data: {
         expectedRevision: 3,
         optionalCategories: { announcement: false, personal_update: false },
-      },
-    })
+      } })
     expect(notificationsConfig.preferences.snapshot?.necessaryCategories).toEqual(['service_notice'])
     expect(hook.result.current.slice.failure).toBeNull()
     hook.unmount()
@@ -379,13 +407,10 @@ describe('notification preferences controller', () => {
       put.mockReturnValue(pending.promise)
       let task!: Promise<unknown>
       act(() => { task = failure!.onRetrySave({ ...canonical, [field]: failure!.retryValues[field] }) })
-      expect(put).toHaveBeenLastCalledWith('/notification-preferences', {
-        alert: false,
-        body: {
+      expect(put).toHaveBeenLastCalledWith({ url: '/notification-preferences', method: 'PUT', alert: false, data: {
           expectedRevision: 4,
           optionalCategories: { ...nextCanonical, [field]: !canonical[field] },
-        },
-      })
+        } })
       await act(async () => { pending.resolve(updated({ revision: 5, optionalCategories: nextCanonical })); await task })
     })
 
@@ -404,10 +429,7 @@ describe('notification preferences controller', () => {
     put.mockReturnValue(pending.promise)
     let task!: Promise<unknown>
     act(() => { task = failure.onRetrySave({ announcement: false, personal_update: false }) })
-    expect(put).toHaveBeenLastCalledWith('/notification-preferences', {
-      alert: false,
-      body: { expectedRevision: 7, optionalCategories: { announcement: false, personal_update: true } },
-    })
+    expect(put).toHaveBeenLastCalledWith({ url: '/notification-preferences', method: 'PUT', alert: false, data: { expectedRevision: 7, optionalCategories: { announcement: false, personal_update: true } } })
     await act(async () => { pending.resolve(updated({ revision: 8, optionalCategories: nextCanonical })); await task })
   })
 

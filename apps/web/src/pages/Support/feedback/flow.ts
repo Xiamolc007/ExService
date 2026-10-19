@@ -1,4 +1,4 @@
-import type { components } from '@workspace/api-client'
+import type { components } from '@workspace/sdk/types'
 import { normalizeMime } from '@workspace/common/feedback-content'
 import { belongsToArea } from './kind-rules'
 

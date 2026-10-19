@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { analyzeRequest, composeBug, FEEDBACK_LIMITS, FREQUENCIES, utf8Bytes } from '@workspace/common/feedback-content'
-import type { components } from '@workspace/api-client'
+import type { components } from '@workspace/sdk/types'
 import type { FeedbackForm } from './flow'
 import { ruleForKind } from './kind-rules'
 

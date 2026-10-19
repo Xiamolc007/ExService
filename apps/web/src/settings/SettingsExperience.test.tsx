@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { writeToken } from '@web/src/auth/storage'
+import { selectSessionScope, writeToken } from '@web/src/auth/storage'
 import { bindNotificationsToken } from '@web/src/notifications/notificationsConfig'
 import { bindSettingsToken } from '@web/src/settings/settingsConfig'
 
@@ -10,7 +10,12 @@ const get = vi.hoisted(() => vi.fn())
 const put = vi.hoisted(() => vi.fn())
 const invalidateSession = vi.hoisted(() => vi.fn())
 const authState = vi.hoisted(() => ({ status: 'authenticated' as 'authenticated' | 'unavailable' }))
-vi.mock('@web/src/api/client', () => ({ api: { GET: get, PUT: put } }))
+vi.mock('@workspace/sdk', async importOriginal => ({ ...await importOriginal<object>(),
+  instance: (config: { method?: string }) => {
+    const handlers = { GET: get, PUT: put }
+    return handlers[(config.method ?? 'GET') as keyof typeof handlers](config)
+  },
+}))
 vi.mock('@web/src/auth/AuthContext', () => ({ useAuth: () => ({
   state: { status: authState.status }, invalidateSession, refreshProfile: vi.fn(),
   retrySession: vi.fn(), logout: vi.fn(),
@@ -52,7 +57,7 @@ const preferences = {
 }
 
 function respond(overrides: { failPreferences?: boolean; failProfile?: boolean } = {}) {
-  get.mockImplementation((path: string) => {
+  get.mockImplementation(({ url: path }: { url: string }) => {
     if (path === '/notification-preferences') {
       return overrides.failPreferences
         ? Promise.reject(new Error('通知设置暂时无法读取'))
@@ -72,10 +77,24 @@ afterEach(() => {
   bindSettingsToken(null)
   bindNotificationsToken(null)
   window.localStorage.clear()
+  selectSessionScope('/api')
   authState.status = 'authenticated'
 })
 
 describe('SettingsExperience', () => {
+  it.each(['profile', 'notifications'] as const)('reads %s again after a same-token root switch', async category => {
+    selectSessionScope('/scope-a')
+    writeToken(window.localStorage, 'same-token')
+    respond()
+    render(<SettingsExperience initialCategory={category} />)
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(1))
+    const path = category === 'profile' ? '/auth/me' : '/notification-preferences'
+    window.localStorage.setItem(`exwebsite.auth.token:${encodeURIComponent(new URL('/scope-b', window.location.origin).href)}`, 'same-token')
+    act(() => selectSessionScope('/scope-b'))
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(2))
+    expect(get.mock.calls.map(([config]) => config.url)).toEqual([path, path])
+  })
+
   it('names the settings dialog without the extra top description', () => {
     render(<SettingsModal initialCategory="general" onClose={vi.fn()} />)
     expect(screen.getByRole('dialog', { name: '设置' })).toBeTruthy()
@@ -93,13 +112,13 @@ describe('SettingsExperience', () => {
     await userEvent.click(screen.getByRole('button', { name: '个人资料分类' }))
     await waitFor(() => expect(screen.getByText('profile:ready')).toBeTruthy())
     expect(get).toHaveBeenCalledTimes(1)
-    expect(get).toHaveBeenCalledWith('/auth/me', { alert: false })
+    expect(get).toHaveBeenCalledWith({ url: '/auth/me', method: 'GET', alert: false })
 
     // 同一次设置实例内切回已读过的分区不再重复请求。
     await userEvent.click(screen.getByRole('button', { name: '通知分类' }))
     await waitFor(() => expect(screen.getByTestId('notifications-status').textContent).toBe('ready'))
     expect(get).toHaveBeenCalledTimes(2)
-    expect(get).toHaveBeenLastCalledWith('/notification-preferences', { alert: false })
+    expect(get).toHaveBeenLastCalledWith({ url: '/notification-preferences', method: 'GET', alert: false })
     await userEvent.click(screen.getByRole('button', { name: '个人资料分类' }))
     expect(screen.getByText('profile:ready')).toBeTruthy()
     expect(get).toHaveBeenCalledTimes(2)
@@ -133,7 +152,7 @@ describe('SettingsExperience', () => {
     respond()
     await userEvent.click(screen.getByRole('button', { name: '个人资料分类' }))
     await waitFor(() => expect(screen.getByText('profile:ready')).toBeTruthy())
-    expect(get).toHaveBeenLastCalledWith('/auth/me', { alert: false })
+    expect(get).toHaveBeenLastCalledWith({ url: '/auth/me', method: 'GET', alert: false })
   })
 
   it('keeps the notifications partition usable when the profile read fails', async () => {
@@ -165,10 +184,7 @@ describe('SettingsExperience', () => {
     await userEvent.click(screen.getByRole('button', { name: '通知分类' }))
     await userEvent.click(screen.getByRole('button', { name: '保存偏好' }))
     await waitFor(() => expect(put).toHaveBeenCalledTimes(1))
-    expect(put).toHaveBeenCalledWith('/notification-preferences', {
-      alert: false,
-      body: { expectedRevision: 1, optionalCategories: { announcement: false, personal_update: true } },
-    })
+    expect(put).toHaveBeenCalledWith({ url: '/notification-preferences', method: 'PUT', alert: false, data: { expectedRevision: 1, optionalCategories: { announcement: false, personal_update: true } } })
     expect(screen.getByTestId('notifications-failure').textContent).toBe('none')
   })
 

@@ -4,11 +4,16 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { removeMatchingToken, writeToken } from '@web/src/auth/storage'
 import { bindSettingsToken } from '@web/src/settings/settingsConfig'
-import { ExAxiosError } from '@workspace/sdk/http/browser'
+import { ExAxiosError } from '@workspace/sdk'
 
 const get = vi.hoisted(() => vi.fn())
 const invalidateSession = vi.hoisted(() => vi.fn())
-vi.mock('@web/src/api/client', () => ({ api: { GET: get } }))
+vi.mock('@workspace/sdk', async importOriginal => ({ ...await importOriginal<object>(),
+  instance: (config: { method?: string }) => {
+    const handlers = { GET: get }
+    return handlers[(config.method ?? 'GET') as keyof typeof handlers](config)
+  },
+}))
 vi.mock('@web/src/auth/AuthContext', () => ({ useAuth: () => ({
   state: { status: 'authenticated' }, openModal: vi.fn(), invalidateSession,
   refreshProfile: vi.fn(), retrySession: vi.fn(), logout: vi.fn(),

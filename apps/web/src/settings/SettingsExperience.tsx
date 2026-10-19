@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Dialog, DialogContent, DialogTitle } from '@exre/exui'
 import { SettingsPanel, type SettingsCategory } from '@workspace/components'
 import { useAuth } from '@web/src/auth/AuthContext'
-import { readToken, subscribeSessionChanges } from '@web/src/auth/storage'
+import { readToken, sessionScopeRevision, subscribeSessionChanges } from '@web/src/auth/storage'
 import { useNotificationPreferencesController } from '@web/src/notifications/useNotificationPreferencesController'
 import { useSettingsController } from '@web/src/settings/useSettingsController'
 import styles from '@web/src/settings/SettingsExperience.module.scss'
@@ -28,6 +28,7 @@ export function SettingsExperience({ initialCategory }: { initialCategory: Setti
 
   // 会话代次：换号后重新读取一次服务器已保存值，不沿用上一个账号的「已读过」记号。
   const [sessionToken, setSessionToken] = useState<string | null>(() => currentToken())
+  const scope = useSyncExternalStore(subscribeSessionChanges, sessionScopeRevision, sessionScopeRevision)
   const entered = useRef(new Set<string>())
 
   useEffect(() => subscribeSessionChanges(() => setSessionToken(currentToken())), [])
@@ -42,12 +43,12 @@ export function SettingsExperience({ initialCategory }: { initialCategory: Setti
         : category === 'notifications' ? 'notifications' : null
     // 初始为 general 时不由设置层触发任何读取。
     if (source === null) return
-    const key = `${sessionToken ?? 'anonymous'}:${source}`
+    const key = `${scope}:${sessionToken ?? 'anonymous'}:${source}`
     if (entered.current.has(key)) return
     entered.current.add(key)
     if (source === 'profile') void settings.load()
     else void preferences.load()
-  }, [category, auth.state.status, sessionToken, settings.load, preferences.load])
+  }, [category, auth.state.status, sessionToken, scope, settings.load, preferences.load])
 
   const profile = settings.snapshot.profile.snapshot
   const authUnavailableWithoutProfile = auth.state.status === 'unavailable' && !profile

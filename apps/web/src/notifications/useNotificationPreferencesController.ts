@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { proxy, useSnapshot } from 'valtio'
-import { api } from '@web/src/api/client'
+import { instance, ExAxiosError } from '@workspace/sdk'
 import { useAuth } from '@web/src/auth/AuthContext'
 import { readToken, subscribeSessionChanges } from '@web/src/auth/storage'
-import { ExAxiosError } from '@workspace/sdk/http/browser'
 import { bindNotificationsToken, notificationsConfig } from '@web/src/notifications/notificationsConfig'
 import type {
   NotificationPreferencesDraft, PreferenceCanonicalValues, PreferenceField, SettingsNotificationsSlice,
@@ -151,7 +150,7 @@ export function useNotificationPreferencesController({ active }: { active: boole
     const handle: { current: Promise<void> | null } = { current: null }
     const task = (async () => {
       try {
-        const result = await api.GET('/notification-preferences', { alert: false })
+        const result = await instance({ url: '/notification-preferences', method: 'GET', alert: false })
         if (!accepted()) return
         runtime.needsCanonicalRead = false
         notificationsConfig.preferences.snapshot = result
@@ -179,7 +178,7 @@ export function useNotificationPreferencesController({ active }: { active: boole
       && runtime.readId === requestId && runtime.writeVersion === version
     notificationsConfig.preferences.status = 'loading'; notificationsConfig.preferences.error = null
     try {
-      const result = await api.GET('/notification-preferences', { alert: false })
+      const result = await instance({ url: '/notification-preferences', method: 'GET', alert: false })
       if (!accepted()) return
       // 一次已接受的读取本身就是规范值：它满足冲突后的必要重读，旧缓存不再被当成可写状态。
       runtime.needsCanonicalRead = false
@@ -225,7 +224,7 @@ export function useNotificationPreferencesController({ active }: { active: boole
     }
     const owned = () => notificationsConfig.epoch === run.epoch && runtime.save === run
     try {
-      const result = await api.PUT('/notification-preferences', { alert: false, body })
+      const result = await instance({ url: '/notification-preferences', method: 'PUT', alert: false, data: body })
       if (!owned()) return null
       runtime.writeVersion += 1; runtime.readId += 1
       notificationsConfig.preferences.snapshot = result

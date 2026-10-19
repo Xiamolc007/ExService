@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest'
-import type { components } from '@workspace/api-client'
+import type { components } from '@workspace/sdk/types'
 import { FeedbackFlow, FeedbackStopped, type FeedbackPort } from './flow'
 
 type Snapshot = components['schemas']['FeedbackSnapshot']

@@ -34,6 +34,18 @@ test('interrupted Windows application generation is recovered only after all exa
   lock.release(); assert.equal(existsSync(join(f.directory, 'applications-lock.json')), false)
 })
 
+test('interrupted preparation and rebuild states retain the same exact-child recovery requirements', t => {
+  for (const state of ['preparing', 'rebuilding', 'rebuild-failed']) {
+    const f = fixture(t)
+    f.run.state = state; f.run.children = [{ name: 'SDK build', identity: identity(90002) }]; f.save()
+    assert.throws(() => acquireApplicationLock(f.state, { inspect: pid => pid === 90002 ? identity(pid) : f.inspect(pid),
+      inspectChildren: () => [], platform: 'win32' }), /MODE_CHILDREN_STILL_ACTIVE/)
+    const lock = acquireApplicationLock(f.state, { inspect: f.inspect, inspectChildren: () => [], platform: 'win32' })
+    assert.deepEqual(readJson(join(f.directory, 'recovered-applications', `${f.run.runId}.json`)).run, f.run)
+    lock.release()
+  }
+})
+
 test('recovered preflight remains reclaimable if its new owner exits before launching applications', t => {
   const f = fixture(t)
   const first = acquireApplicationLock(f.state, { inspect: f.inspect, inspectChildren: () => [], platform: 'win32' })

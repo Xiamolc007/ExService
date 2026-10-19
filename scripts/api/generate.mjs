@@ -69,7 +69,7 @@ export async function generateContract({ workspace = repositoryRoot, mode = 'gen
   workspace = resolve(workspace);
   const contractSource = join(workspace, 'api/openapi.yaml');
   const jsonOutput = join(workspace, 'api/generated/openapi.json');
-  const typesOutput = join(workspace, 'packages/api-client/src/generated/schema.d.ts');
+  const typesOutput = join(workspace, 'packages/sdk/src/generated/schema.d.ts');
   if (!['lint', 'bundle', 'generate', 'check'].includes(mode)) throw new Error(`Unknown API generation mode: ${mode}`);
   const configArgs = ['--config', join(repositoryRoot, 'redocly.yaml')];
   await run(redoclyCli, ['lint', contractSource, ...configArgs], workspace);

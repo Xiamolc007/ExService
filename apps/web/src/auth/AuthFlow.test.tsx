@@ -3,10 +3,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
-import { ExAxiosError } from '@workspace/sdk/http/browser'
+import { ExAxiosError } from '@workspace/sdk'
 
 const post = vi.hoisted(() => vi.fn())
-vi.mock('@web/src/api/client', () => ({ api: { POST: post } }))
+vi.mock('@workspace/sdk', async importOriginal => ({ ...await importOriginal<object>(),
+  instance: (config: { method?: string }) => {
+    const handlers = { POST: post }
+    return handlers[(config.method ?? 'GET') as keyof typeof handlers](config)
+  },
+}))
 vi.mock('@web/src/pages/AuthPage/AuthBackdrop', () => ({ AuthBackdrop: () => null }))
 
 class TestResizeObserver {
@@ -19,9 +24,9 @@ Object.defineProperty(document, 'elementFromPoint', { configurable: true, value:
 
 import { AuthFlow } from '@web/src/auth/AuthFlow'
 import { AuthPage } from '@web/src/pages/AuthPage'
-import { AUTH_TOKEN_KEY } from '@web/src/auth/storage'
+import { AUTH_TOKEN_KEY, clearBrowserSession, readToken, syncSessionToken } from '@web/src/auth/storage'
 
-afterEach(() => { cleanup(); post.mockReset(); window.localStorage.clear() })
+afterEach(() => { cleanup(); post.mockReset(); window.localStorage.clear(); syncSessionToken() })
 
 describe('AuthFlow captcha stage', () => {
   it('removes the legal footer from the actual login page after continuing', async () => {
@@ -52,10 +57,7 @@ describe('AuthFlow captcha stage', () => {
     expect(screen.queryByText('By signing up, you agree to our Terms, Acceptable Use, and Privacy Policy.')).toBeNull()
 
     await user.click(screen.getByRole('button', { name: '登录' }))
-    expect(post).toHaveBeenCalledWith('/auth/login', {
-      body: { email: 'member@example.com', password: 'password-one' },
-      alert: false,
-    })
+    expect(post).toHaveBeenCalledWith({ url: '/auth/login', method: 'POST', data: { email: 'member@example.com', password: 'password-one' }, alert: false })
     expect(await screen.findByText('邮箱或密码错误')).toBeTruthy()
 
     expect(screen.queryByRole('button', { name: '返回修改资料' })).toBeNull()
@@ -65,7 +67,7 @@ describe('AuthFlow captcha stage', () => {
     const user = userEvent.setup()
     window.localStorage.clear()
     const ssoRequestId = 's'.repeat(43)
-    post.mockImplementation((path: string) => path === '/auth/sso/inspect'
+    post.mockImplementation(({ url: path }: { url: string }) => path === '/auth/sso/inspect'
       ? Promise.resolve({ ssoRequestId, status: 'pending' })
       : Promise.reject(new ExAxiosError('http', 'INVALID_CREDENTIALS', 'Invalid credentials', { status: 401 })))
     render(<MemoryRouter><AuthFlow initialMode="login" presentation="page" ssoRequestId={ssoRequestId} /></MemoryRouter>)
@@ -74,18 +76,15 @@ describe('AuthFlow captcha stage', () => {
     await user.type(screen.getByLabelText('邮箱'), 'member@example.com')
     await user.type(screen.getByLabelText('密码', { exact: true }), 'password-one')
     await user.click(screen.getByRole('button', { name: '继续' }))
-    expect(post).not.toHaveBeenCalledWith('/auth/sso/login', expect.anything())
+    expect(post).not.toHaveBeenCalledWith(expect.objectContaining({ url: '/auth/sso/login', method: 'POST' }))
     await user.click(screen.getByRole('button', { name: '登录' }))
-    expect(post).toHaveBeenCalledWith('/auth/sso/login', {
-      body: { ssoRequestId, email: 'member@example.com', password: 'password-one' },
-      alert: false,
-    })
+    expect(post).toHaveBeenCalledWith({ url: '/auth/sso/login', method: 'POST', data: { ssoRequestId, email: 'member@example.com', password: 'password-one' }, alert: false })
   })
 
   it.each(['server rejection', 'network failure'])('keeps the existing session when account-switch logout has a %s', async failure => {
     const user = userEvent.setup()
     window.localStorage.setItem(AUTH_TOKEN_KEY, 'old-token')
-    post.mockImplementation((path: string) => path === '/auth/login'
+    post.mockImplementation(({ url: path }: { url: string }) => path === '/auth/login'
       ? Promise.resolve({ token: 'new-token' })
       : failure === 'network failure'
         ? Promise.reject(new Error('offline'))
@@ -95,7 +94,7 @@ describe('AuthFlow captcha stage', () => {
     await user.type(screen.getByLabelText('密码', { exact: true }), 'password-one')
     await user.click(screen.getByRole('button', { name: '继续' }))
     await user.click(screen.getByRole('button', { name: '登录' }))
-    expect(post).toHaveBeenCalledWith('/auth/logout', { headers: { Authorization: 'Bearer old-token' }, alert: false })
+    expect(post).toHaveBeenCalledWith({ url: '/auth/logout', method: 'POST', headers: { Authorization: 'Bearer old-token' }, alert: false })
     expect(window.localStorage.getItem(AUTH_TOKEN_KEY)).toBe('old-token')
     expect(await screen.findByText(/旧账号退出失败/)).toBeTruthy()
   })
@@ -104,7 +103,7 @@ describe('AuthFlow captcha stage', () => {
     const user = userEvent.setup()
     window.localStorage.setItem(AUTH_TOKEN_KEY, 'old-token')
     let completeLogout: ((value: unknown) => void) | undefined
-    post.mockImplementation((path: string) => path === '/auth/login'
+    post.mockImplementation(({ url: path }: { url: string }) => path === '/auth/login'
       ? Promise.resolve({ token: 'new-token' })
       : new Promise(resolve => { completeLogout = resolve }))
     render(<MemoryRouter><AuthFlow presentation="page" /></MemoryRouter>)
@@ -135,7 +134,7 @@ describe('AuthFlow captcha stage', () => {
     const user = userEvent.setup()
     const onSessionCreated = vi.fn()
     window.localStorage.setItem(AUTH_TOKEN_KEY, 'old-token')
-    post.mockImplementation(async (path: string) => {
+    post.mockImplementation(async ({ url: path }: { url: string }) => {
       if (path === '/auth/login') return { token: 'new-token' }
       if (cleared) window.localStorage.removeItem(AUTH_TOKEN_KEY)
       throw new ExAxiosError('http', 'SESSION_INVALID', 'Invalid session', { status: 401 })
@@ -149,11 +148,17 @@ describe('AuthFlow captcha stage', () => {
     expect(window.localStorage.getItem(AUTH_TOKEN_KEY)).toBe('new-token')
   })
 
-  it('preserves a replacement session arriving while the old account is being revoked', async () => {
+  it.each([false, true])('preserves a replacement session arriving while the old account is revoked (suppressed UI: %s)', async suppressed => {
     const user = userEvent.setup()
     const onSessionCreated = vi.fn()
     window.localStorage.setItem(AUTH_TOKEN_KEY, 'old-token')
-    post.mockImplementation(async (path: string) => {
+    if (suppressed) {
+      const remove = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new Error('denied') })
+      clearBrowserSession()
+      remove.mockRestore()
+      expect(readToken(window.localStorage)).toBeNull()
+    }
+    post.mockImplementation(async ({ url: path }: { url: string }) => {
       if (path === '/auth/login') return { token: 'new-token' }
       window.localStorage.setItem(AUTH_TOKEN_KEY, 'replacement-token')
       return { status: 'ok' }

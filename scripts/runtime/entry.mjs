@@ -10,6 +10,7 @@ import { NativeApplications } from './native.mjs'
 import { convertConfiguration } from './convert.mjs'
 import { prepareInfrastructure, provisionIdentityClients } from './infrastructure.mjs'
 import { renderNginx } from './nginx.mjs'
+import { prepareSdk } from './sdk-preparation.mjs'
 
 export function parseRuntimeArguments(input) {
   const args = [...input]; if (args[0] === '--') args.shift()
@@ -49,16 +50,10 @@ async function applicationLogs(state, service) {
   } finally { files.forEach(file => unwatchFile(file)); scope.close() }
 }
 
-async function generateDevelopmentContract(options) {
-  const { generateContract } = await import('../api/generate.mjs')
-  return generateContract(options)
-}
-
-/** Generation must finish before read-only preflight or any application launch. */
+/** Hand preparation to the application-lock owner; never build before acquiring it. */
 export async function runDevelopmentWithContract(state, options = {},
-  { generate = generateDevelopmentContract, launch = runDevelopment } = {}) {
-  await generate({ workspace: state.workspace })
-  return launch(state, options)
+  { prepare = prepareSdk, launch = runDevelopment } = {}) {
+  return launch(state, { ...options, prepare })
 }
 
 export async function main(input = process.argv.slice(2)) {
