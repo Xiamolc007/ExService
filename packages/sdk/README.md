@@ -8,11 +8,11 @@
 
 产物通过条件导出选择环境实现，公开类型在两个入口下完全一致：
 
-| 入口 | 解析到 | 说明 |
-| --- | --- | --- |
-| `@workspace/sdk` | `browser` / `node` / `default`（浏览器） | 主出口，按运行环境自动选择 |
-| `@workspace/sdk/browser` | 浏览器产物 | 只依赖 `cos-js-sdk-v5` |
-| `@workspace/sdk/node` | Node 产物 | 只依赖 `cos-nodejs-sdk-v5` |
+| 入口                     | 解析到                                   | 说明                       |
+| ------------------------ | ---------------------------------------- | -------------------------- |
+| `@workspace/sdk`         | `browser` / `node` / `default`（浏览器） | 主出口，按运行环境自动选择 |
+| `@workspace/sdk/browser` | 浏览器产物                               | 只依赖 `cos-js-sdk-v5`     |
+| `@workspace/sdk/node`    | Node 产物                                | 只依赖 `cos-nodejs-sdk-v5` |
 
 `api-client` 与 `openapi-fetch` 已打包进产物，外部消费方不需要安装私有 workspace 包。
 
@@ -34,12 +34,12 @@ const url = await sdk.storage.upload('avatars/user-123.webp', bytes, { contentTy
 
 ### 选项
 
-| 字段 | 说明 |
-| --- | --- |
-| `baseUrl` | 本站 API 根地址。浏览器允许 `/api` 这类相对地址，Node 要求绝对 HTTP(S) 地址。 |
-| `getAccessToken` | 同步或异步返回现有 Bearer token。每次本站请求前调用，SDK 不持久化、不刷新、不提供登录界面。 |
-| `options.medium` | 可选，`'file' \| 'cos'`。省略时由服务器配置决定。 |
-| `options.contentType` | 可选内容声明；省略时取 `Blob.type`，再回退 `application/octet-stream`。 |
+| 字段                  | 说明                                                                                        |
+| --------------------- | ------------------------------------------------------------------------------------------- |
+| `baseUrl`             | 本站 API 根地址。浏览器允许 `/api` 这类相对地址，Node 要求绝对 HTTP(S) 地址。               |
+| `getAccessToken`      | 同步或异步返回现有 Bearer token。每次本站请求前调用，SDK 不持久化、不刷新、不提供登录界面。 |
+| `options.medium`      | 可选，`'file' \| 'cos'`。省略时由服务器配置决定。                                           |
+| `options.contentType` | 可选内容声明；省略时取 `Blob.type`，再回退 `application/octet-stream`。                     |
 
 ## 流程与边界
 
@@ -66,7 +66,9 @@ import { StorageSdkError } from '@workspace/sdk/node'
 try {
   await sdk.storage.upload('a.bin', bytes)
 } catch (error) {
-  if (error instanceof StorageSdkError && error.code === 'TOO_LARGE') { /* ... */ }
+  if (error instanceof StorageSdkError && error.code === 'TOO_LARGE') {
+    /* ... */
+  }
 }
 ```
 

@@ -11,39 +11,72 @@ const put = vi.hoisted(() => vi.fn())
 const invalidateSession = vi.hoisted(() => vi.fn())
 const authState = vi.hoisted(() => ({ status: 'authenticated' as 'authenticated' | 'unavailable' }))
 vi.mock('@web/src/api/client', () => ({ api: { GET: get, PUT: put } }))
-vi.mock('@web/src/auth/AuthContext', () => ({ useAuth: () => ({
-  state: { status: authState.status }, invalidateSession, refreshProfile: vi.fn(),
-  retrySession: vi.fn(), logout: vi.fn(),
-}) }))
+vi.mock('@web/src/auth/AuthContext', () => ({
+  useAuth: () => ({
+    state: { status: authState.status },
+    invalidateSession,
+    refreshProfile: vi.fn(),
+    retrySession: vi.fn(),
+    logout: vi.fn(),
+  }),
+}))
 vi.mock('@exre/exui', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@exre/exui')>()),
   useTheme: () => ({ theme: 'system', setTheme: vi.fn() }),
 }))
 vi.mock('@workspace/components', () => ({
-  SettingsPanel: ({ category, onCategoryChange, profileStatus, notifications }: {
+  SettingsPanel: ({
+    category,
+    onCategoryChange,
+    profileStatus,
+    notifications,
+  }: {
     category: string
     onCategoryChange: (category: 'profile' | 'notifications' | 'general') => void
     profileStatus: string
     notifications: {
       status: string
       failure: unknown
-      onSaveField: (field: string, values: { announcement: boolean; personal_update: boolean }) => Promise<unknown>
+      onSaveField: (
+        field: string,
+        values: { announcement: boolean; personal_update: boolean },
+      ) => Promise<unknown>
     }
-  }) => <div>
-    <span>{category}:{profileStatus}</span>
-    <span data-testid="notifications-status">{notifications.status}</span>
-    <span data-testid="notifications-failure">{notifications.failure === null ? 'none' : 'failed'}</span>
-    <button onClick={() => onCategoryChange('profile')}>个人资料分类</button>
-    <button onClick={() => onCategoryChange('notifications')}>通知分类</button>
-    <button onClick={() => void notifications.onSaveField('announcement',
-      { announcement: false, personal_update: true })}>保存偏好</button>
-  </div>,
+  }) => (
+    <div>
+      <span>
+        {category}:{profileStatus}
+      </span>
+      <span data-testid="notifications-status">{notifications.status}</span>
+      <span data-testid="notifications-failure">
+        {notifications.failure === null ? 'none' : 'failed'}
+      </span>
+      <button onClick={() => onCategoryChange('profile')}>个人资料分类</button>
+      <button onClick={() => onCategoryChange('notifications')}>通知分类</button>
+      <button
+        onClick={() =>
+          void notifications.onSaveField('announcement', {
+            announcement: false,
+            personal_update: true,
+          })
+        }
+      >
+        保存偏好
+      </button>
+    </div>
+  ),
 }))
 
 import { SettingsExperience, SettingsModal } from '@web/src/settings/SettingsExperience'
 
-const user = { id: 'user', email: 'person@example.com', nickname: 'Person',
-  qq: null, fivemId: null, avatarUrl: null }
+const user = {
+  id: 'user',
+  email: 'person@example.com',
+  nickname: 'Person',
+  qq: null,
+  fivemId: null,
+  avatarUrl: null,
+}
 const preferences = {
   revision: 1,
   optionalCategories: { announcement: true, personal_update: true },
@@ -97,7 +130,9 @@ describe('SettingsExperience', () => {
 
     // 同一次设置实例内切回已读过的分区不再重复请求。
     await userEvent.click(screen.getByRole('button', { name: '通知分类' }))
-    await waitFor(() => expect(screen.getByTestId('notifications-status').textContent).toBe('ready'))
+    await waitFor(() =>
+      expect(screen.getByTestId('notifications-status').textContent).toBe('ready'),
+    )
     expect(get).toHaveBeenCalledTimes(2)
     expect(get).toHaveBeenLastCalledWith('/notification-preferences', { alert: false })
     await userEvent.click(screen.getByRole('button', { name: '个人资料分类' }))
@@ -128,7 +163,9 @@ describe('SettingsExperience', () => {
     respond({ failPreferences: true })
     render(<SettingsExperience initialCategory="general" />)
     await userEvent.click(screen.getByRole('button', { name: '通知分类' }))
-    await waitFor(() => expect(screen.getByTestId('notifications-status').textContent).toBe('error'))
+    await waitFor(() =>
+      expect(screen.getByTestId('notifications-status').textContent).toBe('error'),
+    )
 
     respond()
     await userEvent.click(screen.getByRole('button', { name: '个人资料分类' }))
@@ -145,7 +182,9 @@ describe('SettingsExperience', () => {
 
     respond()
     await userEvent.click(screen.getByRole('button', { name: '通知分类' }))
-    await waitFor(() => expect(screen.getByTestId('notifications-status').textContent).toBe('ready'))
+    await waitFor(() =>
+      expect(screen.getByTestId('notifications-status').textContent).toBe('ready'),
+    )
   })
 
   it('sends a preference write only while the notifications category is selected', async () => {
@@ -154,7 +193,9 @@ describe('SettingsExperience', () => {
     put.mockResolvedValue({ ...preferences, revision: 2 })
     render(<SettingsExperience initialCategory="general" />)
     await userEvent.click(screen.getByRole('button', { name: '通知分类' }))
-    await waitFor(() => expect(screen.getByTestId('notifications-status').textContent).toBe('ready'))
+    await waitFor(() =>
+      expect(screen.getByTestId('notifications-status').textContent).toBe('ready'),
+    )
 
     await userEvent.click(screen.getByRole('button', { name: '个人资料分类' }))
     await waitFor(() => expect(screen.getByText('profile:ready')).toBeTruthy())
@@ -167,7 +208,10 @@ describe('SettingsExperience', () => {
     await waitFor(() => expect(put).toHaveBeenCalledTimes(1))
     expect(put).toHaveBeenCalledWith('/notification-preferences', {
       alert: false,
-      body: { expectedRevision: 1, optionalCategories: { announcement: false, personal_update: true } },
+      body: {
+        expectedRevision: 1,
+        optionalCategories: { announcement: false, personal_update: true },
+      },
     })
     expect(screen.getByTestId('notifications-failure').textContent).toBe('none')
   })

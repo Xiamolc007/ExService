@@ -12,18 +12,26 @@ import { bindSessionHttp, syncSessionToken } from '@web/src/auth/storage'
  * 否则 `createApiClient` 会在模块加载阶段抛错，前端直接白屏。
  */
 const pageOrigin = typeof window === 'undefined' ? 'http://localhost' : window.location.origin
-const baseUrl: string = new URL(import.meta.env.VITE_API_BASE_URL || '/api', pageOrigin).href.replace(/\/$/, '')
+const baseUrl: string = new URL(
+  import.meta.env.VITE_API_BASE_URL || '/api',
+  pageOrigin,
+).href.replace(/\/$/, '')
 
 export const http = createExAxios({
   baseUrl,
   websiteBaseUrl: baseUrl,
   onSessionExpired: () => {
     if (syncSessionToken() !== null) return
-    if (window.location.pathname === '/support' || window.location.pathname.startsWith('/support/')) return
+    if (window.location.pathname === '/support' || window.location.pathname.startsWith('/support/'))
+      return
     if (window.location.pathname.startsWith('/identity/')) return
-    if (window.location.pathname === '/login' && new URLSearchParams(window.location.search).has('ssoRequestId')) return
+    if (
+      window.location.pathname === '/login' &&
+      new URLSearchParams(window.location.search).has('ssoRequestId')
+    )
+      return
     if (window.location.pathname !== '/login') window.location.replace('/login')
   },
 })
-bindSessionHttp(token => http.setToken(token))
-export const api = createApiClient({ baseUrl, transport: request => http(request) })
+bindSessionHttp((token) => http.setToken(token))
+export const api = createApiClient({ baseUrl, transport: (request) => http(request) })

@@ -1,57 +1,48 @@
-import axios, {
-  AxiosError,
-  AxiosHeaders,
-  type AxiosRequestConfig,
-} from "axios";
-import type { HttpTransportRequest } from "@workspace/api-client";
+import axios, { AxiosError, AxiosHeaders, type AxiosRequestConfig } from 'axios'
+import type { HttpTransportRequest } from '@workspace/api-client'
 
-export type ExAxiosErrorKind =
-  | "config"
-  | "network"
-  | "timeout"
-  | "cancelled"
-  | "http";
-export type ExAxiosRequestConfig = HttpTransportRequest;
+export type ExAxiosErrorKind = 'config' | 'network' | 'timeout' | 'cancelled' | 'http'
+export type ExAxiosRequestConfig = HttpTransportRequest
 export interface SessionExpiredContext {
-  error: ExAxiosError;
-  loginUrl: string;
+  error: ExAxiosError
+  loginUrl: string
 }
 export interface ExAxiosOptions {
-  baseUrl?: string;
-  websiteBaseUrl?: string;
-  alert?: boolean;
-  loginUrl?: string;
-  onSessionExpired?: (context: SessionExpiredContext) => void | Promise<void>;
+  baseUrl?: string
+  websiteBaseUrl?: string
+  alert?: boolean
+  loginUrl?: string
+  onSessionExpired?: (context: SessionExpiredContext) => void | Promise<void>
 }
 export interface ExAxiosInstance {
-  <T = unknown>(config: ExAxiosRequestConfig): Promise<NoInfer<T>>;
-  setBaseUrl(url: string, options?: { website?: boolean }): void;
-  setToken(token: string | null): void;
-  setAlert(enabled: boolean): void;
+  <T = unknown>(config: ExAxiosRequestConfig): Promise<NoInfer<T>>
+  setBaseUrl(url: string, options?: { website?: boolean }): void
+  setToken(token: string | null): void
+  setAlert(enabled: boolean): void
 }
 export class ExAxiosError extends Error {
-  readonly kind: ExAxiosErrorKind;
-  readonly code: string;
-  readonly status?: number;
-  readonly requestId?: string;
-  readonly retryAfterSeconds?: number;
+  readonly kind: ExAxiosErrorKind
+  readonly code: string
+  readonly status?: number
+  readonly requestId?: string
+  readonly retryAfterSeconds?: number
   constructor(
     kind: ExAxiosErrorKind,
     code: string,
     message: string,
     extra: {
-      status?: number;
-      requestId?: string;
-      retryAfterSeconds?: number;
+      status?: number
+      requestId?: string
+      retryAfterSeconds?: number
     } = {},
   ) {
-    super(message);
-    this.name = "ExAxiosError";
-    this.kind = kind;
-    this.code = code;
-    this.status = extra.status;
-    this.requestId = extra.requestId;
-    this.retryAfterSeconds = extra.retryAfterSeconds;
+    super(message)
+    this.name = 'ExAxiosError'
+    this.kind = kind
+    this.code = code
+    this.status = extra.status
+    this.requestId = extra.requestId
+    this.retryAfterSeconds = extra.retryAfterSeconds
   }
   toJSON() {
     return {
@@ -63,107 +54,77 @@ export class ExAxiosError extends Error {
       ...(this.retryAfterSeconds === undefined
         ? {}
         : { retryAfterSeconds: this.retryAfterSeconds }),
-    };
+    }
   }
 }
 
 export interface HttpRuntime {
-  environment: "browser" | "node";
-  origin?: string;
-  readToken?: () => string | null | undefined;
-  clearToken?: (token: string | null) => boolean;
-  notify?: (message: string) => void;
-  navigate?: (url: string) => void;
+  environment: 'browser' | 'node'
+  origin?: string
+  readToken?: () => string | null | undefined
+  clearToken?: (token: string | null) => boolean
+  notify?: (message: string) => void
+  navigate?: (url: string) => void
 }
 
 const allowedKeys = new Set([
-  "url",
-  "method",
-  "params",
-  "data",
-  "headers",
-  "timeout",
-  "signal",
-  "responseType",
-  "alert",
-]);
-const methods = new Set([
-  "GET",
-  "POST",
-  "PUT",
-  "PATCH",
-  "DELETE",
-  "HEAD",
-  "OPTIONS",
-]);
+  'url',
+  'method',
+  'params',
+  'data',
+  'headers',
+  'timeout',
+  'signal',
+  'responseType',
+  'alert',
+])
+const methods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'])
 const errorText: Record<ExAxiosErrorKind, string> = {
-  config: "请求配置无效",
-  network: "网络连接失败，请稍后重试",
-  timeout: "请求超时，请稍后重试",
-  cancelled: "请求已取消",
-  http: "请求失败，请稍后重试",
-};
-const configError = () =>
-  new ExAxiosError("config", "CONFIG_ERROR", errorText.config);
+  config: '请求配置无效',
+  network: '网络连接失败，请稍后重试',
+  timeout: '请求超时，请稍后重试',
+  cancelled: '请求已取消',
+  http: '请求失败，请稍后重试',
+}
+const configError = () => new ExAxiosError('config', 'CONFIG_ERROR', errorText.config)
 
 function parseBase(value: string, runtime: HttpRuntime): string {
-  if (typeof value !== "string" || !value || /[?#]/.test(value))
-    throw configError();
-  let url: URL;
+  if (typeof value !== 'string' || !value || /[?#]/.test(value)) throw configError()
+  let url: URL
   try {
-    url = new URL(
-      value,
-      runtime.environment === "browser" ? runtime.origin : undefined,
-    );
+    url = new URL(value, runtime.environment === 'browser' ? runtime.origin : undefined)
   } catch {
-    throw configError();
+    throw configError()
   }
-  if (
-    !/^https?:$/.test(url.protocol) ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
-  )
-    throw configError();
-  if (runtime.environment === "node" && !/^https?:\/\//i.test(value))
-    throw configError();
-  return url.href.replace(/\/+$/, "");
+  if (!/^https?:$/.test(url.protocol) || url.username || url.password || url.search || url.hash)
+    throw configError()
+  if (runtime.environment === 'node' && !/^https?:\/\//i.test(value)) throw configError()
+  return url.href.replace(/\/+$/, '')
 }
 function parseLogin(value: string, runtime: HttpRuntime): string {
-  let url: URL;
+  let url: URL
   try {
-    url = new URL(
-      value,
-      runtime.environment === "browser" ? runtime.origin : undefined,
-    );
+    url = new URL(value, runtime.environment === 'browser' ? runtime.origin : undefined)
   } catch {
-    throw configError();
+    throw configError()
   }
-  if (!/^https?:$/.test(url.protocol) || url.username || url.password)
-    throw configError();
-  return url.href;
+  if (!/^https?:$/.test(url.protocol) || url.username || url.password) throw configError()
+  return url.href
 }
 function defaultLogin(scope: string | undefined): string {
-  return scope ? `${new URL(scope).origin}/login` : "/login";
+  return scope ? `${new URL(scope).origin}/login` : '/login'
 }
-function finalUrl(
-  baseUrl: string | undefined,
-  config: ExAxiosRequestConfig,
-): string {
-  if (!baseUrl || typeof config.url !== "string" || !config.url)
-    throw configError();
-  if (/\\/.test(config.url.split(/[?#]/, 1)[0] ?? "")) throw configError();
-  let url: URL;
+function finalUrl(baseUrl: string | undefined, config: ExAxiosRequestConfig): string {
+  if (!baseUrl || typeof config.url !== 'string' || !config.url) throw configError()
+  if (/\\/.test(config.url.split(/[?#]/, 1)[0] ?? '')) throw configError()
+  let url: URL
   try {
     url =
-      /^https?:\/\//i.test(config.url) || config.url.startsWith("//")
+      /^https?:\/\//i.test(config.url) || config.url.startsWith('//')
         ? new URL(config.url, baseUrl)
-        : new URL(
-            `${baseUrl.replace(/\/$/, "")}/${config.url.replace(/^\/+/, "")}`,
-          );
+        : new URL(`${baseUrl.replace(/\/$/, '')}/${config.url.replace(/^\/+/, '')}`)
   } catch {
-    throw configError();
+    throw configError()
   }
   if (
     !/^https?:$/.test(url.protocol) ||
@@ -171,84 +132,77 @@ function finalUrl(
     url.password ||
     /%(?:2f|5c)/i.test(url.pathname)
   )
-    throw configError();
+    throw configError()
   if (config.params !== undefined) {
     const entries =
       config.params instanceof URLSearchParams
         ? [...config.params.entries()]
-        : Object.entries(config.params);
+        : Object.entries(config.params)
     for (const [key, value] of entries) {
-      if (value === undefined) continue;
+      if (value === undefined) continue
       for (const item of Array.isArray(value) ? value : [value]) {
-        if (!["string", "number", "boolean"].includes(typeof item))
-          throw configError();
-        url.searchParams.append(key, String(item));
+        if (!['string', 'number', 'boolean'].includes(typeof item)) throw configError()
+        url.searchParams.append(key, String(item))
       }
     }
   }
-  return url.href;
+  return url.href
 }
 function inScope(url: string, scope: string | undefined): boolean {
-  if (!scope) return false;
+  if (!scope) return false
   const target = new URL(url),
-    root = new URL(scope);
-  const path = root.pathname.replace(/\/$/, "");
+    root = new URL(scope)
+  const path = root.pathname.replace(/\/$/, '')
   return (
     target.origin === root.origin &&
-    (path === "" ||
-      target.pathname === path ||
-      target.pathname.startsWith(`${path}/`))
-  );
+    (path === '' || target.pathname === path || target.pathname.startsWith(`${path}/`))
+  )
 }
 function envelope(
   input: unknown,
 ): { code: string; message: string; requestId: string } | undefined {
   if (
     !input ||
-    typeof input !== "object" ||
+    typeof input !== 'object' ||
     Array.isArray(input) ||
     Object.keys(input).length !== 1
   )
-    return undefined;
-  const value = (input as { error?: unknown }).error;
+    return undefined
+  const value = (input as { error?: unknown }).error
   if (
     !value ||
-    typeof value !== "object" ||
+    typeof value !== 'object' ||
     Array.isArray(value) ||
-    Object.keys(value).sort().join(",") !== "code,message,requestId"
+    Object.keys(value).sort().join(',') !== 'code,message,requestId'
   )
-    return undefined;
-  const error = value as Record<string, unknown>;
-  return typeof error.code === "string" &&
-    typeof error.message === "string" &&
-    typeof error.requestId === "string"
+    return undefined
+  const error = value as Record<string, unknown>
+  return typeof error.code === 'string' &&
+    typeof error.message === 'string' &&
+    typeof error.requestId === 'string'
     ? (error as { code: string; message: string; requestId: string })
-    : undefined;
+    : undefined
 }
 function retryAfter(value: unknown): number | undefined {
-  if (typeof value !== "string") return undefined;
+  if (typeof value !== 'string') return undefined
   if (/^\d+$/.test(value)) {
-    const seconds = Number(value);
-    return Number.isSafeInteger(seconds) ? seconds : undefined;
+    const seconds = Number(value)
+    return Number.isSafeInteger(seconds) ? seconds : undefined
   }
-  const date = Date.parse(value);
-  return Number.isNaN(date)
-    ? undefined
-    : Math.max(0, Math.ceil((date - Date.now()) / 1000));
+  const date = Date.parse(value)
+  return Number.isNaN(date) ? undefined : Math.max(0, Math.ceil((date - Date.now()) / 1000))
 }
 function decodedJson(value: unknown): unknown {
   try {
-    return typeof value === "string"
+    return typeof value === 'string'
       ? JSON.parse(value)
       : JSON.parse(
           new TextDecoder().decode(
-            value instanceof Uint8Array
-              ? value
-              : new Uint8Array(value as ArrayBuffer),
+            value instanceof Uint8Array ? value : new Uint8Array(value as ArrayBuffer),
           ),
-        );
+        )
   } catch {
-    return undefined;
+    return undefined
   }
 }
 
@@ -258,51 +212,38 @@ export function createHttpCore(
 ): ExAxiosInstance {
   if (
     !options ||
-    typeof options !== "object" ||
+    typeof options !== 'object' ||
     Object.keys(options).some(
       (key) =>
-        ![
-          "baseUrl",
-          "websiteBaseUrl",
-          "alert",
-          "loginUrl",
-          "onSessionExpired",
-        ].includes(key),
+        !['baseUrl', 'websiteBaseUrl', 'alert', 'loginUrl', 'onSessionExpired'].includes(key),
     )
   )
-    throw configError();
-  if (options.alert !== undefined && typeof options.alert !== "boolean")
-    throw configError();
-  if (
-    options.onSessionExpired !== undefined &&
-    typeof options.onSessionExpired !== "function"
-  )
-    throw configError();
-  let baseUrl: string | undefined = runtime.origin
-    ? `${runtime.origin}/api`
-    : undefined;
-  let websiteBaseUrl = baseUrl;
-  let token: string | null = null;
-  let sessionBound = false;
+    throw configError()
+  if (options.alert !== undefined && typeof options.alert !== 'boolean') throw configError()
+  if (options.onSessionExpired !== undefined && typeof options.onSessionExpired !== 'function')
+    throw configError()
+  let baseUrl: string | undefined = runtime.origin ? `${runtime.origin}/api` : undefined
+  let websiteBaseUrl = baseUrl
+  let token: string | null = null
+  let sessionBound = false
   let scopeRevision = 0,
-    tokenRevision = 0;
-  let expiredVersion: string | undefined;
-  let alertDefault = options.alert ?? true;
-  let loginUrl = defaultLogin(websiteBaseUrl);
-  let customLogin = false;
-  if (options.baseUrl !== undefined)
-    baseUrl = parseBase(options.baseUrl, runtime);
+    tokenRevision = 0
+  let expiredVersion: string | undefined
+  let alertDefault = options.alert ?? true
+  let loginUrl = defaultLogin(websiteBaseUrl)
+  let customLogin = false
+  if (options.baseUrl !== undefined) baseUrl = parseBase(options.baseUrl, runtime)
   if (options.websiteBaseUrl !== undefined)
-    websiteBaseUrl = parseBase(options.websiteBaseUrl, runtime);
+    websiteBaseUrl = parseBase(options.websiteBaseUrl, runtime)
   if (options.loginUrl !== undefined) {
-    loginUrl = parseLogin(options.loginUrl, runtime);
-    customLogin = true;
-  } else loginUrl = defaultLogin(websiteBaseUrl);
+    loginUrl = parseLogin(options.loginUrl, runtime)
+    customLogin = true
+  } else loginUrl = defaultLogin(websiteBaseUrl)
   if (runtime.origin && websiteBaseUrl === `${runtime.origin}/api`) {
     try {
-      const initial = runtime.readToken?.();
-      if (initial !== undefined) sessionBound = true;
-      if (initial && !/[\x00-\x1f\x7f]/.test(initial)) token = initial;
+      const initial = runtime.readToken?.()
+      if (initial !== undefined) sessionBound = true
+      if (initial && !/[\x00-\x1f\x7f]/.test(initial)) token = initial
     } catch {
       /* public requests remain available */
     }
@@ -310,97 +251,82 @@ export function createHttpCore(
 
   function persistedToken(): string | null | undefined {
     try {
-      return runtime.readToken?.();
+      return runtime.readToken?.()
     } catch {
-      return undefined;
+      return undefined
     }
   }
 
   function syncPersistedToken(value: string | null | undefined): void {
-    token = value && !/[\x00-\x1f\x7f]/.test(value) ? value : null;
-    tokenRevision++;
-    expiredVersion = undefined;
+    token = value && !/[\x00-\x1f\x7f]/.test(value) ? value : null
+    tokenRevision++
+    expiredVersion = undefined
   }
 
-  const instance = (async <T = unknown>(
-    config: ExAxiosRequestConfig,
-  ): Promise<T> => {
+  const instance = (async <T = unknown>(config: ExAxiosRequestConfig): Promise<T> => {
     if (
       !config ||
-      typeof config !== "object" ||
+      typeof config !== 'object' ||
       Object.keys(config).some((key) => !allowedKeys.has(key))
     )
-      throw configError();
-    if (config.method !== undefined && typeof config.method !== "string")
-      throw configError();
+      throw configError()
+    if (config.method !== undefined && typeof config.method !== 'string') throw configError()
     if (
       config.headers !== undefined &&
-      (typeof config.headers !== "object" ||
+      (typeof config.headers !== 'object' ||
         config.headers === null ||
         Array.isArray(config.headers))
     )
-      throw configError();
+      throw configError()
     if (
       config.params !== undefined &&
       !(config.params instanceof URLSearchParams) &&
-      (typeof config.params !== "object" ||
-        config.params === null ||
-        Array.isArray(config.params))
+      (typeof config.params !== 'object' || config.params === null || Array.isArray(config.params))
     )
-      throw configError();
-    const method = (config.method ?? "GET").toUpperCase();
+      throw configError()
+    const method = (config.method ?? 'GET').toUpperCase()
     if (
       !methods.has(method) ||
-      (config.timeout !== undefined &&
-        (!Number.isFinite(config.timeout) || config.timeout < 0)) ||
-      (config.alert !== undefined && typeof config.alert !== "boolean")
+      (config.timeout !== undefined && (!Number.isFinite(config.timeout) || config.timeout < 0)) ||
+      (config.alert !== undefined && typeof config.alert !== 'boolean')
     )
-      throw configError();
-    const target = finalUrl(baseUrl, config);
-    const scoped = inScope(target, websiteBaseUrl);
-    const headers: Record<string, string> = {};
+      throw configError()
+    const target = finalUrl(baseUrl, config)
+    const scoped = inScope(target, websiteBaseUrl)
+    const headers: Record<string, string> = {}
     for (const [name, value] of Object.entries(config.headers ?? {})) {
       if (
-        typeof value !== "string" ||
+        typeof value !== 'string' ||
         /^(host|:authority)$/i.test(name) ||
         /[\r\n]/.test(name + value)
       )
-        throw configError();
-      headers[name] = value;
+        throw configError()
+      headers[name] = value
     }
     const explicit = Object.entries(headers).find(
-      ([key]) => key.toLowerCase() === "authorization",
-    )?.[1];
-    if (scoped && token && explicit === undefined)
-      headers.Authorization = `Bearer ${token}`;
-    const protectedRequest =
-      scoped && (explicit !== undefined || token !== null);
+      ([key]) => key.toLowerCase() === 'authorization',
+    )?.[1]
+    if (scoped && token && explicit === undefined) headers.Authorization = `Bearer ${token}`
+    const protectedRequest = scoped && (explicit !== undefined || token !== null)
     const qualified =
-      scoped &&
-      (explicit === undefined ||
-        (token !== null && explicit === `Bearer ${token}`));
+      scoped && (explicit === undefined || (token !== null && explicit === `Bearer ${token}`))
     const requestToken = token,
       requestScope = scopeRevision,
-      requestVersion = tokenRevision;
-    const resolvedAlert = config.alert ?? alertDefault;
-    const responseType = config.responseType ?? "json";
-    if (!["json", "text", "blob", "arraybuffer"].includes(responseType))
-      throw configError();
+      requestVersion = tokenRevision
+    const resolvedAlert = config.alert ?? alertDefault
+    const responseType = config.responseType ?? 'json'
+    if (!['json', 'text', 'blob', 'arraybuffer'].includes(responseType)) throw configError()
     if (config.signal?.aborted)
       throw new ExAxiosError(
-        config.signal.reason?.name === "TimeoutError" ? "timeout" : "cancelled",
-        config.signal.reason?.name === "TimeoutError" ? "TIMEOUT" : "CANCELLED",
-        errorText[
-          config.signal.reason?.name === "TimeoutError"
-            ? "timeout"
-            : "cancelled"
-        ],
-      );
+        config.signal.reason?.name === 'TimeoutError' ? 'timeout' : 'cancelled',
+        config.signal.reason?.name === 'TimeoutError' ? 'TIMEOUT' : 'CANCELLED',
+        errorText[config.signal.reason?.name === 'TimeoutError' ? 'timeout' : 'cancelled'],
+      )
 
-    const requestHeaders = AxiosHeaders.from(headers);
+    const requestHeaders = AxiosHeaders.from(headers)
     // Axios otherwise adds a form Content-Type even to bodyless POST requests.
-    if (config.data === undefined && !requestHeaders.has("Content-Type"))
-      requestHeaders.setContentType(false);
+    if (config.data === undefined && !requestHeaders.has('Content-Type'))
+      requestHeaders.setContentType(false)
     const request: AxiosRequestConfig = {
       url: target,
       method,
@@ -408,205 +334,170 @@ export function createHttpCore(
       data: config.data,
       timeout: config.timeout ?? 30_000,
       signal: config.signal,
-      responseType:
-        responseType === "json" || responseType === "text"
-          ? "text"
-          : "arraybuffer",
+      responseType: responseType === 'json' || responseType === 'text' ? 'text' : 'arraybuffer',
       transformResponse: [(data: unknown) => data],
       validateStatus: () => true,
       withCredentials: false,
-      adapter: runtime.environment === "browser" ? "fetch" : "http",
-      ...(runtime.environment === "browser" && protectedRequest
-        ? { fetchOptions: { redirect: "error", credentials: "omit" } }
+      adapter: runtime.environment === 'browser' ? 'fetch' : 'http',
+      ...(runtime.environment === 'browser' && protectedRequest
+        ? { fetchOptions: { redirect: 'error', credentials: 'omit' } }
         : {}),
-      ...(runtime.environment === "node" && protectedRequest
-        ? { maxRedirects: 0 }
-        : {}),
-    };
-    let response;
+      ...(runtime.environment === 'node' && protectedRequest ? { maxRedirects: 0 } : {}),
+    }
+    let response
     try {
-      response = await axios(request);
+      response = await axios(request)
     } catch (cause) {
       const timedOut =
-        config.signal?.reason?.name === "TimeoutError" ||
+        config.signal?.reason?.name === 'TimeoutError' ||
         (cause instanceof AxiosError &&
-          (cause.code === "ECONNABORTED" || cause.code === "ETIMEDOUT"));
+          (cause.code === 'ECONNABORTED' || cause.code === 'ETIMEDOUT'))
       const cancelled =
         !timedOut &&
-        (config.signal?.aborted ||
-          (cause instanceof AxiosError && cause.code === "ERR_CANCELED"));
-      const kind: ExAxiosErrorKind = timedOut
-        ? "timeout"
-        : cancelled
-          ? "cancelled"
-          : "network";
-      const code = timedOut
-        ? "TIMEOUT"
-        : cancelled
-          ? "CANCELLED"
-          : "NETWORK_ERROR";
-      const error = new ExAxiosError(kind, code, errorText[kind]);
-      if (resolvedAlert && kind !== "cancelled") {
+        (config.signal?.aborted || (cause instanceof AxiosError && cause.code === 'ERR_CANCELED'))
+      const kind: ExAxiosErrorKind = timedOut ? 'timeout' : cancelled ? 'cancelled' : 'network'
+      const code = timedOut ? 'TIMEOUT' : cancelled ? 'CANCELLED' : 'NETWORK_ERROR'
+      const error = new ExAxiosError(kind, code, errorText[kind])
+      if (resolvedAlert && kind !== 'cancelled') {
         try {
-          runtime.notify?.(error.message);
+          runtime.notify?.(error.message)
         } catch {
           /* keep original failure */
         }
       }
-      throw error;
+      throw error
     }
-    const status = response.status;
+    const status = response.status
     if (status >= 200 && status < 300) {
-      if (status === 204) return undefined as T;
-      if (responseType === "text") return response.data as T;
-      if (responseType === "arraybuffer") {
+      if (status === 204) return undefined as T
+      if (responseType === 'text') return response.data as T
+      if (responseType === 'arraybuffer') {
         const bytes =
-          response.data instanceof Uint8Array
-            ? response.data
-            : new Uint8Array(response.data);
-        return bytes.buffer.slice(
-          bytes.byteOffset,
-          bytes.byteOffset + bytes.byteLength,
-        ) as T;
+          response.data instanceof Uint8Array ? response.data : new Uint8Array(response.data)
+        return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as T
       }
-      if (responseType === "blob") return new Blob([response.data]) as T;
-      const parsed = decodedJson(response.data);
-      if (parsed !== undefined) return parsed as T;
+      if (responseType === 'blob') return new Blob([response.data]) as T
+      const parsed = decodedJson(response.data)
+      if (parsed !== undefined) return parsed as T
     }
-    const contentType = String(response.headers["content-type"] ?? "");
-    const raw = response.data;
+    const contentType = String(response.headers['content-type'] ?? '')
+    const raw = response.data
     const size =
-      typeof raw === "string"
+      typeof raw === 'string'
         ? new TextEncoder().encode(raw).byteLength
-        : (raw?.byteLength ?? Number.POSITIVE_INFINITY);
+        : (raw?.byteLength ?? Number.POSITIVE_INFINITY)
     const parsed =
       /^application\/(?:[\w.+-]*\+)?json\b/i.test(contentType) && size <= 65_536
         ? decodedJson(raw)
-        : undefined;
-    const safe = scoped ? envelope(parsed) : undefined;
+        : undefined
+    const safe = scoped ? envelope(parsed) : undefined
     const error = new ExAxiosError(
-      "http",
-      safe?.code ?? "HTTP_ERROR",
+      'http',
+      safe?.code ?? 'HTTP_ERROR',
       safe?.message ?? errorText.http,
       {
         status,
         requestId:
           safe?.requestId ??
-          (typeof response.headers["x-request-id"] === "string"
-            ? response.headers["x-request-id"]
+          (typeof response.headers['x-request-id'] === 'string'
+            ? response.headers['x-request-id']
             : undefined),
-        retryAfterSeconds: retryAfter(response.headers["retry-after"]),
+        retryAfterSeconds: retryAfter(response.headers['retry-after']),
       },
-    );
-    const version = `${requestScope}:${requestVersion}`;
+    )
+    const version = `${requestScope}:${requestVersion}`
     const expired =
       status === 401 &&
-      safe?.code === "SESSION_INVALID" &&
+      safe?.code === 'SESSION_INVALID' &&
       qualified &&
       requestScope === scopeRevision &&
       requestVersion === tokenRevision &&
-      requestToken === token;
-    const staleSession =
-      status === 401 &&
-      safe?.code === "SESSION_INVALID" &&
-      qualified &&
-      !expired;
+      requestToken === token
+    const staleSession = status === 401 && safe?.code === 'SESSION_INVALID' && qualified && !expired
     if (expired && expiredVersion !== version) {
-      const before = sessionBound ? persistedToken() : requestToken;
+      const before = sessionBound ? persistedToken() : requestToken
       if (sessionBound && before !== requestToken) {
-        syncPersistedToken(before);
+        syncPersistedToken(before)
       } else {
-        let cleared = !sessionBound;
+        let cleared = !sessionBound
         if (sessionBound) {
           try {
-            cleared = runtime.clearToken?.(requestToken) === true;
+            cleared = runtime.clearToken?.(requestToken) === true
           } catch {
-            cleared = false;
+            cleared = false
           }
         }
-        const after = sessionBound ? persistedToken() : null;
+        const after = sessionBound ? persistedToken() : null
         if (!cleared || (sessionBound && after !== null)) {
-          syncPersistedToken(after);
+          syncPersistedToken(after)
         } else {
-          expiredVersion = version;
-          token = null;
+          expiredVersion = version
+          token = null
           if (resolvedAlert) {
             try {
-              runtime.notify?.(error.message);
+              runtime.notify?.(error.message)
             } catch {
               /* keep original failure */
             }
           }
           if (options.onSessionExpired) {
             try {
-              void Promise.resolve(
-                options.onSessionExpired({ error, loginUrl }),
-              ).catch(() => {});
+              void Promise.resolve(options.onSessionExpired({ error, loginUrl })).catch(() => {})
             } catch {
               /* keep original failure */
             }
           } else if (runtime.navigate) {
             try {
-              runtime.navigate(loginUrl);
+              runtime.navigate(loginUrl)
             } catch {
               /* keep original failure */
             }
           }
         }
       }
-    } else if (
-      resolvedAlert &&
-      !expired &&
-      !staleSession &&
-      expiredVersion !== version
-    ) {
+    } else if (resolvedAlert && !expired && !staleSession && expiredVersion !== version) {
       try {
-        runtime.notify?.(safe?.message ?? errorText.http);
+        runtime.notify?.(safe?.message ?? errorText.http)
       } catch {
         /* keep original failure */
       }
     }
-    throw error;
-  }) as ExAxiosInstance;
+    throw error
+  }) as ExAxiosInstance
   instance.setBaseUrl = (value, change = {}) => {
     if (
       !change ||
-      typeof change !== "object" ||
-      Object.keys(change).some((key) => key !== "website") ||
-      (change.website !== undefined && typeof change.website !== "boolean")
+      typeof change !== 'object' ||
+      Object.keys(change).some((key) => key !== 'website') ||
+      (change.website !== undefined && typeof change.website !== 'boolean')
     )
-      throw configError();
-    const next = parseBase(value, runtime);
-    baseUrl = next;
+      throw configError()
+    const next = parseBase(value, runtime)
+    baseUrl = next
     if (change.website) {
       if (websiteBaseUrl !== next) {
-        websiteBaseUrl = next;
-        scopeRevision++;
-        tokenRevision++;
-        token = null;
-        sessionBound = false;
-        expiredVersion = undefined;
-        if (!customLogin) loginUrl = defaultLogin(next);
+        websiteBaseUrl = next
+        scopeRevision++
+        tokenRevision++
+        token = null
+        sessionBound = false
+        expiredVersion = undefined
+        if (!customLogin) loginUrl = defaultLogin(next)
       }
     }
-  };
+  }
   instance.setToken = (value) => {
-    if (
-      value !== null &&
-      (typeof value !== "string" || !value || /[\x00-\x1f\x7f]/.test(value))
-    )
-      throw configError();
-    token = value;
-    tokenRevision++;
-    expiredVersion = undefined;
+    if (value !== null && (typeof value !== 'string' || !value || /[\x00-\x1f\x7f]/.test(value)))
+      throw configError()
+    token = value
+    tokenRevision++
+    expiredVersion = undefined
     sessionBound =
-      value !== null
-        ? persistedToken() === value
-        : sessionBound && persistedToken() === null;
-  };
+      value !== null ? persistedToken() === value : sessionBound && persistedToken() === null
+  }
   instance.setAlert = (value) => {
-    if (typeof value !== "boolean") throw configError();
-    alertDefault = value;
-  };
-  return instance;
+    if (typeof value !== 'boolean') throw configError()
+    alertDefault = value
+  }
+  return instance
 }

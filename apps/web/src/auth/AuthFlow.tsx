@@ -43,10 +43,13 @@ export function AuthFlow({
   const authForm = useRef<AuthFormHandle>(null)
   const pendingDraft = useRef<LoginDraft | null>(null)
 
-  useEffect(() => () => {
-    generation.current += 1
-    pendingDraft.current = null
-  }, [])
+  useEffect(
+    () => () => {
+      generation.current += 1
+      pendingDraft.current = null
+    },
+    [],
+  )
 
   function continueLogin(draft: LoginDraft) {
     pendingDraft.current = draft
@@ -97,7 +100,8 @@ export function AuthFlow({
           setFlowBusy(false)
           return
         }
-        if (error instanceof ExAxiosError && isFatalSsoCode(error.code)) setFatalSsoError(error.message)
+        if (error instanceof ExAxiosError && isFatalSsoCode(error.code))
+          setFatalSsoError(error.message)
         else setSsoRetryError('暂时无法连接认证服务，请重试')
         setFlowBusy(false)
       }
@@ -110,7 +114,8 @@ export function AuthFlow({
     try {
       if (ssoRequestId !== undefined) {
         await api.POST('/auth/sso/login', {
-          body: { ssoRequestId, email: draft.email, password: draft.password }, alert: false,
+          body: { ssoRequestId, email: draft.email, password: draft.password },
+          alert: false,
         })
         if (current !== generation.current) return
         finishSso(ssoRequestId)
@@ -118,7 +123,8 @@ export function AuthFlow({
       }
 
       const result = await api.POST('/auth/login', {
-        body: { email: draft.email, password: draft.password }, alert: false,
+        body: { email: draft.email, password: draft.password },
+        alert: false,
       })
       if (current !== generation.current) return
       let oldToken: string | null
@@ -131,7 +137,8 @@ export function AuthFlow({
       if (oldToken !== null && oldToken !== result.token) {
         try {
           await api.POST('/auth/logout', {
-            headers: { Authorization: `Bearer ${oldToken}` }, alert: false,
+            headers: { Authorization: `Bearer ${oldToken}` },
+            alert: false,
           })
           if (current !== generation.current) return
         } catch (error) {
@@ -195,7 +202,14 @@ export function AuthFlow({
   const visibleFooter = step === 'captcha' ? null : footer
 
   if (fatalSsoError !== null) {
-    return <><Alert variant="destructive" role="alert"><AlertDescription>{fatalSsoError}</AlertDescription></Alert>{visibleFooter}</>
+    return (
+      <>
+        <Alert variant="destructive" role="alert">
+          <AlertDescription>{fatalSsoError}</AlertDescription>
+        </Alert>
+        {visibleFooter}
+      </>
+    )
   }
 
   if (ssoRetryError !== null && ssoRequestId !== undefined) {
@@ -203,7 +217,11 @@ export function AuthFlow({
       <>
         <Alert variant="destructive" role="alert">
           <AlertDescription>{ssoRetryError}</AlertDescription>
-          <Button type="button" variant="outline" onClick={() => void prepareSso(ssoRequestId, ++generation.current)}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void prepareSso(ssoRequestId, ++generation.current)}
+          >
             重试
           </Button>
         </Alert>
@@ -215,14 +233,14 @@ export function AuthFlow({
   return (
     <>
       <AuthForm
-      ref={authForm}
-      step={step}
-      busy={flowBusy}
-      initialEmail={email}
-      description={description}
-      onContinueLogin={continueLogin}
-      onCaptchaSubmit={submitCaptcha}
-      onJoin={join}
+        ref={authForm}
+        step={step}
+        busy={flowBusy}
+        initialEmail={email}
+        description={description}
+        onContinueLogin={continueLogin}
+        onCaptchaSubmit={submitCaptcha}
+        onJoin={join}
       />
       {visibleFooter}
     </>
@@ -237,5 +255,9 @@ function mapError(code: string, message: string): AuthFormErrors {
 }
 
 function isFatalSsoCode(code: string): boolean {
-  return code === 'SSO_REQUEST_NOT_FOUND' || code === 'SSO_REQUEST_EXPIRED' || code === 'SSO_ACCOUNT_CONFLICT'
+  return (
+    code === 'SSO_REQUEST_NOT_FOUND' ||
+    code === 'SSO_REQUEST_EXPIRED' ||
+    code === 'SSO_ACCOUNT_CONFLICT'
+  )
 }

@@ -15,4 +15,15 @@ export { StorageSdkError } from './errors.js'
  */
 export declare function createSdk(options: SdkOptions): StorageSdk
 export { ExAxios, createExAxios, ExAxiosError, createApiClient } from './http/browser.js'
-export type { ExAxiosOptions, ExAxiosInstance, ExAxiosRequestConfig, ExAxiosErrorKind, SessionExpiredContext, ApiClient, CreateApiClientOptions, paths, operations, components } from './http/browser.js'
+export type {
+  ExAxiosOptions,
+  ExAxiosInstance,
+  ExAxiosRequestConfig,
+  ExAxiosErrorKind,
+  SessionExpiredContext,
+  ApiClient,
+  CreateApiClientOptions,
+  paths,
+  operations,
+  components,
+} from './http/browser.js'

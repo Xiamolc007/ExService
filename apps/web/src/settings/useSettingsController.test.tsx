@@ -13,10 +13,15 @@ const invalidateSession = vi.hoisted(() => vi.fn())
 const logout = vi.hoisted(() => vi.fn())
 const authState = vi.hoisted(() => ({ current: { status: 'authenticated', message: '' } }))
 vi.mock('@web/src/api/client', () => ({ api: { GET: get, PATCH: patch, POST: post } }))
-vi.mock('@web/src/auth/AuthContext', () => ({ useAuth: () => ({
-  state: authState.current, refreshProfile, invalidateSession,
-  retrySession: vi.fn(), logout,
-}) }))
+vi.mock('@web/src/auth/AuthContext', () => ({
+  useAuth: () => ({
+    state: authState.current,
+    refreshProfile,
+    invalidateSession,
+    retrySession: vi.fn(),
+    logout,
+  }),
+}))
 vi.mock('@exre/exui', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@exre/exui')>()),
   useTheme: () => ({ theme: 'dark', setTheme: vi.fn() }),
@@ -24,14 +29,24 @@ vi.mock('@exre/exui', async (importOriginal) => ({
 
 import { useSettingsController } from '@web/src/settings/useSettingsController'
 
-const user = { id: 'one', email: 'a@example.com', nickname: 'Alice',
-  qq: '123', fivemId: null, avatarUrl: null }
+const user = {
+  id: 'one',
+  email: 'a@example.com',
+  nickname: 'Alice',
+  qq: '123',
+  fivemId: null,
+  avatarUrl: null,
+}
 
 afterEach(() => {
   cleanup()
-  get.mockReset(); patch.mockReset(); post.mockReset()
-  refreshProfile.mockClear(); invalidateSession.mockClear()
-  logout.mockClear(); authState.current = { status: 'authenticated', message: '' }
+  get.mockReset()
+  patch.mockReset()
+  post.mockReset()
+  refreshProfile.mockClear()
+  invalidateSession.mockClear()
+  logout.mockClear()
+  authState.current = { status: 'authenticated', message: '' }
   bindSettingsToken(null)
   window.localStorage.clear()
 })
@@ -42,11 +57,16 @@ describe('settings controller', () => {
     get.mockResolvedValue(user)
     patch.mockResolvedValue({ ...user, qq: null })
     const hook = renderHook(() => useSettingsController())
-    await act(async () => { await hook.result.current.load() })
+    await act(async () => {
+      await hook.result.current.load()
+    })
     expect(settingsConfig.profile.snapshot).toEqual(user)
-    await act(async () => { await hook.result.current.save('qq', '') })
+    await act(async () => {
+      await hook.result.current.save('qq', '')
+    })
     expect(patch).toHaveBeenCalledWith('/auth/me', {
-      alert: false, body: { qq: null },
+      alert: false,
+      body: { qq: null },
     })
     expect(settingsConfig.profile.snapshot?.qq).toBeNull()
     expect(refreshProfile).toHaveBeenCalledOnce()
@@ -55,13 +75,23 @@ describe('settings controller', () => {
   it('discards a late read after the account token changes', async () => {
     writeToken(window.localStorage, 'old-token')
     let release!: (value: unknown) => void
-    get.mockImplementationOnce(() => new Promise((resolve) => { release = resolve }))
+    get.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve
+        }),
+    )
     const hook = renderHook(() => useSettingsController())
     let pending!: Promise<void>
-    act(() => { pending = hook.result.current.load() })
+    act(() => {
+      pending = hook.result.current.load()
+    })
     writeToken(window.localStorage, 'new-token')
     act(() => bindSettingsToken('new-token'))
-    await act(async () => { release(user); await pending })
+    await act(async () => {
+      release(user)
+      await pending
+    })
     expect(settingsConfig.profile.snapshot).toBeNull()
     expect(settingsConfig.profile.status).toBe('idle')
   })
@@ -69,13 +99,23 @@ describe('settings controller', () => {
   it('keeps a shared read alive while the page still consumes settings', async () => {
     writeToken(window.localStorage, 'shared-token')
     let release!: (value: unknown) => void
-    get.mockImplementationOnce(() => new Promise((resolve) => { release = resolve }))
+    get.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve
+        }),
+    )
     const page = renderHook(() => useSettingsController())
     const modal = renderHook(() => useSettingsController())
     let pending!: Promise<void>
-    act(() => { pending = page.result.current.load() })
+    act(() => {
+      pending = page.result.current.load()
+    })
     modal.unmount()
-    await act(async () => { release(user); await pending })
+    await act(async () => {
+      release(user)
+      await pending
+    })
     expect(settingsConfig.profile.snapshot).toEqual(user)
     page.unmount()
   })
@@ -83,12 +123,22 @@ describe('settings controller', () => {
   it('ignores a late read after the final settings container closes', async () => {
     writeToken(window.localStorage, 'closed-token')
     let release!: (value: unknown) => void
-    get.mockImplementationOnce(() => new Promise((resolve) => { release = resolve }))
+    get.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve
+        }),
+    )
     const hook = renderHook(() => useSettingsController())
     let pending!: Promise<void>
-    act(() => { pending = hook.result.current.load() })
+    act(() => {
+      pending = hook.result.current.load()
+    })
     hook.unmount()
-    await act(async () => { release(user); await pending })
+    await act(async () => {
+      release(user)
+      await pending
+    })
     expect(settingsConfig.profile.snapshot).toBeNull()
     expect(settingsConfig.profile.status).toBe('idle')
   })
@@ -96,10 +146,18 @@ describe('settings controller', () => {
   it('invalidates only the matching session on a rejected write', async () => {
     writeToken(window.localStorage, 'expired-token')
     get.mockResolvedValue(user)
-    patch.mockRejectedValue(new ExAxiosError('http', 'SESSION_INVALID', '会话已失效', { status: 401 }))
+    patch.mockRejectedValue(
+      new ExAxiosError('http', 'SESSION_INVALID', '会话已失效', { status: 401 }),
+    )
     const hook = renderHook(() => useSettingsController())
-    await act(async () => { await hook.result.current.load() })
-    await expect(act(async () => { await hook.result.current.save('nickname', 'New') })).rejects.toThrow('会话已失效')
+    await act(async () => {
+      await hook.result.current.load()
+    })
+    await expect(
+      act(async () => {
+        await hook.result.current.save('nickname', 'New')
+      }),
+    ).rejects.toThrow('会话已失效')
     expect(invalidateSession).toHaveBeenCalledWith('expired-token')
     expect(settingsConfig.profile.snapshot).toBeNull()
   })

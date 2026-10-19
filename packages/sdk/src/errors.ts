@@ -41,8 +41,15 @@ export class StorageSdkError extends Error {
   readonly status?: number
   readonly requestId?: string
 
-  constructor(code: StorageSdkErrorCode, options: { status?: number; requestId?: string; detail?: string } = {}) {
-    super(options.detail === undefined ? `storage upload failed: ${code}` : `storage upload failed: ${code} (${options.detail})`)
+  constructor(
+    code: StorageSdkErrorCode,
+    options: { status?: number; requestId?: string; detail?: string } = {},
+  ) {
+    super(
+      options.detail === undefined
+        ? `storage upload failed: ${code}`
+        : `storage upload failed: ${code} (${options.detail})`,
+    )
     this.name = 'StorageSdkError'
     this.code = code
     this.status = options.status
@@ -66,21 +73,39 @@ export function serverCodeToSdkCode(code: unknown): StorageSdkErrorCode {
  * 把服务端 envelope、HTTP 状态与网络异常统一成 StorageSdkError。
  * 云 SDK 的原始异常不直接作为展示文案。
  */
-export function toStorageSdkError(input: { error?: unknown; status?: number; cause?: unknown }): StorageSdkError {
+export function toStorageSdkError(input: {
+  error?: unknown
+  status?: number
+  cause?: unknown
+}): StorageSdkError {
   const { error, status, cause } = input
   if (cause instanceof ExAxiosError) {
-    const code = cause.code === 'SESSION_INVALID' ? 'UNAUTHORIZED'
-      : cause.code === 'TIMEOUT' || cause.code === 'CANCELLED' ? 'TIMEOUT'
-      : cause.code === 'NETWORK_ERROR' ? 'NETWORK' : serverCodeToSdkCode(cause.code)
-    return new StorageSdkError(code, { status: cause.status, requestId: cause.requestId, detail: sanitizeDetail(cause.kind === 'http' ? cause.message : undefined) })
+    const code =
+      cause.code === 'SESSION_INVALID'
+        ? 'UNAUTHORIZED'
+        : cause.code === 'TIMEOUT' || cause.code === 'CANCELLED'
+          ? 'TIMEOUT'
+          : cause.code === 'NETWORK_ERROR'
+            ? 'NETWORK'
+            : serverCodeToSdkCode(cause.code)
+    return new StorageSdkError(code, {
+      status: cause.status,
+      requestId: cause.requestId,
+      detail: sanitizeDetail(cause.kind === 'http' ? cause.message : undefined),
+    })
   }
-  const envelope = typeof error === 'object' && error !== null
-    ? (error as { error?: { code?: unknown; message?: unknown; requestId?: unknown } }).error
-    : undefined
+  const envelope =
+    typeof error === 'object' && error !== null
+      ? (error as { error?: { code?: unknown; message?: unknown; requestId?: unknown } }).error
+      : undefined
   const code = serverCodeToSdkCode(envelope?.code)
   const requestId = typeof envelope?.requestId === 'string' ? envelope.requestId : undefined
   if (code !== 'UNKNOWN') {
-    return new StorageSdkError(code, { status, requestId, detail: sanitizeDetail(envelope?.message) })
+    return new StorageSdkError(code, {
+      status,
+      requestId,
+      detail: sanitizeDetail(envelope?.message),
+    })
   }
   if (cause !== undefined) {
     const message = cause instanceof Error ? cause.message : String(cause)

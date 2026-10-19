@@ -5,7 +5,11 @@ const subscribers = new Set<() => void>()
 
 export function bindSessionHttp(setToken: (token: string | null) => void): void {
   updateHttpToken = setToken
-  try { setToken(readToken(window.localStorage)) } catch { setToken(null) }
+  try {
+    setToken(readToken(window.localStorage))
+  } catch {
+    setToken(null)
+  }
 }
 
 export function subscribeSessionChanges(listener: () => void): () => void {
@@ -32,7 +36,10 @@ export function syncSessionToken(): string | null | undefined {
     const token = readToken(window.localStorage)
     changed(token)
     return token
-  } catch { changed(null); return undefined }
+  } catch {
+    changed(null)
+    return undefined
+  }
 }
 
 export function readToken(storage: Pick<Storage, 'getItem'>): string | null {
@@ -44,7 +51,10 @@ export function writeToken(storage: Pick<Storage, 'setItem'>, token: string): vo
   changed(token)
 }
 
-export function removeMatchingToken(storage: Pick<Storage, 'getItem' | 'removeItem'>, token: string): void {
+export function removeMatchingToken(
+  storage: Pick<Storage, 'getItem' | 'removeItem'>,
+  token: string,
+): void {
   if (storage.getItem(AUTH_TOKEN_KEY) === token) {
     storage.removeItem(AUTH_TOKEN_KEY)
     changed(null)
@@ -53,8 +63,16 @@ export function removeMatchingToken(storage: Pick<Storage, 'getItem' | 'removeIt
 
 /** Explicit logout clears browser state before any remote revocation can finish. */
 export function clearBrowserSession(): void {
-  try { window.localStorage.removeItem(AUTH_TOKEN_KEY) } catch { /* still clear in-memory authentication */ }
-  try { window.sessionStorage.removeItem(SSO_SUCCESS_KEY) } catch { /* independent of token cleanup */ }
+  try {
+    window.localStorage.removeItem(AUTH_TOKEN_KEY)
+  } catch {
+    /* still clear in-memory authentication */
+  }
+  try {
+    window.sessionStorage.removeItem(SSO_SUCCESS_KEY)
+  } catch {
+    /* independent of token cleanup */
+  }
   changed(null)
 }
 
@@ -76,12 +94,12 @@ export function readRecentSsoSuccess(
   try {
     const value = JSON.parse(raw) as { ssoRequestId?: unknown; confirmedAt?: unknown }
     if (
-      typeof value.ssoRequestId !== 'string'
-      || !/^[A-Za-z0-9_-]{43}$/.test(value.ssoRequestId)
-      || typeof value.confirmedAt !== 'number'
-      || !Number.isSafeInteger(value.confirmedAt)
-      || now - value.confirmedAt < 0
-      || now - value.confirmedAt > 5 * 60 * 1000
+      typeof value.ssoRequestId !== 'string' ||
+      !/^[A-Za-z0-9_-]{43}$/.test(value.ssoRequestId) ||
+      typeof value.confirmedAt !== 'number' ||
+      !Number.isSafeInteger(value.confirmedAt) ||
+      now - value.confirmedAt < 0 ||
+      now - value.confirmedAt > 5 * 60 * 1000
     ) {
       storage.removeItem(SSO_SUCCESS_KEY)
       return null

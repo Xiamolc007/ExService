@@ -39,4 +39,15 @@ export function createSdk(options: SdkOptions) {
 export type { SdkOptions, UploadOptions, UploadData, Medium, StorageSdk } from './shared.js'
 export { StorageSdkError, type StorageSdkErrorCode } from './errors.js'
 export { ExAxios, createExAxios, ExAxiosError, createApiClient } from './http/browser.js'
-export type { ExAxiosOptions, ExAxiosInstance, ExAxiosRequestConfig, ExAxiosErrorKind, SessionExpiredContext, ApiClient, CreateApiClientOptions, paths, operations, components } from './http/browser.js'
+export type {
+  ExAxiosOptions,
+  ExAxiosInstance,
+  ExAxiosRequestConfig,
+  ExAxiosErrorKind,
+  SessionExpiredContext,
+  ApiClient,
+  CreateApiClientOptions,
+  paths,
+  operations,
+  components,
+} from './http/browser.js'

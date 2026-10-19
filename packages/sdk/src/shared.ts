@@ -48,9 +48,17 @@ export interface CosTransport {
 export const FALLBACK_CONTENT_TYPE = 'application/octet-stream'
 const CONTENT_TYPE_PATTERN = /^[A-Za-z0-9!#$%&'*+.^_`|~-]+\/[A-Za-z0-9!#$%&'*+.^_`|~-]+$/
 
-export function resolveContentType(explicit: string | undefined, blobType: string | undefined): string {
+export function resolveContentType(
+  explicit: string | undefined,
+  blobType: string | undefined,
+): string {
   if (explicit !== undefined) return explicit
-  if (typeof blobType === 'string' && blobType !== '' && blobType.length <= 127 && CONTENT_TYPE_PATTERN.test(blobType)) {
+  if (
+    typeof blobType === 'string' &&
+    blobType !== '' &&
+    blobType.length <= 127 &&
+    CONTENT_TYPE_PATTERN.test(blobType)
+  ) {
     return blobType
   }
   return FALLBACK_CONTENT_TYPE
@@ -59,7 +67,11 @@ export function resolveContentType(explicit: string | undefined, blobType: strin
 /** 与服务端一致的只读视图复制：不上传底层 ArrayBuffer 的额外字节。 */
 async function toBytes(data: UploadData): Promise<Uint8Array> {
   if (data instanceof Uint8Array) return new Uint8Array(data).slice()
-  if (typeof data === 'object' && data !== null && typeof (data as Blob).arrayBuffer === 'function') {
+  if (
+    typeof data === 'object' &&
+    data !== null &&
+    typeof (data as Blob).arrayBuffer === 'function'
+  ) {
     return new Uint8Array(await (data as Blob).arrayBuffer())
   }
   throw new StorageSdkError('INVALID_INPUT', { detail: 'unsupported binary input' })
@@ -71,7 +83,9 @@ function assertBaseUrl(baseUrl: string, requireAbsolute: boolean): void {
   }
   if (!requireAbsolute) return
   if (!/^https?:\/\//i.test(baseUrl)) {
-    throw new StorageSdkError('INVALID_INPUT', { detail: 'node entry requires an absolute http(s) baseUrl' })
+    throw new StorageSdkError('INVALID_INPUT', {
+      detail: 'node entry requires an absolute http(s) baseUrl',
+    })
   }
 }
 
@@ -89,12 +103,29 @@ async function apiRequest<T>(pending: Promise<T>): Promise<T> {
  *
  * 每次调用独立持有 COS 临时凭证，不使用全局可变凭证缓存，避免不同 key 并发串用。
  */
-export function createStorageSdk(options: SdkOptions, transport: CosTransport, requireAbsoluteBaseUrl: boolean, requestPolicy: { timeoutMs?: number; signal?: AbortSignal } = {}) {
+export function createStorageSdk(
+  options: SdkOptions,
+  transport: CosTransport,
+  requireAbsoluteBaseUrl: boolean,
+  requestPolicy: { timeoutMs?: number; signal?: AbortSignal } = {},
+) {
   assertBaseUrl(options.baseUrl, requireAbsoluteBaseUrl)
-  const http = createHttpCore({ environment: requireAbsoluteBaseUrl ? 'node' : 'browser', origin: requireAbsoluteBaseUrl ? undefined : location.origin }, {
-    baseUrl: options.baseUrl, websiteBaseUrl: options.baseUrl, alert: false, onSessionExpired: () => {},
+  const http = createHttpCore(
+    {
+      environment: requireAbsoluteBaseUrl ? 'node' : 'browser',
+      origin: requireAbsoluteBaseUrl ? undefined : location.origin,
+    },
+    {
+      baseUrl: options.baseUrl,
+      websiteBaseUrl: options.baseUrl,
+      alert: false,
+      onSessionExpired: () => {},
+    },
+  )
+  const client = createApiClient({
+    baseUrl: options.baseUrl,
+    transport: (request) => http(request),
   })
-  const client = createApiClient({ baseUrl: options.baseUrl, transport: request => http(request) })
 
   async function headers(): Promise<Record<string, string>> {
     const token = await options.getAccessToken()
@@ -104,23 +135,34 @@ export function createStorageSdk(options: SdkOptions, transport: CosTransport, r
     return { authorization: `Bearer ${token}` }
   }
 
-  async function upload(key: string, data: UploadData, uploadOptions: UploadOptions = {}): Promise<string> {
+  async function upload(
+    key: string,
+    data: UploadData,
+    uploadOptions: UploadOptions = {},
+  ): Promise<string> {
     if (typeof key !== 'string' || key.length === 0) {
       throw new StorageSdkError('INVALID_INPUT', { detail: 'key is required' })
     }
     const bytes = await toBytes(data)
-    const contentType = resolveContentType(uploadOptions.contentType, data instanceof Uint8Array ? undefined : data.type)
+    const contentType = resolveContentType(
+      uploadOptions.contentType,
+      data instanceof Uint8Array ? undefined : data.type,
+    )
 
-    const prepared = await apiRequest(client.POST('/storage/uploads/prepare', {
-      timeout: requestPolicy.timeoutMs ?? REQUEST_TIMEOUT_MS, signal: requestPolicy.signal, alert: false,
-      headers: await headers(),
-      body: {
-        key,
-        size: bytes.byteLength,
-        contentType,
-        ...(uploadOptions.medium === undefined ? {} : { medium: uploadOptions.medium }),
-      },
-    }))
+    const prepared = await apiRequest(
+      client.POST('/storage/uploads/prepare', {
+        timeout: requestPolicy.timeoutMs ?? REQUEST_TIMEOUT_MS,
+        signal: requestPolicy.signal,
+        alert: false,
+        headers: await headers(),
+        body: {
+          key,
+          size: bytes.byteLength,
+          contentType,
+          ...(uploadOptions.medium === undefined ? {} : { medium: uploadOptions.medium }),
+        },
+      }),
+    )
     const plan = prepared
 
     // prepare 的 maxBytes 只是客户端预检，服务器仍是最终校验者。
@@ -139,11 +181,15 @@ export function createStorageSdk(options: SdkOptions, transport: CosTransport, r
       } catch (cause) {
         throw toStorageSdkError({ cause })
       }
-      const completed = await apiRequest(client.POST('/storage/uploads/complete', {
-        timeout: requestPolicy.timeoutMs ?? REQUEST_TIMEOUT_MS, signal: requestPolicy.signal, alert: false,
-        headers: await headers(),
-        body: { key: plan.key, uploadTicket: plan.uploadTicket },
-      }))
+      const completed = await apiRequest(
+        client.POST('/storage/uploads/complete', {
+          timeout: requestPolicy.timeoutMs ?? REQUEST_TIMEOUT_MS,
+          signal: requestPolicy.signal,
+          alert: false,
+          headers: await headers(),
+          body: { key: plan.key, uploadTicket: plan.uploadTicket },
+        }),
+      )
       return completed.url
     }
 
@@ -153,13 +199,21 @@ export function createStorageSdk(options: SdkOptions, transport: CosTransport, r
     form.append('key', key)
     form.append('medium', 'file')
     form.append('contentType', contentType)
-    form.append('data', new Blob([new Uint8Array(bytes)], { type: contentType }), key.split('/').pop() ?? key)
+    form.append(
+      'data',
+      new Blob([new Uint8Array(bytes)], { type: contentType }),
+      key.split('/').pop() ?? key,
+    )
 
-    const uploaded = await apiRequest(client.POST('/storage/uploads', {
-      timeout: requestPolicy.timeoutMs ?? REQUEST_TIMEOUT_MS, signal: requestPolicy.signal, alert: false,
-      headers: await headers(),
-      body: form,
-    }))
+    const uploaded = await apiRequest(
+      client.POST('/storage/uploads', {
+        timeout: requestPolicy.timeoutMs ?? REQUEST_TIMEOUT_MS,
+        signal: requestPolicy.signal,
+        alert: false,
+        headers: await headers(),
+        body: form,
+      }),
+    )
     return uploaded.url
   }
 

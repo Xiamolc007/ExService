@@ -15,31 +15,41 @@ export default [
   {
     input: resolve(packageRoot, 'src/index.ts'),
     output: { file: resolve(packageRoot, 'dist/index.d.ts'), format: 'es' },
-    plugins: [dts({ tsconfig: resolve(packageRoot, 'tsconfig.build.json'), respectExternal: true })],
+    plugins: [
+      dts({ tsconfig: resolve(packageRoot, 'tsconfig.build.json'), respectExternal: true }),
+    ],
     external: [],
   },
   {
     input: resolve(packageRoot, 'src/browser.ts'),
     output: { file: resolve(packageRoot, 'dist/browser.d.ts'), format: 'es' },
-    plugins: [dts({ tsconfig: resolve(packageRoot, 'tsconfig.build.json'), respectExternal: true })],
+    plugins: [
+      dts({ tsconfig: resolve(packageRoot, 'tsconfig.build.json'), respectExternal: true }),
+    ],
     external: ['cos-js-sdk-v5'],
   },
   {
     input: resolve(packageRoot, 'src/node.ts'),
     output: { file: resolve(packageRoot, 'dist/node.d.ts'), format: 'es' },
-    plugins: [dts({ tsconfig: resolve(packageRoot, 'tsconfig.build.json'), respectExternal: true })],
+    plugins: [
+      dts({ tsconfig: resolve(packageRoot, 'tsconfig.build.json'), respectExternal: true }),
+    ],
     external: ['cos-nodejs-sdk-v5'],
   },
   {
     input: resolve(packageRoot, 'src/http/browser.ts'),
     output: { file: resolve(packageRoot, 'dist/http-browser.d.ts'), format: 'es' },
-    plugins: [dts({ tsconfig: resolve(packageRoot, 'tsconfig.build.json'), respectExternal: true })],
+    plugins: [
+      dts({ tsconfig: resolve(packageRoot, 'tsconfig.build.json'), respectExternal: true }),
+    ],
     external: ['axios', '@exre/exui'],
   },
   {
     input: resolve(packageRoot, 'src/http/node.ts'),
     output: { file: resolve(packageRoot, 'dist/http-node.d.ts'), format: 'es' },
-    plugins: [dts({ tsconfig: resolve(packageRoot, 'tsconfig.build.json'), respectExternal: true })],
+    plugins: [
+      dts({ tsconfig: resolve(packageRoot, 'tsconfig.build.json'), respectExternal: true }),
+    ],
     external: ['axios'],
   },
 ]

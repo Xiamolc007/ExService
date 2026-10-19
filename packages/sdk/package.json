@@ -52,7 +52,9 @@
     "@exre/exui": "^0.8.0"
   },
   "peerDependenciesMeta": {
-    "@exre/exui": { "optional": true }
+    "@exre/exui": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@exre/exui": "^0.8.0",
